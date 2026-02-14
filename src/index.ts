@@ -142,7 +142,7 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "0.2.0",
+  version: "1.9.40",
 });
 
 // ---------------------------------------------------------------------------
@@ -275,7 +275,7 @@ server.tool(
         {
           type: "text" as const,
           text: [
-            `ContextEngine v0.2.0`,
+            `ContextEngine v1.9.40`,
             `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
             "",
             ...lines,
