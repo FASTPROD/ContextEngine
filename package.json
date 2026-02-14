@@ -1,7 +1,7 @@
 {
-  "name": "contextengine",
+  "name": "contextengine-mcp",
   "version": "0.1.0",
-  "description": "MCP server — queryable knowledge base from FASTPROD project docs",
+  "description": "MCP server that turns your project documentation into a queryable knowledge base for AI coding agents",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -10,11 +10,41 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
   },
-  "keywords": ["mcp", "context", "knowledge-base"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "copilot",
+    "claude",
+    "cursor",
+    "ai",
+    "knowledge-base",
+    "documentation",
+    "context",
+    "rag",
+    "search",
+    "developer-tools"
+  ],
   "author": "FASTPROD",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FASTPROD/ContextEngine.git"
+  },
+  "homepage": "https://github.com/FASTPROD/ContextEngine#readme",
+  "bugs": {
+    "url": "https://github.com/FASTPROD/ContextEngine/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "zod": "^4.3.6"

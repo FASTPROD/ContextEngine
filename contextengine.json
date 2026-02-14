@@ -1,0 +1,14 @@
+{
+  "sources": [
+    { "name": "SKILLS", "path": "~/Library/CloudStorage/GoogleDrive-yannick@compr.ch/My Drive/CTRL/EXO/SKILLS.md" },
+    { "name": "Session Doc", "path": "~/FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md" },
+    { "name": "Server Audit", "path": "~/Library/CloudStorage/GoogleDrive-yannick@compr.ch/My Drive/CTRL/EXO/SERVER_AUDIT_2026-02-11.md" },
+    { "name": "Pipeline Diagnostic Map", "path": "~/FASTPROD/docs/PIPELINE_DIAGNOSTIC_MAP.md" }
+  ],
+  "workspaces": [
+    "~/Projects"
+  ],
+  "patterns": [
+    ".github/copilot-instructions.md"
+  ]
+}

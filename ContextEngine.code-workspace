@@ -1,6 +1,10 @@
 {
 	"folders": [
 		{
+			"name": "ContextEngine",
+			"path": "."
+		},
+		{
 			"name": "VOILA.tips",
 			"path": "../VOILA.tips"
 		},
@@ -21,5 +25,14 @@
 			"path": "../../Library/CloudStorage/GoogleDrive-yannick@compr.ch/My Drive/CTRL/EXO"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"mcp": {
+			"servers": {
+				"ContextEngine": {
+					"command": "node",
+					"args": ["/Users/yan/Projects/ContextEngine/dist/index.js"]
+				}
+			}
+		}
+	}
 }

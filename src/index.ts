@@ -3,7 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { getDefaultSources } from "./config.js";
+import { loadSources } from "./config.js";
 import { ingestSources, Chunk } from "./ingest.js";
 import { searchChunks } from "./search.js";
 import { readFileSync, existsSync } from "fs";
@@ -11,7 +11,7 @@ import { readFileSync, existsSync } from "fs";
 // ---------------------------------------------------------------------------
 // Boot: ingest all knowledge sources
 // ---------------------------------------------------------------------------
-const sources = getDefaultSources();
+const sources = loadSources();
 const chunks: Chunk[] = ingestSources(sources);
 
 // ---------------------------------------------------------------------------
