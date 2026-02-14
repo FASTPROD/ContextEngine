@@ -15,6 +15,14 @@ import {
   VectorSearchResult,
 } from "./embeddings.js";
 import { collectProjectOps, collectSystemOps } from "./collectors.js";
+import {
+  listProjects,
+  checkPorts,
+  runComplianceAudit,
+  formatProjectList,
+  formatPortMap,
+  formatPlan,
+} from "./agents.js";
 import { readFileSync, existsSync, watch } from "fs";
 import { basename } from "path";
 
@@ -171,7 +179,7 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "1.9.40",
+  version: "1.9.42",
 });
 
 // ---------------------------------------------------------------------------
@@ -304,7 +312,7 @@ server.tool(
         {
           type: "text" as const,
           text: [
-            `ContextEngine v1.9.40`,
+            `ContextEngine v1.9.42`,
             `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
             "",
             ...lines,
@@ -382,6 +390,62 @@ server.tool(
           text: `Re-indexed: ${chunks.length} chunks from ${sources.length} sources. Embeddings: ${embeddedChunks.length} vectors.`,
         },
       ],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: list_projects (Multi-Agent Phase 1)
+// ---------------------------------------------------------------------------
+server.tool(
+  "list_projects",
+  "Discover and analyze all projects in the workspace. Shows tech stack (framework, runtime, key dependencies), infrastructure (git, docker, pm2), and git remote status for each project.",
+  {},
+  async () => {
+    const projectDirs = loadProjectDirs();
+    const projects = listProjects(projectDirs);
+    const text = formatProjectList(projects);
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: check_ports (Multi-Agent Phase 1)
+// ---------------------------------------------------------------------------
+server.tool(
+  "check_ports",
+  "Scan all projects for port declarations (ecosystem.config.js, docker-compose.yml, .env, package.json) and detect port conflicts. Returns a port allocation map with conflict warnings.",
+  {},
+  async () => {
+    const projectDirs = loadProjectDirs();
+    const { ports, conflicts } = checkPorts(projectDirs);
+    const text = formatPortMap(ports, conflicts);
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: run_audit (Multi-Agent Phase 1 — Compliance Agent)
+// ---------------------------------------------------------------------------
+server.tool(
+  "run_audit",
+  "Run the Compliance Agent audit across all projects. Checks: port conflicts, git remotes (origin + gdrive), git hooks (post-commit auto-push), .env files (existence + gitignore), Docker config (restart policy, workdir), PM2 config (treekill, kill_timeout, no bash wrappers), version issues (EOL runtimes, outdated deps, MUI v4/v5 coexistence). Returns a structured plan with findings and remediation steps.",
+  {
+    scope: z
+      .enum(["all", "compliance", "versions", "ports"])
+      .default("all")
+      .describe("Audit scope: all checks, compliance only, version checks only, or port conflicts only"),
+  },
+  async ({ scope }) => {
+    const projectDirs = loadProjectDirs();
+    const plan = runComplianceAudit(projectDirs);
+    const text = formatPlan(plan);
+    return {
+      content: [{ type: "text" as const, text }],
     };
   }
 );
