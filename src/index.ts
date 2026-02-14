@@ -26,6 +26,14 @@ import {
   scoreProject,
   formatScoreReport,
 } from "./agents.js";
+import {
+  saveSession,
+  loadSession,
+  listSessions,
+  deleteSession,
+  formatSession,
+  formatSessionList,
+} from "./sessions.js";
 import { readFileSync, existsSync, watch } from "fs";
 import { basename, join } from "path";
 import { scanCodeDir } from "./code-chunker.js";
@@ -205,7 +213,7 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "1.9.43",
+  version: "1.9.44",
 });
 
 // ---------------------------------------------------------------------------
@@ -512,6 +520,82 @@ server.tool(
     }
 
     const text = formatScoreReport(scores);
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: save_session (Session Persistence)
+// ---------------------------------------------------------------------------
+server.tool(
+  "save_session",
+  "Save a key-value entry to a named session. Use to persist decisions, context, plans, and findings between coding sessions. Each session can hold multiple keys (e.g., 'summary', 'active_tasks', 'decisions'). Keys are updated in place if they already exist.",
+  {
+    session: z
+      .string()
+      .describe("Session name (e.g., 'admin-crowlr-upgrade', 'compr-app-v2'). Will be created if it doesn't exist."),
+    key: z
+      .string()
+      .describe("Entry key within the session (e.g., 'summary', 'active_tasks', 'decisions', 'blockers')"),
+    value: z
+      .string()
+      .describe("Content to save — can be a summary, list of tasks, decisions, notes, code snippets, etc."),
+  },
+  async ({ session, key, value }) => {
+    const result = saveSession(session, key, value);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `✅ Saved key "${key}" to session "${session}" (${result.entries.length} entries total)`,
+        },
+      ],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: load_session (Session Persistence)
+// ---------------------------------------------------------------------------
+server.tool(
+  "load_session",
+  "Load a previously saved session by name. Returns all stored key-value entries with timestamps. Use at the start of a session to restore context from a previous conversation.",
+  {
+    session: z
+      .string()
+      .describe("Session name to load"),
+  },
+  async ({ session }) => {
+    const result = loadSession(session);
+    if (!result) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `No session found with name "${session}". Use \`list_sessions\` to see available sessions.`,
+          },
+        ],
+      };
+    }
+    const text = formatSession(result);
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: list_sessions (Session Persistence)
+// ---------------------------------------------------------------------------
+server.tool(
+  "list_sessions",
+  "List all saved sessions. Shows session names, entry counts, and timestamps. Use to discover what context is available from previous conversations.",
+  {},
+  async () => {
+    const sessions = listSessions();
+    const text = formatSessionList(sessions);
     return {
       content: [{ type: "text" as const, text }],
     };

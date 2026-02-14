@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.9.43
+- **Version**: v1.9.44
 - **Branch**: `main`
 - **License**: MIT (open-source, npm-publishable)
 
@@ -16,11 +16,14 @@
 - **Non-blocking**: Keyword search available instantly at startup, embeddings load in background (or from cache)
 - **File watching**: `fs.watch` on all sources with 500ms debounce → auto re-index
 - **Auto-discovery**: 7 patterns (copilot-instructions, SKILLS, CLAUDE.md, .cursorrules, .cursor/rules, AGENTS.md)
+- **Session persistence**: `~/.contextengine/sessions/` — key-value store per named session, persists across restarts
+- **CLI**: `npx contextengine init` — scaffolds contextengine.json + copilot-instructions.md template
 
 ## Source Files
 | File | Purpose |
 |------|---------|
-| `src/index.ts` | MCP server entry point — 8 tools, MCP resources, file watcher, startup |
+| `src/cli.ts` | CLI entry point — `init` scaffolding, `help`, routes to MCP server |
+| `src/index.ts` | MCP server entry point — 11 tools, MCP resources, file watcher, startup |
 | `src/config.ts` | Configuration loading — contextengine.json, env vars, auto-discovery |
 | `src/ingest.ts` | Markdown parser — heading-based chunking with section hierarchy |
 | `src/search.ts` | Keyword search engine — tokenizer, term overlap scoring, multi-term bonus |
@@ -28,10 +31,11 @@
 | `src/cache.ts` | Embedding cache — SHA-256 hash, disk persistence, instant restart |
 | `src/collectors.ts` | 11 operational data collectors — git, package.json, composer, .env, docker, pm2, nginx, cron |
 | `src/agents.ts` | Multi-agent — project analyzer, port conflict detector, compliance auditor, AI-readiness scorer |
+| `src/sessions.ts` | Session persistence — save/load/list/delete named sessions to disk |
 | `src/code-chunker.ts` | Code parser — regex-based TS/JS/Python function/class/interface extraction |
 | `src/test.ts` | Test harness — validates keyword + semantic search on real data |
 
-## MCP Tools Exposed (8 tools)
+## MCP Tools Exposed (11 tools)
 | Tool | Description |
 |------|-------------|
 | `search_context` | Hybrid keyword+semantic search with mode selector (hybrid/keyword/semantic) |
@@ -42,6 +46,9 @@
 | `check_ports` | Scan all projects for port conflicts |
 | `run_audit` | Compliance agent — git remotes, hooks, .env, Docker, PM2, versions |
 | `score_project` | AI-readiness scoring 0-100% with letter grades (A+ to F) |
+| `save_session` | Save key-value entry to a named session for cross-session persistence |
+| `load_session` | Load all entries from a named session |
+| `list_sessions` | List all saved sessions with entry counts and timestamps |
 
 ## Configuration System
 - **Priority**: `CONTEXTENGINE_CONFIG` env → `./contextengine.json` → `~/.contextengine.json` → `CONTEXTENGINE_WORKSPACES` env → auto-discover `~/Projects`
@@ -56,7 +63,7 @@
 5. **Git auto-push** — post-commit hook pushes to `origin` (GitHub) + `gdrive` (Google Drive backup)
 6. **Embedding cache** — `~/.contextengine/embedding-cache.json`, invalidated by SHA-256 hash of all chunk contents
 
-## Stats (as of v1.9.43)
+## Stats (as of v1.9.44)
 - 555+ chunks from 13+ sources auto-discovered
 - 127+ operational chunks from 19 projects
 - 76 code chunks from TS/JS/Python source files

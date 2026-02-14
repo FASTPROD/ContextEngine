@@ -416,6 +416,7 @@ function auditGitRemotes(projects: ProjectInfo[]): AuditFinding[] {
 
 /**
  * Check for post-commit hook (auto-push to all remotes).
+ * Also audits hook quality: error handling, gdrive best-effort pattern.
  */
 function auditGitHooks(projects: ProjectInfo[]): AuditFinding[] {
   const findings: AuditFinding[] = [];
@@ -430,10 +431,11 @@ function auditGitHooks(projects: ProjectInfo[]): AuditFinding[] {
     ];
 
     let foundHook = false;
+    let hookContent = "";
     for (const hookPath of hookPaths) {
       if (existsSync(hookPath)) {
-        const content = readFileSync(hookPath, "utf-8");
-        if (content.includes("push") || content.includes("remote")) {
+        hookContent = readFileSync(hookPath, "utf-8");
+        if (hookContent.includes("push") || hookContent.includes("remote")) {
           foundHook = true;
           break;
         }
@@ -446,6 +448,7 @@ function auditGitHooks(projects: ProjectInfo[]): AuditFinding[] {
       const customHook = resolve(p.path, hooksPath, "post-commit");
       if (existsSync(customHook)) {
         foundHook = true;
+        if (!hookContent) hookContent = readFileSync(customHook, "utf-8");
       }
     }
 
@@ -457,6 +460,70 @@ function auditGitHooks(projects: ProjectInfo[]): AuditFinding[] {
       severity: foundHook ? "info" : "low",
       remediation: foundHook ? undefined : `Add post-commit hook: cp hooks/post-commit ${p.path}/.git/hooks/`,
     });
+
+    // Hook quality checks (only if hook exists)
+    if (foundHook && hookContent) {
+      // Check: gdrive push should be best-effort (error-suppressed)
+      const pushesGdrive = hookContent.includes("gdrive");
+      const gdriveErrorSuppressed =
+        hookContent.includes("2>/dev/null") ||
+        hookContent.includes("2>&1") ||
+        hookContent.includes("|| true") ||
+        hookContent.includes("|| echo");
+
+      if (pushesGdrive && !gdriveErrorSuppressed) {
+        findings.push({
+          check: "hook-quality",
+          status: "warn",
+          message: `${p.name}: gdrive push has no error suppression — FUSE failures will produce noisy output`,
+          project: p.name,
+          severity: "low",
+          remediation: `Update hook: git push gdrive "$BRANCH" 2>/dev/null && echo "✅ gdrive" || echo "⚠️ gdrive (best-effort)"`,
+        });
+      } else if (pushesGdrive && gdriveErrorSuppressed) {
+        findings.push({
+          check: "hook-quality",
+          status: "pass",
+          message: `${p.name}: gdrive push is best-effort ✅ (errors suppressed)`,
+          project: p.name,
+          severity: "info",
+        });
+      }
+
+      // Check: hook should use BRANCH variable, not hardcoded branch name
+      const usesBranchVar =
+        hookContent.includes("$BRANCH") ||
+        hookContent.includes("$(git") ||
+        hookContent.includes("`git");
+      const hardcodesBranch =
+        hookContent.includes("push origin main") ||
+        hookContent.includes("push origin master") ||
+        hookContent.includes("push gdrive main") ||
+        hookContent.includes("push gdrive master");
+
+      if (hardcodesBranch && !usesBranchVar) {
+        findings.push({
+          check: "hook-quality",
+          status: "warn",
+          message: `${p.name}: hook hardcodes branch name — won't work on feature branches`,
+          project: p.name,
+          severity: "low",
+          remediation: `Use BRANCH=$(git rev-parse --abbrev-ref HEAD) then git push origin "$BRANCH"`,
+        });
+      }
+
+      // Check: hook should have shebang
+      if (!hookContent.startsWith("#!")) {
+        findings.push({
+          check: "hook-quality",
+          status: "warn",
+          message: `${p.name}: post-commit hook missing shebang (#!/bin/zsh or #!/bin/bash)`,
+          project: p.name,
+          severity: "low",
+          remediation: `Add #!/bin/zsh as the first line of the hook`,
+        });
+      }
+    }
   }
 
   return findings;
