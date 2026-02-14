@@ -1,6 +1,6 @@
 # ContextEngine — Competitive Analysis
 
-> Last updated: 2026-02-15 · v1.9.40
+> Last updated: 2026-02-14 · v1.9.43
 
 ## Executive Summary
 
@@ -241,18 +241,20 @@ The MCP Knowledge & Memory space has **~20+ active projects** but is fragmented 
 | **Zero API Keys** | ✅ | ⚠️ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | ❌ |
 | **Local Embeddings** | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | **Hybrid Search** | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Embedding Cache** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **File Watching** | ✅ | N/A | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
 | **Markdown Chunking** | ✅ | N/A | ❌ | ❌ | ✅ | ✅ | ❌ | ✅ | ✅ |
-| **Code Chunking (AST)** | ❌ | N/A | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| **Code Chunking** | ✅ | N/A | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | **Multi-Project** | ✅ | N/A | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ |
-| **Multi-Agent** | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Multi-Agent** | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **AI-Readiness Score** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| **Operational Data** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **MCP Resources** | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **MIT License** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅* |
 | **Node.js Native** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ |
 | **Instant Keyword** | ✅ | N/A | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | **Non-blocking Start** | ✅ | N/A | ❌ | ❌ | ❌ | ❌ | N/A | ❌ | ❌ |
 | **Team Integrations** | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **Operational Data** | 🔜 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 \* ContextMCP is Apache-2.0
 
@@ -317,17 +319,20 @@ The MCP Knowledge & Memory space has **~20+ active projects** but is fragmented 
 
 ## Strategic Recommendations
 
-### Phase 1: Differentiate (NOW)
+### Phase 1: Differentiate ✅ COMPLETE
 - [x] Hybrid search (keyword + semantic) ✅
 - [x] Local embeddings (MiniLM) ✅
-- [x] Auto-discovery ✅
+- [x] Auto-discovery ✅ (7 patterns)
 - [x] File watching ✅
-- [ ] **Operational data sources** ← THIS IS THE MOAT
+- [x] **Operational data sources** ✅ v1.9.41 — 11 collectors, UNIQUE MOAT
 - [ ] Session context persistence
 
-### Phase 2: Compete (v2.0)
-- [ ] Code chunking (AST-based for TS/JS/Python)
-- [ ] Multi-agent coordination (Phase 1)
+### Phase 2: Compete ✅ MOSTLY COMPLETE
+- [x] Code chunking (regex-based TS/JS/Python) ✅ v1.9.43
+- [x] Multi-agent coordination ✅ v1.9.42 — compliance agent, port checker, project analyzer
+- [x] Embedding cache ✅ v1.9.43 — instant restart
+- [x] AI-readiness scoring ✅ v1.9.43 — score_project tool
+- [x] Multi-pattern support ✅ v1.9.43 — 7 patterns
 - [ ] Knowledge graph (entities from chunks)
 - [ ] VS Code extension (for discoverability)
 
