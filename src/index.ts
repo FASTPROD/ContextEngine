@@ -3,7 +3,7 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { loadSources, KnowledgeSource } from "./config.js";
+import { loadSources, loadProjectDirs, loadConfig, KnowledgeSource } from "./config.js";
 import { ingestSources, Chunk } from "./ingest.js";
 import { searchChunks, SearchResult } from "./search.js";
 import {
@@ -14,6 +14,7 @@ import {
   EmbeddedChunk,
   VectorSearchResult,
 } from "./embeddings.js";
+import { collectProjectOps, collectSystemOps } from "./collectors.js";
 import { readFileSync, existsSync, watch } from "fs";
 import { basename } from "path";
 
@@ -30,6 +31,34 @@ let embeddedChunks: EmbeddedChunk[] = [];
 async function reindex(): Promise<void> {
   sources = loadSources();
   chunks = ingestSources(sources);
+
+  // Collect operational data from project directories
+  const config = loadConfig();
+  if (config.collectOps !== false) {
+    const projectDirs = loadProjectDirs();
+    let opsChunks = 0;
+    for (const dir of projectDirs) {
+      const ops = collectProjectOps(dir.path, dir.name);
+      chunks.push(...ops);
+      opsChunks += ops.length;
+    }
+    if (opsChunks > 0) {
+      console.error(
+        `[ContextEngine] ⚙ Collected ${opsChunks} operational chunks from ${projectDirs.length} projects`
+      );
+    }
+  }
+
+  // Collect system-wide operational data
+  if (config.collectSystemOps !== false) {
+    const sysOps = collectSystemOps();
+    if (sysOps.length > 0) {
+      chunks.push(...sysOps);
+      console.error(
+        `[ContextEngine] 🖥 Collected ${sysOps.length} system operational chunks`
+      );
+    }
+  }
 
   if (isEmbeddingsReady()) {
     console.error(`[ContextEngine] 🧠 Re-embedding ${chunks.length} chunks...`);
@@ -404,6 +433,32 @@ async function main() {
   // 1. Ingest all sources (fast — keyword search available immediately)
   sources = loadSources();
   chunks = ingestSources(sources);
+
+  // 1b. Collect operational data (git, deps, env, docker, pm2, etc.)
+  const config = loadConfig();
+  if (config.collectOps !== false) {
+    const projectDirs = loadProjectDirs();
+    let opsChunks = 0;
+    for (const dir of projectDirs) {
+      const ops = collectProjectOps(dir.path, dir.name);
+      chunks.push(...ops);
+      opsChunks += ops.length;
+    }
+    if (opsChunks > 0) {
+      console.error(
+        `[ContextEngine] ⚙ Collected ${opsChunks} operational chunks from ${projectDirs.length} projects`
+      );
+    }
+  }
+  if (config.collectSystemOps !== false) {
+    const sysOps = collectSystemOps();
+    if (sysOps.length > 0) {
+      chunks.push(...sysOps);
+      console.error(
+        `[ContextEngine] 🖥 Collected ${sysOps.length} system operational chunks`
+      );
+    }
+  }
 
   // 2. Register MCP resources
   registerResources();

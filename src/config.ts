@@ -15,6 +15,16 @@ export interface KnowledgeSource {
 }
 
 /**
+ * A discovered project directory for operational data collection.
+ */
+export interface ProjectDirectory {
+  /** Human-readable project name (directory basename) */
+  name: string;
+  /** Absolute path to the project root */
+  path: string;
+}
+
+/**
  * User configuration loaded from contextengine.json
  */
 export interface ContextEngineConfig {
@@ -27,6 +37,10 @@ export interface ContextEngineConfig {
   workspaces?: string[];
   /** File patterns to auto-discover within workspaces */
   patterns?: string[];
+  /** Enable operational data collection (git, deps, env, etc.) — default true */
+  collectOps?: boolean;
+  /** Enable system-wide operational data (docker, pm2, nginx, cron, shell history) — default true */
+  collectSystemOps?: boolean;
 }
 
 const DEFAULT_PATTERNS = [
@@ -190,4 +204,75 @@ function dedup(sources: KnowledgeSource[]): KnowledgeSource[] {
     seen.add(s.path);
     return true;
   });
+}
+
+/**
+ * Discover project directories from workspaces.
+ * Returns one entry per top-level project found.
+ */
+export function loadProjectDirs(): ProjectDirectory[] {
+  const configPath = findConfigFile();
+  const dirs: ProjectDirectory[] = [];
+  let workspaceDirs: string[] = [];
+
+  if (configPath) {
+    const config: ContextEngineConfig = JSON.parse(
+      readFileSync(configPath, "utf-8")
+    );
+    if (config.collectOps === false) return []; // opted out
+    if (config.workspaces) {
+      workspaceDirs = config.workspaces.map((w) =>
+        resolve(configPath!, "..", w.replace(/^~/, homedir()))
+      );
+    }
+  }
+
+  // Env var fallback
+  if (workspaceDirs.length === 0) {
+    const envWorkspaces = process.env.CONTEXTENGINE_WORKSPACES;
+    if (envWorkspaces) {
+      workspaceDirs = envWorkspaces.split(":").filter(Boolean);
+    }
+  }
+
+  // Auto-discover fallback
+  if (workspaceDirs.length === 0) {
+    const projectsDir = resolve(homedir(), "Projects");
+    if (existsSync(projectsDir)) {
+      workspaceDirs = [projectsDir];
+    }
+  }
+
+  for (const wsDir of workspaceDirs) {
+    const absDir = resolve(wsDir.replace(/^~/, homedir()));
+    if (!existsSync(absDir)) continue;
+
+    try {
+      for (const entry of readdirSync(absDir)) {
+        if (entry.startsWith(".") || entry === "node_modules") continue;
+        const subDir = join(absDir, entry);
+        try {
+          if (!statSync(subDir).isDirectory()) continue;
+        } catch {
+          continue;
+        }
+        dirs.push({ name: entry, path: subDir });
+      }
+    } catch {
+      // Permission denied — skip
+    }
+  }
+
+  return dirs;
+}
+
+/**
+ * Load the raw config (for checking flags like collectSystemOps).
+ */
+export function loadConfig(): ContextEngineConfig {
+  const configPath = findConfigFile();
+  if (configPath) {
+    return JSON.parse(readFileSync(configPath, "utf-8"));
+  }
+  return {};
 }
