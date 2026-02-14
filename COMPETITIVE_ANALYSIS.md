@@ -261,19 +261,21 @@ The MCP Knowledge & Memory space has **~20+ active projects** but is fragmented 
 ## Gap Analysis: What We Don't Have (Yet)
 
 ### High Priority — Build These
-| Gap | Who Has It | Difficulty | Impact |
-|-----|-----------|------------|--------|
-| **Operational data sources** (git, docker, pm2, nginx, cron, .env) | **Nobody** | Medium | 🔥 **UNIQUE MOAT** |
-| **Code chunking (AST)** | Memory Bank, ContextStream, src-to-kb | Hard | High |
-| **Multi-agent coordination** | Memory Bank | Medium | Medium |
-| **Session context persistence** | Memory Bank, claude-brain | Easy | Medium |
-| **Knowledge graph** | claude-brain, ContextStream | Hard | Medium |
+| Gap | Who Has It | Difficulty | Impact | Status |
+|-----|-----------|------------|--------|--------|
+| **Operational data sources** (git, docker, pm2, nginx, cron, .env) | **Nobody** | Medium | 🔥 **UNIQUE MOAT** | ✅ **DONE v1.9.41** — 11 collectors, 127+ ops chunks |
+| **Code chunking (AST)** | Memory Bank, ContextStream, src-to-kb | Hard | High | ✅ **DONE v1.9.43** — Regex parser for TS/JS/Python, 76 chunks from own src |
+| **Multi-agent coordination** | Memory Bank | Medium | Medium | ✅ **DONE v1.9.42** — Compliance agent, port conflict detector, project analyzer |
+| **Embedding cache** (instant restart) | FAF, Context7 | Easy | High | ✅ **DONE v1.9.43** — SHA-256 hash, ~/.contextengine/embedding-cache.json |
+| **Multi-pattern support** (CLAUDE.md, .cursorrules) | FAF, src-to-kb | Easy | Medium | ✅ **DONE v1.9.43** — 7 patterns auto-discovered |
+| **AI-readiness scoring** | FAF | Easy | Medium | ✅ **DONE v1.9.43** — score_project tool, 4 categories, A+ to F grades |
+| **Session context persistence** | Memory Bank, claude-brain | Easy | Medium | ⬜ Planned |
+| **Knowledge graph** | claude-brain, ContextStream | Hard | Medium | ⬜ Planned |
 
 ### Medium Priority — Nice to Have
 | Gap | Who Has It | Difficulty | Impact |
 |-----|-----------|------------|--------|
 | Team integrations (Slack, GitHub, Notion) | ContextStream | Hard | Medium |
-| AI-readiness scoring | FAF | Easy | Low |
 | Answer modes (enduser/dev/copilot) | src-to-kb | Easy | Low |
 | Cross-project delegation | Memory Bank | Medium | Low |
 
@@ -289,15 +291,21 @@ The MCP Knowledge & Memory space has **~20+ active projects** but is fragmented 
 ## ContextEngine's Unique Positioning
 
 ### What NOBODY else does:
-1. **Operational data sources** — git log, docker ps, pm2 list, nginx configs, crontab, .env (sanitized), zsh_history. This is the **#1 differentiator**. Every other tool indexes code or docs. We index the **entire developer environment**.
+1. **Operational data sources** — git log, docker ps, pm2 list, nginx configs, crontab, .env (sanitized), zsh_history. This is the **#1 differentiator**. Every other tool indexes code or docs. We index the **entire developer environment**. ✅ SHIPPED v1.9.41.
 
-2. **Non-blocking startup** — keyword search available instantly while embeddings load in background. No other competitor does this.
+2. **Non-blocking startup** — keyword search available instantly while embeddings load in background. No other competitor does this. Now with **embedding cache** for instant restart when sources haven't changed. ✅ SHIPPED v1.9.43.
 
 3. **Zero-dependency local embeddings** — MiniLM-L6-v2 runs locally with zero API keys, zero accounts, zero cost. Only DevRag and claude-brain match this, but both have other dependencies (Go binary / Bun + ChromaDB).
 
-4. **Auto-discovery** — scans `~/Projects` for copilot-instructions.md files automatically. No manual configuration needed. No other competitor auto-discovers project context.
+4. **Auto-discovery** — scans `~/Projects` for copilot-instructions.md, CLAUDE.md, .cursorrules, AGENTS.md, and SKILLS.md files automatically. No manual configuration needed. No other competitor auto-discovers project context across 7 patterns. ✅ EXPANDED v1.9.43.
 
 5. **Hybrid search with instant fallback** — 40% keyword + 60% semantic, with keyword always available even when embeddings haven't loaded yet.
+
+6. **AI-readiness scoring** — `score_project` tool rates projects 0-100% across documentation, infrastructure, code quality, and security. Gamification borrowed from FAF, but integrated as a live MCP tool. ✅ SHIPPED v1.9.43.
+
+7. **Multi-agent compliance** — Built-in compliance agent, port conflict detector, and project analyzer. Scans all projects simultaneously. ✅ SHIPPED v1.9.42.
+
+8. **Code chunking** — Regex-based parser for TS/JS/Python extracts functions, classes, interfaces, and methods into searchable chunks. ✅ SHIPPED v1.9.43.
 
 ### Elevator Pitch
 > **ContextEngine is the only MCP server that gives AI agents instant access to your entire developer environment — not just code and docs, but git history, running services, server configs, and environment variables — with zero API keys, zero cloud accounts, and zero cost.**

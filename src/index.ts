@@ -15,6 +15,7 @@ import {
   VectorSearchResult,
 } from "./embeddings.js";
 import { collectProjectOps, collectSystemOps } from "./collectors.js";
+import { loadCache, saveCache, clearCache } from "./cache.js";
 import {
   listProjects,
   checkPorts,
@@ -22,9 +23,12 @@ import {
   formatProjectList,
   formatPortMap,
   formatPlan,
+  scoreProject,
+  formatScoreReport,
 } from "./agents.js";
 import { readFileSync, existsSync, watch } from "fs";
-import { basename } from "path";
+import { basename, join } from "path";
+import { scanCodeDir } from "./code-chunker.js";
 
 // ---------------------------------------------------------------------------
 // State
@@ -68,9 +72,31 @@ async function reindex(): Promise<void> {
     }
   }
 
+  // Scan code files if configured
+  if (config.codeDirs && config.codeDirs.length > 0) {
+    const projectDirs = loadProjectDirs();
+    let codeChunks = 0;
+    for (const dir of projectDirs) {
+      for (const codeDir of config.codeDirs) {
+        const codePath = join(dir.path, codeDir);
+        if (existsSync(codePath)) {
+          const codeResults = scanCodeDir(codePath, dir.name);
+          chunks.push(...codeResults);
+          codeChunks += codeResults.length;
+        }
+      }
+    }
+    if (codeChunks > 0) {
+      console.error(
+        `[ContextEngine] 💻 Parsed ${codeChunks} code chunks from source files`
+      );
+    }
+  }
+
   if (isEmbeddingsReady()) {
     console.error(`[ContextEngine] 🧠 Re-embedding ${chunks.length} chunks...`);
     embeddedChunks = await embedChunks(chunks);
+    saveCache(chunks, embeddedChunks);
   }
 }
 
@@ -179,7 +205,7 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "1.9.42",
+  version: "1.9.43",
 });
 
 // ---------------------------------------------------------------------------
@@ -312,7 +338,7 @@ server.tool(
         {
           type: "text" as const,
           text: [
-            `ContextEngine v1.9.42`,
+            `ContextEngine v1.9.43`,
             `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
             "",
             ...lines,
@@ -451,6 +477,48 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool: score_project (AI-Readiness Scoring)
+// ---------------------------------------------------------------------------
+server.tool(
+  "score_project",
+  "Score one or all projects on AI-readiness (0-100%). Checks documentation (copilot-instructions, README, CLAUDE.md, .cursorrules, SKILLS.md, .env.example), infrastructure (git, hooks, Docker, CI, deploy scripts, PM2), code quality (tests, TypeScript, linting, npm scripts), and security (.env gitignored, secrets exposure, lockfiles). Returns letter grade (A+ to F) with detailed breakdown.",
+  {
+    project: z
+      .string()
+      .optional()
+      .describe("Project name to score. Omit to score all projects."),
+  },
+  async ({ project }) => {
+    const projectDirs = loadProjectDirs();
+
+    let scores;
+    if (project) {
+      const dir = projectDirs.find(
+        (d) => d.name.toLowerCase() === project.toLowerCase()
+      );
+      if (!dir) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Project "${project}" not found. Available: ${projectDirs.map((d) => d.name).join(", ")}`,
+            },
+          ],
+        };
+      }
+      scores = [scoreProject(dir)];
+    } else {
+      scores = projectDirs.map(scoreProject);
+    }
+
+    const text = formatScoreReport(scores);
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
 // MCP Resources: expose each source as a browsable resource
 // ---------------------------------------------------------------------------
 function registerResources(): void {
@@ -524,6 +592,27 @@ async function main() {
     }
   }
 
+  // 1c. Scan code files (TS/JS/Python) if configured
+  if (config.codeDirs && config.codeDirs.length > 0) {
+    const projectDirs = loadProjectDirs();
+    let codeChunks = 0;
+    for (const dir of projectDirs) {
+      for (const codeDir of config.codeDirs) {
+        const codePath = join(dir.path, codeDir);
+        if (existsSync(codePath)) {
+          const codeResults = scanCodeDir(codePath, dir.name);
+          chunks.push(...codeResults);
+          codeChunks += codeResults.length;
+        }
+      }
+    }
+    if (codeChunks > 0) {
+      console.error(
+        `[ContextEngine] 💻 Parsed ${codeChunks} code chunks from source files`
+      );
+    }
+  }
+
   // 2. Register MCP resources
   registerResources();
 
@@ -532,18 +621,27 @@ async function main() {
   await server.connect(transport);
   console.error("[ContextEngine] 🚀 MCP server running on stdio (keyword search ready)");
 
-  // 4. Load embeddings in background (non-blocking — semantic search becomes available when done)
-  initEmbeddings().then(async (ready) => {
-    if (ready) {
-      console.error(
-        `[ContextEngine] 🧠 Embedding ${chunks.length} chunks...`
-      );
-      embeddedChunks = await embedChunks(chunks);
-      console.error(
-        `[ContextEngine] ✅ Semantic search ready (${embeddedChunks.length} vectors)`
-      );
-    }
-  });
+  // 4. Load embeddings — try cache first, then model (non-blocking)
+  const cached = loadCache(chunks);
+  if (cached) {
+    embeddedChunks = cached;
+    console.error(
+      `[ContextEngine] ✅ Semantic search ready from cache (${embeddedChunks.length} vectors)`
+    );
+  } else {
+    initEmbeddings().then(async (ready) => {
+      if (ready) {
+        console.error(
+          `[ContextEngine] 🧠 Embedding ${chunks.length} chunks...`
+        );
+        embeddedChunks = await embedChunks(chunks);
+        saveCache(chunks, embeddedChunks);
+        console.error(
+          `[ContextEngine] ✅ Semantic search ready (${embeddedChunks.length} vectors)`
+        );
+      }
+    });
+  }
 
   // 5. Start file watchers
   startWatching();

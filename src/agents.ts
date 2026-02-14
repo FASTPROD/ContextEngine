@@ -916,3 +916,351 @@ export function formatPortMap(ports: PortUsage[], conflicts: Array<{ port: numbe
 
   return lines.join("\n");
 }
+
+// ---------------------------------------------------------------------------
+// AI-Readiness Scoring — score_project tool
+// ---------------------------------------------------------------------------
+
+export interface ScoreCheck {
+  name: string;
+  category: string;
+  points: number;
+  maxPoints: number;
+  status: "pass" | "partial" | "fail";
+  detail: string;
+}
+
+export interface ProjectScore {
+  project: string;
+  path: string;
+  score: number;
+  maxScore: number;
+  percentage: number;
+  grade: string; // A+ to F
+  checks: ScoreCheck[];
+}
+
+/**
+ * Score a project's AI-readiness (0-100%).
+ * Checks how well-prepared a project is for AI coding agents.
+ */
+export function scoreProject(dir: ProjectDirectory): ProjectScore {
+  const checks: ScoreCheck[] = [];
+  const p = dir.path;
+
+  // --- Documentation (30 points max) ---
+
+  // copilot-instructions.md (10 pts)
+  const copilotPath = join(p, ".github", "copilot-instructions.md");
+  if (existsSync(copilotPath)) {
+    const content = readFileSync(copilotPath, "utf-8");
+    const lines = content.split("\n").length;
+    if (lines > 50) {
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 10, maxPoints: 10, status: "pass", detail: `${lines} lines — comprehensive` });
+    } else {
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 6, maxPoints: 10, status: "partial", detail: `${lines} lines — could be more detailed` });
+    }
+  } else {
+    checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 0, maxPoints: 10, status: "fail", detail: "Missing — AI agents lack project context" });
+  }
+
+  // README.md (8 pts)
+  const readmePath = join(p, "README.md");
+  if (existsSync(readmePath)) {
+    const content = readFileSync(readmePath, "utf-8");
+    const readmeLines = content.split("\n").length;
+    if (readmeLines > 30) {
+      checks.push({ name: "README.md", category: "Documentation", points: 8, maxPoints: 8, status: "pass", detail: `${readmeLines} lines` });
+    } else {
+      checks.push({ name: "README.md", category: "Documentation", points: 4, maxPoints: 8, status: "partial", detail: `${readmeLines} lines — sparse` });
+    }
+  } else {
+    checks.push({ name: "README.md", category: "Documentation", points: 0, maxPoints: 8, status: "fail", detail: "Missing" });
+  }
+
+  // CLAUDE.md / .cursorrules / AGENTS.md (6 pts)
+  const altPatterns = ["CLAUDE.md", ".cursorrules", ".cursor/rules", "AGENTS.md"];
+  const foundAlt = altPatterns.filter(pat => existsSync(join(p, pat)));
+  if (foundAlt.length >= 2) {
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 6, maxPoints: 6, status: "pass", detail: `Found: ${foundAlt.join(", ")}` });
+  } else if (foundAlt.length === 1) {
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 3, maxPoints: 6, status: "partial", detail: `Found: ${foundAlt[0]} only` });
+  } else {
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 0, maxPoints: 6, status: "fail", detail: "No CLAUDE.md, .cursorrules, or AGENTS.md" });
+  }
+
+  // .github/SKILLS.md (3 pts)
+  const skillsPath = join(p, ".github", "SKILLS.md");
+  if (existsSync(skillsPath)) {
+    checks.push({ name: "SKILLS.md", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: "Present" });
+  } else {
+    checks.push({ name: "SKILLS.md", category: "Documentation", points: 0, maxPoints: 3, status: "fail", detail: "Missing — agents can't discover capabilities" });
+  }
+
+  // .env.example (3 pts)
+  const envExamplePath = join(p, ".env.example");
+  if (existsSync(envExamplePath)) {
+    checks.push({ name: ".env.example", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: "Present — agents know which env vars to set" });
+  } else {
+    checks.push({ name: ".env.example", category: "Documentation", points: 0, maxPoints: 3, status: "fail", detail: "Missing — agents can't set up env" });
+  }
+
+  // --- Infrastructure (30 points max) ---
+
+  // Git repo (5 pts)
+  if (existsSync(join(p, ".git"))) {
+    checks.push({ name: "Git repository", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "Initialized" });
+  } else {
+    checks.push({ name: "Git repository", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "Not a git repo" });
+  }
+
+  // .gitignore (3 pts)
+  if (existsSync(join(p, ".gitignore"))) {
+    checks.push({ name: ".gitignore", category: "Infrastructure", points: 3, maxPoints: 3, status: "pass", detail: "Present" });
+  } else {
+    checks.push({ name: ".gitignore", category: "Infrastructure", points: 0, maxPoints: 3, status: "fail", detail: "Missing" });
+  }
+
+  // Git hooks (5 pts)
+  const hookDir = join(p, "hooks");
+  const gitHookDir = join(p, ".git", "hooks");
+  const hasPostCommit = existsSync(join(hookDir, "post-commit")) || existsSync(join(gitHookDir, "post-commit"));
+  if (hasPostCommit) {
+    checks.push({ name: "Git hooks", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "post-commit hook configured" });
+  } else {
+    checks.push({ name: "Git hooks", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "No hooks — consider auto-push" });
+  }
+
+  // Docker / containerization (5 pts)
+  const hasDockerfile = existsSync(join(p, "Dockerfile"));
+  const hasCompose = existsSync(join(p, "docker-compose.yml")) || existsSync(join(p, "docker-compose.prod.yml"));
+  if (hasDockerfile && hasCompose) {
+    checks.push({ name: "Docker", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "Dockerfile + compose" });
+  } else if (hasDockerfile || hasCompose) {
+    checks.push({ name: "Docker", category: "Infrastructure", points: 3, maxPoints: 5, status: "partial", detail: hasDockerfile ? "Dockerfile only" : "Compose only" });
+  } else {
+    checks.push({ name: "Docker", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "Not containerized" });
+  }
+
+  // CI config (5 pts)
+  const ciPaths = [".github/workflows", ".gitlab-ci.yml", "Jenkinsfile", ".circleci", ".travis.yml"];
+  const foundCI = ciPaths.filter(ci => existsSync(join(p, ci)));
+  if (foundCI.length > 0) {
+    checks.push({ name: "CI/CD", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: foundCI.join(", ") });
+  } else {
+    checks.push({ name: "CI/CD", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "No CI pipeline" });
+  }
+
+  // Deploy script (4 pts)
+  const deployPaths = ["deploy.sh", "deploy.js", "Makefile"];
+  const foundDeploy = deployPaths.filter(d => existsSync(join(p, d)));
+  if (foundDeploy.length > 0) {
+    checks.push({ name: "Deploy script", category: "Infrastructure", points: 4, maxPoints: 4, status: "pass", detail: foundDeploy.join(", ") });
+  } else {
+    checks.push({ name: "Deploy script", category: "Infrastructure", points: 0, maxPoints: 4, status: "fail", detail: "No deploy automation" });
+  }
+
+  // PM2 / process manager (3 pts)
+  if (existsSync(join(p, "ecosystem.config.js")) || existsSync(join(p, "ecosystem.config.cjs"))) {
+    checks.push({ name: "Process manager", category: "Infrastructure", points: 3, maxPoints: 3, status: "pass", detail: "PM2 ecosystem config" });
+  } else {
+    checks.push({ name: "Process manager", category: "Infrastructure", points: 0, maxPoints: 3, status: "fail", detail: "No PM2 config" });
+  }
+
+  // --- Code Quality (20 points max) ---
+
+  // Tests directory (8 pts)
+  const testDirs = ["tests", "test", "__tests__", "spec", "src/__tests__"];
+  const foundTests = testDirs.filter(td => existsSync(join(p, td)));
+  if (foundTests.length > 0) {
+    const testDir = join(p, foundTests[0]);
+    try {
+      const hasFiles = readdirSync(testDir).length > 0;
+      if (hasFiles) {
+        checks.push({ name: "Tests", category: "Code Quality", points: 8, maxPoints: 8, status: "pass", detail: `${foundTests[0]}/ directory with files` });
+      } else {
+        checks.push({ name: "Tests", category: "Code Quality", points: 3, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ exists but empty` });
+      }
+    } catch {
+      checks.push({ name: "Tests", category: "Code Quality", points: 3, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ exists` });
+    }
+  } else {
+    checks.push({ name: "Tests", category: "Code Quality", points: 0, maxPoints: 8, status: "fail", detail: "No test directory" });
+  }
+
+  // TypeScript / type checking (5 pts)
+  if (existsSync(join(p, "tsconfig.json"))) {
+    checks.push({ name: "TypeScript", category: "Code Quality", points: 5, maxPoints: 5, status: "pass", detail: "tsconfig.json present" });
+  } else if (existsSync(join(p, "jsconfig.json"))) {
+    checks.push({ name: "Type checking", category: "Code Quality", points: 2, maxPoints: 5, status: "partial", detail: "jsconfig.json only" });
+  } else {
+    checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "fail", detail: "No tsconfig/jsconfig" });
+  }
+
+  // Linting config (4 pts)
+  const lintConfigs = [".eslintrc.js", ".eslintrc.json", ".eslintrc.yml", "eslint.config.js", "eslint.config.mjs", ".prettierrc", "phpcs.xml"];
+  const foundLint = lintConfigs.filter(l => existsSync(join(p, l)));
+  if (foundLint.length > 0) {
+    checks.push({ name: "Linting", category: "Code Quality", points: 4, maxPoints: 4, status: "pass", detail: foundLint.join(", ") });
+  } else {
+    checks.push({ name: "Linting", category: "Code Quality", points: 0, maxPoints: 4, status: "fail", detail: "No lint config" });
+  }
+
+  // Package scripts / build commands (3 pts)
+  const pkgPath = join(p, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      const scripts = Object.keys(pkg.scripts || {});
+      const hasUseful = scripts.some(s => ["build", "dev", "start", "test", "lint"].includes(s));
+      if (hasUseful) {
+        checks.push({ name: "npm scripts", category: "Code Quality", points: 3, maxPoints: 3, status: "pass", detail: scripts.slice(0, 6).join(", ") });
+      } else {
+        checks.push({ name: "npm scripts", category: "Code Quality", points: 1, maxPoints: 3, status: "partial", detail: `Has scripts but no build/dev/test: ${scripts.join(", ")}` });
+      }
+    } catch { /* ignore */ }
+  }
+
+  // --- Security (20 points max) ---
+
+  // .env in .gitignore (8 pts)
+  const gitignorePath = join(p, ".gitignore");
+  if (existsSync(gitignorePath)) {
+    const gitignore = readFileSync(gitignorePath, "utf-8");
+    if (gitignore.includes(".env")) {
+      checks.push({ name: ".env in .gitignore", category: "Security", points: 8, maxPoints: 8, status: "pass", detail: ".env is gitignored" });
+    } else {
+      checks.push({ name: ".env in .gitignore", category: "Security", points: 0, maxPoints: 8, status: "fail", detail: ".env NOT in .gitignore — secrets at risk!" });
+    }
+  } else {
+    checks.push({ name: ".env in .gitignore", category: "Security", points: 0, maxPoints: 8, status: "fail", detail: "No .gitignore at all" });
+  }
+
+  // No secrets in tracked files (6 pts)
+  if (existsSync(join(p, ".env")) && existsSync(join(p, ".git"))) {
+    const tracked = exec("git ls-files .env", p);
+    if (tracked === ".env") {
+      checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 6, status: "fail", detail: ".env is tracked by git!" });
+    } else {
+      checks.push({ name: "Secrets exposure", category: "Security", points: 6, maxPoints: 6, status: "pass", detail: ".env not tracked" });
+    }
+  } else {
+    checks.push({ name: "Secrets exposure", category: "Security", points: 6, maxPoints: 6, status: "pass", detail: "No .env or not a git repo" });
+  }
+
+  // Lockfile present (3 pts)
+  const lockfiles = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "composer.lock"];
+  const foundLock = lockfiles.filter(l => existsSync(join(p, l)));
+  if (foundLock.length > 0) {
+    checks.push({ name: "Lockfile", category: "Security", points: 3, maxPoints: 3, status: "pass", detail: foundLock.join(", ") });
+  } else if (existsSync(pkgPath) || existsSync(join(p, "composer.json"))) {
+    checks.push({ name: "Lockfile", category: "Security", points: 0, maxPoints: 3, status: "fail", detail: "No lockfile — deps not pinned" });
+  }
+
+  // node_modules in .gitignore (3 pts)
+  if (existsSync(gitignorePath)) {
+    const gitignore = readFileSync(gitignorePath, "utf-8");
+    if (gitignore.includes("node_modules") || gitignore.includes("vendor")) {
+      checks.push({ name: "Deps gitignored", category: "Security", points: 3, maxPoints: 3, status: "pass", detail: "node_modules/vendor gitignored" });
+    } else if (!existsSync(join(p, "package.json")) && !existsSync(join(p, "composer.json"))) {
+      checks.push({ name: "Deps gitignored", category: "Security", points: 3, maxPoints: 3, status: "pass", detail: "N/A — no package manager" });
+    } else {
+      checks.push({ name: "Deps gitignored", category: "Security", points: 0, maxPoints: 3, status: "fail", detail: "node_modules/vendor not in .gitignore" });
+    }
+  }
+
+  // --- Calculate totals ---
+  const totalScore = checks.reduce((sum, c) => sum + c.points, 0);
+  const maxScore = checks.reduce((sum, c) => sum + c.maxPoints, 0);
+  const percentage = Math.round((totalScore / maxScore) * 100);
+
+  let grade: string;
+  if (percentage >= 90) grade = "A+";
+  else if (percentage >= 80) grade = "A";
+  else if (percentage >= 70) grade = "B";
+  else if (percentage >= 60) grade = "C";
+  else if (percentage >= 50) grade = "D";
+  else grade = "F";
+
+  return {
+    project: dir.name,
+    path: dir.path,
+    score: totalScore,
+    maxScore,
+    percentage,
+    grade,
+    checks,
+  };
+}
+
+/**
+ * Format a project score report as Markdown.
+ */
+export function formatScoreReport(scores: ProjectScore[]): string {
+  const lines: string[] = [];
+
+  // Summary table
+  lines.push("# 🎯 AI-Readiness Scores\n");
+  lines.push("| Project | Score | Grade | Doc | Infra | Quality | Security |");
+  lines.push("|---------|-------|-------|-----|-------|---------|----------|");
+
+  for (const s of scores) {
+    const byCategory = new Map<string, { pts: number; max: number }>();
+    for (const c of s.checks) {
+      const cat = byCategory.get(c.category) || { pts: 0, max: 0 };
+      cat.pts += c.points;
+      cat.max += c.maxPoints;
+      byCategory.set(c.category, cat);
+    }
+
+    const doc = byCategory.get("Documentation") || { pts: 0, max: 0 };
+    const infra = byCategory.get("Infrastructure") || { pts: 0, max: 0 };
+    const quality = byCategory.get("Code Quality") || { pts: 0, max: 0 };
+    const security = byCategory.get("Security") || { pts: 0, max: 0 };
+
+    const gradeEmoji = s.percentage >= 80 ? "🟢" : s.percentage >= 60 ? "🟡" : "🔴";
+
+    lines.push(
+      `| ${s.project} | **${s.percentage}%** | ${gradeEmoji} ${s.grade} | ${doc.pts}/${doc.max} | ${infra.pts}/${infra.max} | ${quality.pts}/${quality.max} | ${security.pts}/${security.max} |`
+    );
+  }
+
+  // Sort by score descending
+  const sorted = [...scores].sort((a, b) => b.percentage - a.percentage);
+
+  // Top performers
+  const top3 = sorted.slice(0, 3);
+  lines.push("\n## 🏆 Top Performers");
+  for (const s of top3) {
+    lines.push(`- **${s.project}** — ${s.percentage}% (${s.grade})`);
+  }
+
+  // Needs work
+  const needsWork = sorted.filter(s => s.percentage < 60);
+  if (needsWork.length > 0) {
+    lines.push("\n## ⚠️ Needs Work");
+    for (const s of needsWork) {
+      const fails = s.checks.filter(c => c.status === "fail");
+      lines.push(`- **${s.project}** — ${s.percentage}% (${s.grade}): ${fails.map(f => f.name).join(", ")}`);
+    }
+  }
+
+  // Detailed per-project breakdown (top 5 only to keep output manageable)
+  lines.push("\n## 📋 Detailed Breakdown\n");
+  for (const s of sorted.slice(0, 5)) {
+    lines.push(`### ${s.project} — ${s.percentage}% (${s.grade})\n`);
+    lines.push("| Check | Category | Score | Status | Detail |");
+    lines.push("|-------|----------|-------|--------|--------|");
+    for (const c of s.checks) {
+      const icon = c.status === "pass" ? "✅" : c.status === "partial" ? "🟡" : "❌";
+      lines.push(`| ${c.name} | ${c.category} | ${c.points}/${c.maxPoints} | ${icon} | ${c.detail} |`);
+    }
+    lines.push("");
+  }
+
+  // Overall stats
+  const avgScore = Math.round(scores.reduce((sum, s) => sum + s.percentage, 0) / scores.length);
+  lines.push(`\n---\n**${scores.length} projects scanned** | Average AI-readiness: **${avgScore}%**`);
+
+  return lines.join("\n");
+}

@@ -10,5 +10,8 @@
   ],
   "patterns": [
     ".github/copilot-instructions.md"
+  ],
+  "codeDirs": [
+    "src"
   ]
 }

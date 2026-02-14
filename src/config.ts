@@ -11,7 +11,7 @@ export interface KnowledgeSource {
   /** Absolute path to the file */
   path: string;
   /** File type for parser selection */
-  type: "markdown";
+  type: "markdown" | "code";
 }
 
 /**
@@ -37,6 +37,8 @@ export interface ContextEngineConfig {
   workspaces?: string[];
   /** File patterns to auto-discover within workspaces */
   patterns?: string[];
+  /** Directories to scan for code files (TS/JS/Python) — e.g. ["src/"] relative to project root */
+  codeDirs?: string[];
   /** Enable operational data collection (git, deps, env, etc.) — default true */
   collectOps?: boolean;
   /** Enable system-wide operational data (docker, pm2, nginx, cron, shell history) — default true */
@@ -44,8 +46,16 @@ export interface ContextEngineConfig {
 }
 
 const DEFAULT_PATTERNS = [
+  // GitHub Copilot
   ".github/copilot-instructions.md",
   ".github/SKILLS.md",
+  // Claude Code
+  "CLAUDE.md",
+  // Cursor
+  ".cursorrules",
+  ".cursor/rules",
+  // Codex / multi-agent
+  "AGENTS.md",
 ];
 
 /**
