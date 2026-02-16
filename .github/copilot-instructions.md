@@ -5,7 +5,9 @@
 - **GitHub**: FASTPROD/ContextEngine
 - **Version**: v1.9.44
 - **Branch**: `main`
-- **License**: MIT (open-source, npm-publishable)
+- **License**: MIT (open-source)
+- **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
+- **npm account**: `compr` (yannick@compr.ch)
 
 ## Architecture
 - **MCP SDK**: `@modelcontextprotocol/sdk` v1.26 — stdio transport
@@ -17,7 +19,7 @@
 - **File watching**: `fs.watch` on all sources with 500ms debounce → auto re-index
 - **Auto-discovery**: 7 patterns (copilot-instructions, SKILLS, CLAUDE.md, .cursorrules, .cursor/rules, AGENTS.md)
 - **Session persistence**: `~/.contextengine/sessions/` — key-value store per named session, persists across restarts
-- **CLI**: `npx contextengine init` — scaffolds contextengine.json + copilot-instructions.md template
+- **CLI**: `npx @compr/contextengine-mcp init` — scaffolds contextengine.json + copilot-instructions.md template
 
 ## Source Files
 | File | Purpose |

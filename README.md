@@ -2,7 +2,7 @@
 
 **An MCP server that turns your project documentation into a queryable knowledge base for AI agents.**
 
-ContextEngine indexes your `copilot-instructions.md`, `SKILLS.md`, runbooks, and any markdown documentation — then exposes it via the [Model Context Protocol](https://modelcontextprotocol.io) so AI coding assistants (GitHub Copilot, Claude, Cursor, Windsurf) can search your accumulated knowledge in real time.
+ContextEngine indexes your `copilot-instructions.md`, `SKILLS.md`, `CLAUDE.md`, runbooks, and source code — then exposes it via the [Model Context Protocol](https://modelcontextprotocol.io) so AI coding assistants (GitHub Copilot, Claude, Cursor, Windsurf) can search your accumulated knowledge in real time.
 
 ## Why
 
@@ -10,69 +10,90 @@ AI coding agents are powerful — but they forget everything between sessions. Y
 
 ContextEngine fixes this: **zero-config, fully local, privacy-first.**
 
-- 🔍 **Search** — keyword + relevance scoring across all your project docs
-- 📁 **Auto-discover** — finds `copilot-instructions.md` in all your projects automatically
-- 🔒 **Local-only** — nothing leaves your machine, no API keys needed
-- ⚡ **Instant** — indexes hundreds of docs in milliseconds at startup
-- 🔌 **MCP native** — works with any MCP-compatible client out of the box
+- 🔍 **Hybrid Search** — keyword + semantic (vector embeddings) across all your docs
+- 🧠 **Semantic Search** — `all-MiniLM-L6-v2` runs locally on CPU (no API keys)
+- 📁 **Auto-discover** — finds `copilot-instructions.md`, `CLAUDE.md`, `.cursorrules`, `AGENTS.md` across all projects
+- 💻 **Code Parsing** — extracts functions, classes, interfaces from TS/JS/Python source files
+- ⚙️ **Operational Intelligence** — collects git, Docker, PM2, nginx, cron, package.json data
+- 🔒 **Local-only** — nothing leaves your machine
+- ⚡ **Instant startup** — keyword search ready immediately, embeddings load in background
+- 💾 **Session Persistence** — AI agents can save/restore context across conversations
+- 🔌 **MCP native** — works with any MCP-compatible client
 
 ## Quick Start
 
-### Install
+### 1. Scaffold config (optional)
 
 ```bash
-npm install -g contextengine
+npx @compr/contextengine-mcp init
 ```
 
-### Use with VS Code (GitHub Copilot)
+Detects your project type, creates `contextengine.json` + `.github/copilot-instructions.md` template.
 
-Add to your `.vscode/mcp.json`:
+### 2. Add to your MCP client
+
+**VS Code** — add to `~/.vscode/mcp.json` (global) or `.vscode/mcp.json` (per-project):
+
+```json
+{
+  "servers": {
+    "ContextEngine": {
+      "command": "npx",
+      "args": ["@compr/contextengine-mcp"]
+    }
+  }
+}
+```
+
+**Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "ContextEngine": {
-      "command": "contextengine"
+      "command": "npx",
+      "args": ["@compr/contextengine-mcp"]
     }
   }
 }
 ```
 
-Or in your `.code-workspace` settings:
-
-```json
-{
-  "settings": {
-    "mcp": {
-      "servers": {
-        "ContextEngine": {
-          "command": "contextengine"
-        }
-      }
-    }
-  }
-}
-```
-
-### Use with Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+**Cursor** — add to MCP settings:
 
 ```json
 {
   "mcpServers": {
     "ContextEngine": {
-      "command": "contextengine"
+      "command": "npx",
+      "args": ["@compr/contextengine-mcp"]
     }
   }
 }
 ```
+
+That's it. ContextEngine auto-discovers your docs in `~/Projects`.
+
+## Tools (11)
+
+| Tool | Description |
+|------|-------------|
+| `search_context` | Hybrid keyword+semantic search with mode selector |
+| `list_sources` | Show all indexed sources with chunk counts |
+| `read_source` | Read full content of a knowledge source by name |
+| `reindex` | Force full re-index of all sources |
+| `list_projects` | Discover and analyze all projects (tech stack, git, docker, pm2) |
+| `check_ports` | Scan all projects for port conflicts |
+| `run_audit` | Compliance agent — git, hooks, .env, Docker, PM2, versions |
+| `score_project` | AI-readiness scoring 0-100% with letter grades (A+ to F) |
+| `save_session` | Save key-value entry to a named session |
+| `load_session` | Load all entries from a named session |
+| `list_sessions` | List all saved sessions |
 
 ## Configuration
 
-ContextEngine works **zero-config** — it auto-discovers `.github/copilot-instructions.md` files in `~/Projects`.
+ContextEngine works **zero-config** — it auto-discovers documentation files in `~/Projects`.
 
-For full control, create a `contextengine.json` in your project root:
+For full control, create a `contextengine.json`:
 
 ```json
 {
@@ -80,66 +101,84 @@ For full control, create a `contextengine.json` in your project root:
     { "name": "Team Runbook", "path": "./docs/RUNBOOK.md" },
     { "name": "Architecture", "path": "./docs/ARCHITECTURE.md" }
   ],
-  "workspaces": [
-    "~/Projects",
-    "~/Work/repos"
-  ],
+  "workspaces": ["~/Projects"],
   "patterns": [
     ".github/copilot-instructions.md",
-    ".github/SKILLS.md",
-    "docs/RUNBOOK.md"
-  ]
+    "CLAUDE.md",
+    ".cursorrules",
+    "AGENTS.md"
+  ],
+  "codeDirs": ["src"]
 }
 ```
 
-### Configuration Resolution
+### Auto-discovered patterns
 
-| Priority | Source | Description |
-|----------|--------|-------------|
-| 1 | `CONTEXTENGINE_CONFIG` env var | Explicit path to config file |
-| 2 | `./contextengine.json` | Config in current working directory |
-| 3 | `~/.contextengine.json` | Global user config |
-| 4 | `CONTEXTENGINE_WORKSPACES` env var | Colon-separated workspace paths |
-| 5 | `~/Projects` | Auto-discover fallback |
+| Pattern | Description |
+|---------|-------------|
+| `.github/copilot-instructions.md` | GitHub Copilot project instructions |
+| `.github/SKILLS.md` | Team skills inventory |
+| `CLAUDE.md` | Claude Code project instructions |
+| `.cursorrules` | Cursor AI rules |
+| `.cursor/rules` | Cursor AI rules (folder format) |
+| `AGENTS.md` | Multi-agent instructions |
 
-## Tools
+### Config resolution order
 
-ContextEngine exposes three MCP tools:
-
-### `search_context`
-
-Search across all indexed knowledge sources by natural language query.
-
-```
-Query: "Docker deployment PHP"
-→ Returns top-k chunks with source, section headings, line numbers, and relevance score
-```
-
-### `list_sources`
-
-List all indexed knowledge sources with their status and chunk counts.
-
-### `read_source`
-
-Read the full content of any indexed source by name.
+| Priority | Source |
+|----------|--------|
+| 1 | `CONTEXTENGINE_CONFIG` env var |
+| 2 | `./contextengine.json` |
+| 3 | `~/.contextengine.json` |
+| 4 | `CONTEXTENGINE_WORKSPACES` env var |
+| 5 | `~/Projects` auto-discover |
 
 ## How It Works
 
 ```
-Your Markdown Files          ContextEngine              AI Agent
-┌────────────────┐     ┌──────────────────┐     ┌──────────────┐
-│ copilot-        │     │  1. Parse         │     │ GitHub       │
-│  instructions   │────▶│  2. Chunk by §    │◀───▶│  Copilot     │
-│ SKILLS.md       │     │  3. Score & rank  │     │ Claude       │
-│ runbooks        │     │  4. Return top-k  │     │ Cursor       │
-└────────────────┘     └──────────────────┘     └──────────────┘
+Your Project Files           ContextEngine              AI Agent
++-----------------+    +-------------------+    +---------------+
+| copilot-        |    | 1. Parse & chunk  |    | GitHub        |
+|  instructions   |--->| 2. Embed vectors  |<-->|  Copilot      |
+| CLAUDE.md       |    | 3. Hybrid search  |    | Claude        |
+| source code     |    | 4. Return top-k   |    | Cursor        |
+| git/docker/pm2  |    | 5. Persist state  |    | Windsurf      |
++-----------------+    +-------------------+    +---------------+
                             stdio (MCP)
 ```
 
-1. **Parse** — reads all configured markdown sources at startup
-2. **Chunk** — splits on headings, preserving section hierarchy
-3. **Index** — builds in-memory search index (keyword scoring with term overlap + multi-term bonuses)
-4. **Serve** — exposes MCP tools over stdio transport
+1. **Parse** — markdown heading-based chunker + code parser (TS/JS/Python)
+2. **Embed** — `all-MiniLM-L6-v2` sentence embeddings (384-dim, local CPU)
+3. **Search** — hybrid scoring: 40% keyword overlap + 60% cosine similarity
+4. **Collect** — operational data from git, package.json, Docker, PM2, nginx, cron
+5. **Audit** — compliance checks, port conflicts, AI-readiness scoring
+
+### Performance
+
+| Metric | Value |
+|--------|-------|
+| Startup (keyword ready) | Instant |
+| Startup (semantic ready) | ~200ms from cache, ~15s first run |
+| Embedding speed | ~50 chunks/sec (Apple Silicon) |
+| Embedding cache | `~/.contextengine/embedding-cache.json` |
+| Session storage | `~/.contextengine/sessions/` |
+
+## Architecture
+
+```
+src/
+├── cli.ts           # CLI - init scaffolding, help, routes to MCP
+├── index.ts         # MCP server - 11 tools, resources, file watcher
+├── config.ts        # Config loading, auto-discovery, 7 patterns
+├── ingest.ts        # Markdown heading-based chunker
+├── search.ts        # Keyword search - term overlap scoring
+├── embeddings.ts    # MiniLM-L6-v2 - vector search, cosine similarity
+├── cache.ts         # Embedding cache - SHA-256 hash invalidation
+├── code-chunker.ts  # Code parser - TS/JS/Python function extraction
+├── collectors.ts    # 11 operational data collectors
+├── agents.ts        # Compliance auditor, port checker, AI scorer
+└── sessions.ts      # Session persistence - key-value store
+```
 
 ## Development
 
@@ -151,24 +190,10 @@ npm run build
 npm start
 ```
 
-### Project Structure
+## Requirements
 
-```
-src/
-├── index.ts     # MCP server entry point — tool registration
-├── config.ts    # Configuration loading & source discovery
-├── ingest.ts    # Markdown parser & heading-based chunker
-└── search.ts    # Keyword search engine with relevance scoring
-```
-
-## Roadmap
-
-- [ ] **Vector embeddings** — semantic search via `all-MiniLM-L6-v2` (local, no API)
-- [ ] **File watching** — auto-reindex on file changes
-- [ ] **MCP resources** — expose docs as browsable resources
-- [ ] **Multi-format** — support YAML, JSON, code comments
-- [ ] **Team server** — shared HTTP transport for team knowledge bases
-- [ ] **VS Code extension** — one-click install from marketplace
+- Node.js 18+
+- No API keys needed — embeddings run locally
 
 ## License
 
