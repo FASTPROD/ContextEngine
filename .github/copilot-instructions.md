@@ -3,11 +3,12 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.9.44
+- **Version**: v1.9.45
 - **Branch**: `main`
 - **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
 - **npm account**: `compr` (yannick@compr.ch)
+- **npm token**: granular, expires March 18, 2026
 
 ## Architecture
 - **MCP SDK**: `@modelcontextprotocol/sdk` v1.26 — stdio transport
@@ -65,7 +66,7 @@
 5. **Git auto-push** — post-commit hook pushes to `origin` (GitHub) + `gdrive` (Google Drive backup)
 6. **Embedding cache** — `~/.contextengine/embedding-cache.json`, invalidated by SHA-256 hash of all chunk contents
 
-## Stats (as of v1.9.44)
+## Stats (as of v1.9.45)
 - 555+ chunks from 13+ sources auto-discovered
 - 127+ operational chunks from 19 projects
 - 76 code chunks from TS/JS/Python source files
