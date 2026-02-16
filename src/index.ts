@@ -34,6 +34,16 @@ import {
   formatSession,
   formatSessionList,
 } from "./sessions.js";
+import {
+  saveLearning,
+  searchLearnings,
+  listLearnings,
+  deleteLearning,
+  learningsToChunks,
+  learningsStats,
+  formatLearnings,
+  LEARNING_CATEGORIES,
+} from "./learnings.js";
 import { readFileSync, existsSync, watch, statSync } from "fs";
 import { basename, join, dirname } from "path";
 import { execSync } from "child_process";
@@ -100,6 +110,15 @@ async function reindex(): Promise<void> {
         `[ContextEngine] 💻 Parsed ${codeChunks} code chunks from source files`
       );
     }
+  }
+
+  // Inject learnings as searchable chunks
+  const learningChunks = learningsToChunks();
+  if (learningChunks.length > 0) {
+    chunks.push(...learningChunks);
+    console.error(
+      `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index`
+    );
   }
 
   if (isEmbeddingsReady()) {
@@ -214,7 +233,7 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "1.9.48",
+  version: "1.9.49",
 });
 
 // ---------------------------------------------------------------------------
@@ -799,6 +818,83 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool: save_learning (Permanent Learning Store)
+// ---------------------------------------------------------------------------
+server.tool(
+  "save_learning",
+  "Save a permanent operational rule learned during a coding session. Unlike sessions (ephemeral), learnings persist forever and auto-surface in search_context results so AI agents don't repeat mistakes. Duplicate rules (same category + rule text) are updated in place.",
+  {
+    category: z
+      .enum(LEARNING_CATEGORIES)
+      .describe("Category: deployment, api, database, frontend, backend, devops, security, performance, testing, debugging, tooling, git, dependencies, architecture, data, infrastructure, mobile, other"),
+    rule: z
+      .string()
+      .describe("The operational rule — concise, actionable (e.g., 'Always restart Flask after model changes')"),
+    context: z
+      .string()
+      .describe("Full context of how this was discovered — the bug, the fix, the symptoms (e.g., 'Avatar save returned 200 but field missing from API response — stale to_dict() cache')"),
+    project: z
+      .string()
+      .optional()
+      .describe("Project this learning applies to (e.g., 'CROWLR.io'). Omit if it's a general rule."),
+  },
+  async ({ category, rule, context, project }) => {
+    const learning = saveLearning(category, rule, context, project);
+    const stats = learningsStats();
+
+    // Re-inject learnings into search index
+    const newChunks = learningsToChunks();
+    // Remove old learning chunks and add new ones
+    const nonLearningChunks = chunks.filter((c) => c.source !== "💡 Learnings Store");
+    chunks.length = 0;
+    chunks.push(...nonLearningChunks, ...newChunks);
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: [
+            `✅ Learning saved: **${rule}**`,
+            ``,
+            `- **ID:** \`${learning.id}\``,
+            `- **Category:** ${category}`,
+            project ? `- **Project:** ${project}` : "",
+            `- **Tags:** ${learning.tags.join(", ")}`,
+            ``,
+            `📊 Store: ${stats.total} learnings across ${Object.keys(stats.categories).length} categories`,
+            ``,
+            `This learning will now auto-surface in \`search_context\` results when relevant.`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        },
+      ],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: list_learnings (Permanent Learning Store)
+// ---------------------------------------------------------------------------
+server.tool(
+  "list_learnings",
+  "List all permanent learnings, optionally filtered by category. Shows operational rules that have been discovered across sessions. Use search_context to find learnings by keyword — they're automatically included in search results.",
+  {
+    category: z
+      .string()
+      .optional()
+      .describe("Filter by category (deployment, api, database, etc.). Omit to show all."),
+  },
+  async ({ category }) => {
+    const learnings = category ? listLearnings(category) : listLearnings();
+    const text = formatLearnings(learnings);
+    return {
+      content: [{ type: "text" as const, text }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
 // MCP Resources: expose each source as a browsable resource
 // ---------------------------------------------------------------------------
 function registerResources(): void {
@@ -891,6 +987,15 @@ async function main() {
         `[ContextEngine] 💻 Parsed ${codeChunks} code chunks from source files`
       );
     }
+  }
+
+  // 1d. Inject learnings into search index
+  const learningChunks = learningsToChunks();
+  if (learningChunks.length > 0) {
+    chunks.push(...learningChunks);
+    console.error(
+      `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index`
+    );
   }
 
   // 2. Register MCP resources

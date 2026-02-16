@@ -18,7 +18,8 @@ ContextEngine fixes this: **zero-config, fully local, privacy-first.**
 - 🔒 **Local-only** — nothing leaves your machine
 - ⚡ **Instant startup** — keyword search ready immediately, embeddings load in background
 - 💾 **Session Persistence** — AI agents can save/restore context across conversations
-- 🔌 **MCP native** — works with any MCP-compatible client
+- � **Learning Store** — permanent operational rules that auto-surface in search results
+- �🔌 **MCP native** — works with any MCP-compatible client
 
 ## Quick Start
 
@@ -73,7 +74,7 @@ Detects your project type, creates `contextengine.json` + `.github/copilot-instr
 
 That's it. ContextEngine auto-discovers your docs in `~/Projects`.
 
-## Tools (12)
+## Tools (14)
 
 | Tool | Description |
 |------|-------------|
@@ -89,6 +90,8 @@ That's it. ContextEngine auto-discovers your docs in `~/Projects`.
 | `load_session` | Load all entries from a named session |
 | `list_sessions` | List all saved sessions |
 | `end_session` | Pre-flight checklist — checks uncommitted changes + doc freshness |
+| `save_learning` | Save a permanent operational rule — auto-surfaces in search results |
+| `list_learnings` | List all permanent learnings, optionally filtered by category |
 
 ## Configuration
 
@@ -163,13 +166,14 @@ Your Project Files           ContextEngine              AI Agent
 | Embedding speed | ~50 chunks/sec (Apple Silicon) |
 | Embedding cache | `~/.contextengine/embedding-cache.json` |
 | Session storage | `~/.contextengine/sessions/` |
+| Learnings storage | `~/.contextengine/learnings.json` |
 
 ## Architecture
 
 ```
 src/
 ├── cli.ts           # CLI - init scaffolding, help, routes to MCP
-├── index.ts         # MCP server - 12 tools, resources, file watcher
+├── index.ts         # MCP server - 14 tools, resources, file watcher
 ├── config.ts        # Config loading, auto-discovery, 7 patterns
 ├── ingest.ts        # Markdown heading-based chunker
 ├── search.ts        # Keyword search - term overlap scoring
@@ -178,7 +182,8 @@ src/
 ├── code-chunker.ts  # Code parser - TS/JS/Python function extraction
 ├── collectors.ts    # 11 operational data collectors
 ├── agents.ts        # Compliance auditor, port checker, AI scorer
-└── sessions.ts      # Session persistence - key-value store
+├── sessions.ts      # Session persistence - key-value store
+└── learnings.ts     # Permanent learning store - auto-indexed rules
 ```
 
 ## Development

@@ -3,3 +3,4 @@ dist/
 *.js.map
 .env
 .npmrc
+.DS_Store
