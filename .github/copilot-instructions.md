@@ -75,4 +75,4 @@
 - **Competitive Analysis**: `COMPETITIVE_ANALYSIS.md` (8 competitors analyzed)
 - **Multi-Agent Architecture Plan**: `FASTPROD/docs/MULTI_AGENT_ARCHITECTURE_PLAN.md`
 - **Session Doc**: `FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md`
-- **SKILLS**: `GDrive/CTRL/EXO/SKILLS.md`
+- **SKILLS**: `~/Projects/EXO/SKILLS.md`
