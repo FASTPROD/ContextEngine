@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.9.47
+- **Version**: v1.9.48
 - **Branch**: `main`
 - **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
@@ -72,7 +72,7 @@
    - Append session summary to `~/FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md`
    - Git commit + push ALL changed repos (ContextEngine, EXO, FASTPROD)
 
-## Stats (as of v1.9.47)
+## Stats (as of v1.9.48)
 - 555+ chunks from 13+ sources auto-discovered
 - 127+ operational chunks from 19 projects
 - 76 code chunks from TS/JS/Python source files
