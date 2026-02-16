@@ -65,6 +65,11 @@
 4. **MiniLM is NOT an LLM** — it's a sentence embedding model (text→vector), not generative
 5. **Git auto-push** — post-commit hook pushes to `origin` (GitHub) + `gdrive` (Google Drive backup)
 6. **Embedding cache** — `~/.contextengine/embedding-cache.json`, invalidated by SHA-256 hash of all chunk contents
+7. **End-of-session protocol** — before ending ANY session, ALWAYS:
+   - Update `ContextEngine/.github/copilot-instructions.md` (version, new features, stats)
+   - Update `~/Projects/EXO/SKILLS.md` (new capabilities learned)
+   - Append session summary to `~/FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md`
+   - Git commit + push ALL changed repos (ContextEngine, EXO, FASTPROD)
 
 ## Stats (as of v1.9.45)
 - 555+ chunks from 13+ sources auto-discovered
