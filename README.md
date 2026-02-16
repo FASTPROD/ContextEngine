@@ -73,7 +73,7 @@ Detects your project type, creates `contextengine.json` + `.github/copilot-instr
 
 That's it. ContextEngine auto-discovers your docs in `~/Projects`.
 
-## Tools (11)
+## Tools (12)
 
 | Tool | Description |
 |------|-------------|
@@ -88,6 +88,7 @@ That's it. ContextEngine auto-discovers your docs in `~/Projects`.
 | `save_session` | Save key-value entry to a named session |
 | `load_session` | Load all entries from a named session |
 | `list_sessions` | List all saved sessions |
+| `end_session` | Pre-flight checklist — checks uncommitted changes + doc freshness |
 
 ## Configuration
 
@@ -168,7 +169,7 @@ Your Project Files           ContextEngine              AI Agent
 ```
 src/
 ├── cli.ts           # CLI - init scaffolding, help, routes to MCP
-├── index.ts         # MCP server - 11 tools, resources, file watcher
+├── index.ts         # MCP server - 12 tools, resources, file watcher
 ├── config.ts        # Config loading, auto-discovery, 7 patterns
 ├── ingest.ts        # Markdown heading-based chunker
 ├── search.ts        # Keyword search - term overlap scoring

@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.9.46
+- **Version**: v1.9.47
 - **Branch**: `main`
 - **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
@@ -26,7 +26,7 @@
 | File | Purpose |
 |------|---------|
 | `src/cli.ts` | CLI entry point — `init` scaffolding, `help`, routes to MCP server |
-| `src/index.ts` | MCP server entry point — 11 tools, MCP resources, file watcher, startup |
+| `src/index.ts` | MCP server entry point — 12 tools, MCP resources, file watcher, startup |
 | `src/config.ts` | Configuration loading — contextengine.json, env vars, auto-discovery |
 | `src/ingest.ts` | Markdown parser — heading-based chunking with section hierarchy |
 | `src/search.ts` | Keyword search engine — tokenizer, term overlap scoring, multi-term bonus |
@@ -38,7 +38,7 @@
 | `src/code-chunker.ts` | Code parser — regex-based TS/JS/Python function/class/interface extraction |
 | `src/test.ts` | Test harness — validates keyword + semantic search on real data |
 
-## MCP Tools Exposed (11 tools)
+## MCP Tools Exposed (12 tools)
 | Tool | Description |
 |------|-------------|
 | `search_context` | Hybrid keyword+semantic search with mode selector (hybrid/keyword/semantic) |
@@ -52,6 +52,7 @@
 | `save_session` | Save key-value entry to a named session for cross-session persistence |
 | `load_session` | Load all entries from a named session |
 | `list_sessions` | List all saved sessions with entry counts and timestamps |
+| `end_session` | Pre-flight checklist — checks uncommitted git changes + doc freshness across all repos |
 
 ## Configuration System
 - **Priority**: `CONTEXTENGINE_CONFIG` env → `./contextengine.json` → `~/.contextengine.json` → `CONTEXTENGINE_WORKSPACES` env → auto-discover `~/Projects`
@@ -71,7 +72,7 @@
    - Append session summary to `~/FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md`
    - Git commit + push ALL changed repos (ContextEngine, EXO, FASTPROD)
 
-## Stats (as of v1.9.46)
+## Stats (as of v1.9.47)
 - 555+ chunks from 13+ sources auto-discovered
 - 127+ operational chunks from 19 projects
 - 76 code chunks from TS/JS/Python source files

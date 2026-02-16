@@ -34,8 +34,9 @@ import {
   formatSession,
   formatSessionList,
 } from "./sessions.js";
-import { readFileSync, existsSync, watch } from "fs";
-import { basename, join } from "path";
+import { readFileSync, existsSync, watch, statSync } from "fs";
+import { basename, join, dirname } from "path";
+import { execSync } from "child_process";
 import { scanCodeDir } from "./code-chunker.js";
 
 // ---------------------------------------------------------------------------
@@ -213,7 +214,7 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "1.9.44",
+  version: "1.9.47",
 });
 
 // ---------------------------------------------------------------------------
@@ -598,6 +599,201 @@ server.tool(
     const text = formatSessionList(sessions);
     return {
       content: [{ type: "text" as const, text }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: end_session (End-of-Session Protocol Enforcer)
+// ---------------------------------------------------------------------------
+server.tool(
+  "end_session",
+  "MUST be called before ending any coding session. Checks all project repos for uncommitted changes, verifies documentation freshness (copilot-instructions.md, SKILLS.md, session docs), and returns a checklist of required actions. Will report PASS/FAIL for each check. The AI agent should resolve all FAIL items before ending.",
+  {},
+  async () => {
+    const projectDirs = loadProjectDirs();
+    const checks: string[] = [];
+    let passCount = 0;
+    let failCount = 0;
+
+    checks.push("# End-of-Session Protocol\n");
+
+    // --- Check 1: Uncommitted changes across all repos ---
+    checks.push("## 1. Uncommitted Changes\n");
+    const reposChecked = new Set<string>();
+
+    for (const dir of projectDirs) {
+      try {
+        // Find the git root for this project
+        const gitRoot = execSync("git rev-parse --show-toplevel", {
+          cwd: dir.path,
+          encoding: "utf-8",
+          timeout: 5000,
+        }).trim();
+
+        if (reposChecked.has(gitRoot)) continue;
+        reposChecked.add(gitRoot);
+
+        const status = execSync("git status --porcelain", {
+          cwd: gitRoot,
+          encoding: "utf-8",
+          timeout: 5000,
+        }).trim();
+
+        const repoName = basename(gitRoot);
+        if (status) {
+          const fileCount = status.split("\n").length;
+          checks.push(`- ❌ **FAIL** — \`${repoName}\` has ${fileCount} uncommitted file(s)`);
+          // Show first 5 files
+          const files = status.split("\n").slice(0, 5);
+          for (const f of files) {
+            checks.push(`  - \`${f.trim()}\``);
+          }
+          if (fileCount > 5) checks.push(`  - ... and ${fileCount - 5} more`);
+          failCount++;
+        } else {
+          checks.push(`- ✅ **PASS** — \`${repoName}\` is clean`);
+          passCount++;
+        }
+      } catch {
+        // Not a git repo or git not available
+      }
+    }
+
+    // Also check common doc repos that might not be in projectDirs
+    const extraRepoPaths = [
+      join(process.env.HOME || "", "FASTPROD"),
+    ];
+    for (const repoPath of extraRepoPaths) {
+      if (!existsSync(repoPath) || reposChecked.has(repoPath)) continue;
+      try {
+        const gitRoot = execSync("git rev-parse --show-toplevel", {
+          cwd: repoPath,
+          encoding: "utf-8",
+          timeout: 5000,
+        }).trim();
+
+        if (reposChecked.has(gitRoot)) continue;
+        reposChecked.add(gitRoot);
+
+        const status = execSync("git status --porcelain", {
+          cwd: gitRoot,
+          encoding: "utf-8",
+          timeout: 5000,
+        }).trim();
+
+        const repoName = basename(gitRoot);
+        if (status) {
+          const fileCount = status.split("\n").length;
+          checks.push(`- ❌ **FAIL** — \`${repoName}\` has ${fileCount} uncommitted file(s)`);
+          failCount++;
+        } else {
+          checks.push(`- ✅ **PASS** — \`${repoName}\` is clean`);
+          passCount++;
+        }
+      } catch {
+        // Not a git repo
+      }
+    }
+
+    checks.push("");
+
+    // --- Check 2: Documentation freshness ---
+    checks.push("## 2. Documentation Freshness\n");
+    const now = Date.now();
+    const SESSION_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours — if not modified in current session, flag it
+
+    // Find copilot-instructions.md files across projects
+    let copilotFound = false;
+    for (const dir of projectDirs) {
+      const copilotPath = join(dir.path, ".github", "copilot-instructions.md");
+      if (existsSync(copilotPath)) {
+        copilotFound = true;
+        try {
+          const stat = statSync(copilotPath);
+          const ageMs = now - stat.mtimeMs;
+          if (ageMs < SESSION_THRESHOLD_MS) {
+            const mins = Math.round(ageMs / 60000);
+            checks.push(`- ✅ **PASS** — \`${dir.name}/copilot-instructions.md\` updated ${mins}m ago`);
+            passCount++;
+          } else {
+            const hours = Math.round(ageMs / 3600000);
+            checks.push(`- ⚠️ **CHECK** — \`${dir.name}/copilot-instructions.md\` last modified ${hours}h ago — update if anything changed`);
+            failCount++;
+          }
+        } catch {
+          checks.push(`- ⚠️ **CHECK** — \`${dir.name}/copilot-instructions.md\` could not be read`);
+        }
+      }
+    }
+    if (!copilotFound) {
+      checks.push("- ⚠️ **CHECK** — No copilot-instructions.md found in any project");
+    }
+
+    // Check SKILLS.md
+    const skillsPaths = [
+      join(process.env.HOME || "", "Projects", "EXO", "SKILLS.md"),
+    ];
+    for (const sp of skillsPaths) {
+      if (existsSync(sp)) {
+        try {
+          const stat = statSync(sp);
+          const ageMs = now - stat.mtimeMs;
+          if (ageMs < SESSION_THRESHOLD_MS) {
+            const mins = Math.round(ageMs / 60000);
+            checks.push(`- ✅ **PASS** — \`SKILLS.md\` updated ${mins}m ago`);
+            passCount++;
+          } else {
+            const hours = Math.round(ageMs / 3600000);
+            checks.push(`- ⚠️ **CHECK** — \`SKILLS.md\` last modified ${hours}h ago — update if new capabilities were learned`);
+            failCount++;
+          }
+        } catch {
+          // Can't stat
+        }
+      }
+    }
+
+    // Check session doc
+    const sessionDocPath = join(process.env.HOME || "", "FASTPROD", "docs", "CROWLR_COMPR_APPS_SESSION.md");
+    if (existsSync(sessionDocPath)) {
+      try {
+        const stat = statSync(sessionDocPath);
+        const ageMs = now - stat.mtimeMs;
+        if (ageMs < SESSION_THRESHOLD_MS) {
+          const mins = Math.round(ageMs / 60000);
+          checks.push(`- ✅ **PASS** — \`SESSION.md\` updated ${mins}m ago`);
+          passCount++;
+        } else {
+          const hours = Math.round(ageMs / 3600000);
+          checks.push(`- ⚠️ **CHECK** — \`SESSION.md\` last modified ${hours}h ago — append session summary`);
+          failCount++;
+        }
+      } catch {
+        // Can't stat
+      }
+    }
+
+    checks.push("");
+
+    // --- Summary ---
+    checks.push("## Summary\n");
+    const total = passCount + failCount;
+    if (failCount === 0) {
+      checks.push(`✅ **ALL CLEAR** — ${passCount}/${total} checks passed. Safe to end session.`);
+    } else {
+      checks.push(`⚠️ **${failCount} item(s) need attention** — ${passCount}/${total} passed.`);
+      checks.push("");
+      checks.push("**Before ending this session, please:**");
+      checks.push("1. Commit and push all uncommitted changes");
+      checks.push("2. Update copilot-instructions.md with version/feature changes");
+      checks.push("3. Update SKILLS.md if new capabilities were used");
+      checks.push("4. Append a session summary to SESSION.md");
+      checks.push("5. Run `end_session` again to verify all clear");
+    }
+
+    return {
+      content: [{ type: "text" as const, text: checks.join("\n") }],
     };
   }
 );
