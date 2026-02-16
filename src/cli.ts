@@ -117,6 +117,12 @@ function generateCopilotInstructions(det: ProjectDetection): string {
   lines.push("## Related");
   lines.push("- <!-- Links to related projects, docs, or resources -->");
   lines.push("");
+  lines.push("## End-of-Session Protocol");
+  lines.push("Before ending ANY coding session, the AI agent MUST:");
+  lines.push("1. Update this file (`copilot-instructions.md`) with any new rules, architecture changes, or version bumps");
+  lines.push("2. Git commit + push all changed repositories");
+  lines.push("3. <!-- Optional: Update SKILLS.md, session logs, or other tracking docs -->");
+  lines.push("");
   return lines.join("\n");
 }
 
