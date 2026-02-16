@@ -42,6 +42,7 @@ import {
   learningsToChunks,
   learningsStats,
   formatLearnings,
+  importLearningsFromFile,
   LEARNING_CATEGORIES,
 } from "./learnings.js";
 import { readFileSync, existsSync, watch, statSync } from "fs";
@@ -233,7 +234,7 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "1.9.49",
+  version: "1.9.50",
 });
 
 // ---------------------------------------------------------------------------
@@ -890,6 +891,67 @@ server.tool(
     const text = formatLearnings(learnings);
     return {
       content: [{ type: "text" as const, text }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: import_learnings (Bulk Import from Files)
+// ---------------------------------------------------------------------------
+server.tool(
+  "import_learnings",
+  "Bulk-import learnings from a Markdown or JSON file. Parses headings, bullets, and tables to extract operational rules. Supports: (1) Structured Markdown (H2=category, H3=rule, bullets=context), (2) Inline bullets with [category] prefix, (3) JSON arrays of {category, rule, context}. Deduplicates against existing learnings.",
+  {
+    file_path: z
+      .string()
+      .describe("Absolute path to the Markdown (.md) or JSON (.json) file to import from"),
+    default_category: z
+      .string()
+      .optional()
+      .describe("Default category for rules where category cannot be inferred. Defaults to 'other'."),
+    project: z
+      .string()
+      .optional()
+      .describe("Project name to tag all imported learnings with (e.g., 'FC_project')"),
+  },
+  async ({ file_path, default_category, project }) => {
+    const result = importLearningsFromFile(
+      file_path,
+      default_category || "other",
+      project,
+    );
+
+    // Re-inject learnings into search index
+    const newChunks = learningsToChunks();
+    const nonLearningChunks = chunks.filter((c) => c.source !== "💡 Learnings Store");
+    chunks.length = 0;
+    chunks.push(...nonLearningChunks, ...newChunks);
+
+    const stats = learningsStats();
+    const lines = [
+      `# Import Results\n`,
+      `- **Imported:** ${result.imported} new learnings`,
+      `- **Updated:** ${result.updated} existing learnings (dedup match)`,
+      `- **Skipped:** ${result.skipped} entries (missing data)`,
+      ``,
+      `📊 Store total: ${stats.total} learnings across ${Object.keys(stats.categories).length} categories`,
+      ``,
+    ];
+
+    if (result.errors.length > 0) {
+      lines.push(`## ⚠️ Errors (${result.errors.length})\n`);
+      for (const err of result.errors.slice(0, 10)) {
+        lines.push(`- ${err}`);
+      }
+      if (result.errors.length > 10) {
+        lines.push(`- ... and ${result.errors.length - 10} more`);
+      }
+    }
+
+    lines.push(`\nAll imported learnings now auto-surface in \`search_context\` results.`);
+
+    return {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
     };
   }
 );

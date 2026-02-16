@@ -230,6 +230,294 @@ export function deleteLearning(id: string): boolean {
 }
 
 /**
+ * Import learnings from a Markdown file.
+ * Parses headings and bullet points to extract rules.
+ *
+ * Supported formats:
+ * 1. **Structured Markdown** — H2 = category, H3 = rule, bullet = context
+ *    ```md
+ *    ## deployment
+ *    ### Never docker build | tee
+ *    - Pipeline signals kill builds. Use nohup > /tmp/log 2>&1 &
+ *    ```
+ *
+ * 2. **Bullet-list Markdown** — Each bullet with "→" or "—" separator
+ *    ```md
+ *    - [deployment] Never docker build | tee → Pipeline signals kill builds
+ *    ```
+ *
+ * 3. **JSON array** — Direct Learning[] import
+ */
+export interface ImportResult {
+  imported: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export function importLearningsFromFile(
+  filePath: string,
+  defaultCategory: string = "other",
+  defaultProject?: string,
+): ImportResult {
+  if (!existsSync(filePath)) {
+    return { imported: 0, updated: 0, skipped: 0, errors: [`File not found: ${filePath}`] };
+  }
+
+  const content = readFileSync(filePath, "utf-8");
+  const ext = filePath.split(".").pop()?.toLowerCase();
+
+  if (ext === "json") {
+    return importFromJson(content, defaultProject);
+  }
+  return importFromMarkdown(content, defaultCategory, defaultProject);
+}
+
+function importFromJson(content: string, defaultProject?: string): ImportResult {
+  const result: ImportResult = { imported: 0, updated: 0, skipped: 0, errors: [] };
+
+  try {
+    const data = JSON.parse(content);
+    const items: any[] = Array.isArray(data)
+      ? data
+      : data.learnings
+        ? data.learnings
+        : [];
+
+    for (const item of items) {
+      if (!item.rule || !item.category) {
+        result.skipped++;
+        result.errors.push(`Skipped entry missing rule or category: ${JSON.stringify(item).substring(0, 80)}`);
+        continue;
+      }
+      const cat = LEARNING_CATEGORIES.includes(item.category) ? item.category : "other";
+      const store = loadStore();
+      const existing = store.learnings.find(
+        (l) => l.category === cat && l.rule.toLowerCase().trim() === item.rule.toLowerCase().trim()
+      );
+      saveLearning(cat, item.rule, item.context || "", item.project || defaultProject);
+      if (existing) {
+        result.updated++;
+      } else {
+        result.imported++;
+      }
+    }
+  } catch (e: any) {
+    result.errors.push(`JSON parse error: ${e.message}`);
+  }
+
+  return result;
+}
+
+function importFromMarkdown(
+  content: string,
+  defaultCategory: string,
+  defaultProject?: string,
+): ImportResult {
+  const result: ImportResult = { imported: 0, updated: 0, skipped: 0, errors: [] };
+  const lines = content.split("\n");
+
+  let currentCategory = defaultCategory;
+  let currentRule = "";
+  let currentContext: string[] = [];
+
+  function flushRule(): void {
+    if (!currentRule) return;
+    const cat = normalizeCategory(currentCategory);
+    const ctx = currentContext.join(" ").trim() || `Imported from file`;
+    const store = loadStore();
+    const existing = store.learnings.find(
+      (l) => l.category === cat && l.rule.toLowerCase().trim() === currentRule.toLowerCase().trim()
+    );
+    saveLearning(cat, currentRule, ctx, defaultProject);
+    if (existing) {
+      result.updated++;
+    } else {
+      result.imported++;
+    }
+    currentRule = "";
+    currentContext = [];
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // H1 — file title, skip
+    if (trimmed.startsWith("# ") && !trimmed.startsWith("## ")) continue;
+
+    // H2 — category (e.g., "## deployment" or "## Security & Server Administration")
+    if (trimmed.startsWith("## ")) {
+      flushRule();
+      const heading = trimmed.replace(/^##\s+/, "").toLowerCase().trim();
+      currentCategory = heading;
+      continue;
+    }
+
+    // H3 — rule (e.g., "### Never docker build | tee")
+    if (trimmed.startsWith("### ")) {
+      flushRule();
+      currentRule = trimmed.replace(/^###\s+/, "").trim();
+      continue;
+    }
+
+    // H4+ — sub-rule, treat as context for current rule
+    if (trimmed.startsWith("#### ")) {
+      if (currentRule) {
+        currentContext.push(trimmed.replace(/^####\s+/, "").trim());
+      }
+      continue;
+    }
+
+    // Bullet with inline category: "- [deployment] Rule text → Context"
+    const inlineCatMatch = trimmed.match(/^[-*]\s+\[(\w+)\]\s+(.+)/);
+    if (inlineCatMatch) {
+      flushRule();
+      const [, cat, rest] = inlineCatMatch;
+      currentCategory = cat;
+      // Split on → or — for rule/context separation
+      const sepMatch = rest.match(/^(.+?)(?:\s*[→—]\s*|\s+[-–]\s+)(.+)$/);
+      if (sepMatch) {
+        currentRule = sepMatch[1].trim();
+        currentContext = [sepMatch[2].trim()];
+        flushRule();
+      } else {
+        currentRule = rest.trim();
+        flushRule();
+      }
+      continue;
+    }
+
+    // Table rows: | Pattern | Example | Description |
+    const tableMatch = trimmed.match(/^\|\s*\*\*(.+?)\*\*\s*\|(.+)\|(.+)\|/);
+    if (tableMatch) {
+      flushRule();
+      currentRule = tableMatch[1].trim();
+      currentContext = [tableMatch[2].trim() + " — " + tableMatch[3].trim()];
+      flushRule();
+      continue;
+    }
+
+    // Regular bullet — either starts a new rule or adds context to current
+    if (trimmed.match(/^[-*]\s+\*\*(.+?)\*\*/)) {
+      // Bold-start bullet = likely a rule
+      flushRule();
+      const boldMatch = trimmed.match(/^[-*]\s+\*\*(.+?)\*\*\s*(.*)$/);
+      if (boldMatch) {
+        currentRule = boldMatch[1].trim();
+        if (boldMatch[2]) {
+          // Strip leading separators
+          currentContext = [boldMatch[2].replace(/^[\s—→:]+/, "").trim()];
+        }
+      }
+      continue;
+    }
+
+    // Regular bullet or numbered item — context for current rule
+    if ((trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.match(/^\d+\.\s/)) && currentRule) {
+      const text = trimmed.replace(/^[-*\d.]+\s+/, "").trim();
+      if (text) currentContext.push(text);
+      continue;
+    }
+
+    // Plain text after a rule heading = context
+    if (currentRule && trimmed.length > 10 && !trimmed.startsWith("|") && !trimmed.startsWith("```")) {
+      currentContext.push(trimmed);
+    }
+  }
+
+  flushRule(); // Flush last rule
+  return result;
+}
+
+/** Map free-form heading text to closest LEARNING_CATEGORIES value */
+function normalizeCategory(heading: string): LearningCategory {
+  const h = heading.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
+
+  // Direct match
+  for (const cat of LEARNING_CATEGORIES) {
+    if (h === cat || h.startsWith(cat)) return cat;
+  }
+
+  // Keyword mapping
+  const map: Record<string, LearningCategory> = {
+    "deploy": "deployment",
+    "ci/cd": "devops",
+    "ci cd": "devops",
+    "pipeline": "devops",
+    "docker": "devops",
+    "nginx": "infrastructure",
+    "server": "infrastructure",
+    "hosting": "infrastructure",
+    "ssl": "security",
+    "cors": "security",
+    "auth": "security",
+    "malware": "security",
+    "hack": "security",
+    "hardening": "security",
+    "terminal": "tooling",
+    "command": "tooling",
+    "monitoring": "tooling",
+    "vs code": "tooling",
+    "test": "testing",
+    "jest": "testing",
+    "spec": "testing",
+    "debug": "debugging",
+    "bug": "debugging",
+    "fix": "debugging",
+    "react": "frontend",
+    "vue": "frontend",
+    "css": "frontend",
+    "ui": "frontend",
+    "laravel": "backend",
+    "django": "backend",
+    "flask": "backend",
+    "express": "backend",
+    "mysql": "database",
+    "postgres": "database",
+    "sql": "database",
+    "migration": "database",
+    "npm": "dependencies",
+    "composer": "dependencies",
+    "pip": "dependencies",
+    "package": "dependencies",
+    "git": "git",
+    "commit": "git",
+    "branch": "git",
+    "hook": "git",
+    "perf": "performance",
+    "speed": "performance",
+    "cache": "performance",
+    "mobile": "mobile",
+    "expo": "mobile",
+    "flutter": "mobile",
+    "react native": "mobile",
+    "swift": "mobile",
+    "pattern": "architecture",
+    "design": "architecture",
+    "struct": "architecture",
+    "data type": "data",
+    "csv": "data",
+    "import": "data",
+    "export": "data",
+    "api": "api",
+    "endpoint": "api",
+    "rest": "api",
+    "smtp": "infrastructure",
+    "email": "infrastructure",
+    "queue": "infrastructure",
+    "audit": "security",
+    "version": "dependencies",
+    "upgrade": "dependencies",
+  };
+
+  for (const [keyword, cat] of Object.entries(map)) {
+    if (h.includes(keyword)) return cat;
+  }
+
+  return "other";
+}
+
+/**
  * Convert learnings to Chunks so they can be included in search_context.
  * This is the key integration — learnings auto-surface in hybrid search.
  */

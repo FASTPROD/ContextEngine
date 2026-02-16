@@ -74,7 +74,7 @@ Detects your project type, creates `contextengine.json` + `.github/copilot-instr
 
 That's it. ContextEngine auto-discovers your docs in `~/Projects`.
 
-## Tools (14)
+## Tools (15)
 
 | Tool | Description |
 |------|-------------|
@@ -92,6 +92,7 @@ That's it. ContextEngine auto-discovers your docs in `~/Projects`.
 | `end_session` | Pre-flight checklist — checks uncommitted changes + doc freshness |
 | `save_learning` | Save a permanent operational rule — auto-surfaces in search results |
 | `list_learnings` | List all permanent learnings, optionally filtered by category |
+| `import_learnings` | Bulk-import learnings from Markdown or JSON files |
 
 ## Configuration
 
