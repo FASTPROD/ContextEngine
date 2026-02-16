@@ -5,7 +5,7 @@
 - **GitHub**: FASTPROD/ContextEngine
 - **Version**: v1.9.44
 - **Branch**: `main`
-- **License**: MIT (open-source)
+- **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
 - **npm account**: `compr` (yannick@compr.ch)
 

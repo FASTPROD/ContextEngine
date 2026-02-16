@@ -195,6 +195,14 @@ npm start
 - Node.js 18+
 - No API keys needed — embeddings run locally
 
+## Contributing
+
+Issues, feature requests, and PRs welcome at [github.com/FASTPROD/ContextEngine](https://github.com/FASTPROD/ContextEngine/issues).
+
+If you're using ContextEngine, we'd love to hear about it — feedback helps us improve.
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+AGPL-3.0 — see [LICENSE](LICENSE).
+
+For commercial licensing: yannick@compr.ch
