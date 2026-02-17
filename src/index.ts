@@ -130,12 +130,44 @@ async function reindex(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Hybrid Search: combine keyword + vector scores
+// Hybrid Search: combine keyword + vector scores with temporal decay
 // ---------------------------------------------------------------------------
+
+/**
+ * Temporal decay half-life in days.
+ * Chunks older than this get a ~50% penalty; very recent chunks get a boost.
+ * Set to 0 to disable temporal decay.
+ */
+const DECAY_HALF_LIFE_DAYS = 90;
+
+/**
+ * Compute a temporal decay multiplier for a chunk based on its indexedAt time.
+ * Returns a value between 0.5 and 1.0 (exponential decay).
+ * Formula: 0.5 + 0.5 * exp(-age_days * ln(2) / half_life)
+ *
+ * Age 0 days → 1.0 (no decay)
+ * Age = half_life → 0.75
+ * Age = 2 * half_life → 0.625
+ * Very old → approaches 0.5
+ */
+function temporalDecay(chunk: Chunk): number {
+  if (DECAY_HALF_LIFE_DAYS <= 0) return 1.0;
+  if (!chunk.indexedAt) return 0.85; // Default for chunks without timestamp
+
+  const now = Date.now();
+  const indexedMs = new Date(chunk.indexedAt).getTime();
+  if (isNaN(indexedMs)) return 0.85;
+
+  const ageDays = (now - indexedMs) / (1000 * 60 * 60 * 24);
+  const lambda = Math.LN2 / DECAY_HALF_LIFE_DAYS;
+  return 0.5 + 0.5 * Math.exp(-ageDays * lambda);
+}
+
 interface HybridResult {
   chunk: Chunk;
   keywordScore: number;
   vectorScore: number;
+  temporalMultiplier: number;
   combinedScore: number;
 }
 
@@ -154,6 +186,7 @@ function hybridSearch(
       chunk: r.chunk,
       keywordScore: r.score / maxKw,
       vectorScore: 0,
+      temporalMultiplier: temporalDecay(r.chunk),
       combinedScore: 0,
     });
   }
@@ -168,14 +201,16 @@ function hybridSearch(
         chunk: r.chunk,
         keywordScore: 0,
         vectorScore: r.score,
+        temporalMultiplier: temporalDecay(r.chunk),
         combinedScore: 0,
       });
     }
   }
 
-  // Combined: 40% keyword + 60% semantic (semantic is better for natural language)
+  // Combined: 40% keyword + 60% semantic, multiplied by temporal decay
   for (const r of map.values()) {
-    r.combinedScore = r.keywordScore * 0.4 + r.vectorScore * 0.6;
+    const rawScore = r.keywordScore * 0.4 + r.vectorScore * 0.6;
+    r.combinedScore = rawScore * r.temporalMultiplier;
   }
 
   const results = Array.from(map.values());
@@ -234,7 +269,7 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "1.9.50",
+  version: "1.10.0",
 });
 
 // ---------------------------------------------------------------------------
@@ -242,7 +277,7 @@ const server = new McpServer({
 // ---------------------------------------------------------------------------
 server.tool(
   "search_context",
-  "Search across all indexed project knowledge (copilot-instructions, skills docs, runbooks, session docs). Uses hybrid keyword + semantic search. Returns the most relevant chunks with source file, section, and line numbers.",
+  "Search across all indexed project knowledge (copilot-instructions, skills docs, runbooks, session docs). Uses hybrid BM25 keyword + semantic search with temporal decay. Returns the most relevant chunks with source file, section, and line numbers.",
   {
     query: z.string().describe("Natural language search query"),
     top_k: z
@@ -280,7 +315,7 @@ server.tool(
         results = hybrid.map((r) => ({
           chunk: r.chunk,
           score: r.combinedScore,
-          label: `kw:${r.keywordScore.toFixed(2)} sem:${r.vectorScore.toFixed(2)}`,
+          label: `kw:${r.keywordScore.toFixed(2)} sem:${r.vectorScore.toFixed(2)} age:${r.temporalMultiplier.toFixed(2)}`,
         }));
       }
     } else if (mode === "semantic") {
@@ -367,7 +402,7 @@ server.tool(
         {
           type: "text" as const,
           text: [
-            `ContextEngine v1.9.43`,
+            `ContextEngine v1.10.0`,
             `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
             "",
             ...lines,

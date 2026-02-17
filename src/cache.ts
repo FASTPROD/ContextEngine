@@ -33,7 +33,7 @@ interface CacheEntry {
   vectors: number[][];
 }
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 
 /**
  * Compute a hash of all chunk contents to detect changes.
