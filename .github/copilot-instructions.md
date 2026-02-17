@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.9.48
+- **Version**: v1.9.50
 - **Branch**: `main`
 - **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
@@ -20,13 +20,15 @@
 - **File watching**: `fs.watch` on all sources with 500ms debounce → auto re-index
 - **Auto-discovery**: 7 patterns (copilot-instructions, SKILLS, CLAUDE.md, .cursorrules, .cursor/rules, AGENTS.md)
 - **Session persistence**: `~/.contextengine/sessions/` — key-value store per named session, persists across restarts
+- **Learning store**: `~/.contextengine/learnings.json` — permanent operational rules, auto-surface in search_context results
+- **Bulk import**: `import_learnings` tool parses Markdown (H2=category, H3=rule, bullets=context) or JSON arrays
 - **CLI**: `npx @compr/contextengine-mcp init` — scaffolds contextengine.json + copilot-instructions.md template
 
 ## Source Files
 | File | Purpose |
 |------|---------|
 | `src/cli.ts` | CLI entry point — `init` scaffolding, `help`, routes to MCP server |
-| `src/index.ts` | MCP server entry point — 12 tools, MCP resources, file watcher, startup |
+| `src/index.ts` | MCP server entry point — 15 tools, MCP resources, file watcher, startup |
 | `src/config.ts` | Configuration loading — contextengine.json, env vars, auto-discovery |
 | `src/ingest.ts` | Markdown parser — heading-based chunking with section hierarchy |
 | `src/search.ts` | Keyword search engine — tokenizer, term overlap scoring, multi-term bonus |
@@ -35,10 +37,11 @@
 | `src/collectors.ts` | 11 operational data collectors — git, package.json, composer, .env, docker, pm2, nginx, cron |
 | `src/agents.ts` | Multi-agent — project analyzer, port conflict detector, compliance auditor, AI-readiness scorer |
 | `src/sessions.ts` | Session persistence — save/load/list/delete named sessions to disk |
+| `src/learnings.ts` | Learning store — permanent operational rules, 18 categories, auto-tag extraction, bulk import |
 | `src/code-chunker.ts` | Code parser — regex-based TS/JS/Python function/class/interface extraction |
 | `src/test.ts` | Test harness — validates keyword + semantic search on real data |
 
-## MCP Tools Exposed (12 tools)
+## MCP Tools Exposed (15 tools)
 | Tool | Description |
 |------|-------------|
 | `search_context` | Hybrid keyword+semantic search with mode selector (hybrid/keyword/semantic) |
@@ -53,6 +56,9 @@
 | `load_session` | Load all entries from a named session |
 | `list_sessions` | List all saved sessions with entry counts and timestamps |
 | `end_session` | Pre-flight checklist — checks uncommitted git changes + doc freshness across all repos |
+| `save_learning` | Save a permanent operational rule — auto-surfaces in search_context results |
+| `list_learnings` | List all permanent learnings, optionally filtered by category |
+| `import_learnings` | Bulk-import learnings from Markdown or JSON files |
 
 ## Configuration System
 - **Priority**: `CONTEXTENGINE_CONFIG` env → `./contextengine.json` → `~/.contextengine.json` → `CONTEXTENGINE_WORKSPACES` env → auto-discover `~/Projects`
@@ -72,10 +78,11 @@
    - Append session summary to `~/FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md`
    - Git commit + push ALL changed repos (ContextEngine, EXO, FASTPROD)
 
-## Stats (as of v1.9.48)
+## Stats (as of v1.9.50)
 - 555+ chunks from 13+ sources auto-discovered
 - 127+ operational chunks from 19 projects
 - 76 code chunks from TS/JS/Python source files
+- 107 learnings across 14 categories (seeded from SKILLS.md, FC_project, operational rules)
 - Keyword search: instant
 - Semantic search: ~15s model load (first run), ~200ms from cache
 - Embedding speed: ~50 chunks/sec on Apple Silicon
