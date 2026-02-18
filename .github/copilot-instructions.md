@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.11.0
+- **Version**: v1.12.0
 - **Branch**: `main`
 - **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
@@ -25,6 +25,8 @@
 - **Bundled defaults**: 30 curated universal learnings ship with npm — auto-merged on first load (dedup by rule text)
 - **Bulk import**: `import_learnings` tool parses Markdown (H2=category, H3=rule, bullets=context) or JSON arrays
 - **CLI**: `npx @compr/contextengine-mcp init` — scaffolds contextengine.json + copilot-instructions.md template
+- **Plugin adapters**: `src/adapters.ts` — custom data source connectors, ES module loading, env var resolution, factory pattern
+- **OpenClaw skill**: `skills/contextengine/SKILL.md` — AgentSkills-compatible, targets 208K-star OpenClaw community
 
 ## Source Files
 | File | Purpose |
@@ -41,8 +43,11 @@
 | `src/sessions.ts` | Session persistence — save/load/list/delete named sessions to disk |
 | `src/learnings.ts` | Learning store — permanent operational rules, 18 categories, auto-tag extraction, bulk import, bundled defaults |
 | `defaults/learnings.json` | 30 curated universal best practices — shipped with npm, auto-merged on first load |
+| `src/adapters.ts` | Plugin adapter system — Adapter interface, registry, ES module loading, env var resolution |
 | `src/code-chunker.ts` | Code parser — regex-based TS/JS/Python function/class/interface extraction |
 | `src/test.ts` | Test harness — validates keyword + semantic search on real data |
+| `skills/contextengine/SKILL.md` | OpenClaw skill package — AgentSkills frontmatter, 15 tools, MCP setup docs |
+| `examples/adapters/` | Example adapters — Notion skeleton + RSS feed adapter |
 
 ## MCP Tools Exposed (15 tools)
 | Tool | Description |
@@ -65,7 +70,7 @@
 
 ## Configuration System
 - **Priority**: `CONTEXTENGINE_CONFIG` env → `./contextengine.json` → `~/.contextengine.json` → `CONTEXTENGINE_WORKSPACES` env → auto-discover `~/Projects`
-- **contextengine.json**: `sources` (explicit files), `workspaces` (dirs to scan), `patterns` (filenames to match), `codeDirs` (source dirs to parse)
+- **contextengine.json**: `sources` (explicit files), `workspaces` (dirs to scan), `patterns` (filenames to match), `codeDirs` (source dirs to parse), `adapters` (plugin data sources)
 - **Default patterns**: `.github/copilot-instructions.md`, `.github/SKILLS.md`, `CLAUDE.md`, `.cursorrules`, `.cursor/rules`, `AGENTS.md`
 
 ## Critical Rules
@@ -87,7 +92,7 @@
    - If ContextEngine MCP is not connected in the current workspace, **say so** and ask the user to connect it — do NOT silently skip
    - This rule exists because learnings written to markdown files are stranded — they don't auto-surface in `search_context` results
 
-## Stats (as of v1.11.0)
+## Stats (as of v1.12.0)
 - 555+ chunks from 13+ sources auto-discovered (with 4-line overlap at section boundaries)
 - 127+ operational chunks from 19 projects
 - 76 code chunks from TS/JS/Python source files
@@ -99,7 +104,7 @@
 - Embedding speed: ~50 chunks/sec on Apple Silicon
 
 ## Related
-- **Competitive Analysis**: `COMPETITIVE_ANALYSIS.md` (8 competitors analyzed)
+- **Competitive Analysis**: `COMPETITIVE_ANALYSIS.md` (8 competitors + OpenClaw strategic complement analyzed)
 - **Multi-Agent Architecture Plan**: `FASTPROD/docs/MULTI_AGENT_ARCHITECTURE_PLAN.md`
 - **Session Doc**: `FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md`
 - **SKILLS**: `~/Projects/EXO/SKILLS.md`
