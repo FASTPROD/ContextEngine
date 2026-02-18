@@ -1,6 +1,6 @@
 {
   "name": "@compr/contextengine-mcp",
-  "version": "1.10.1",
+  "version": "1.11.0",
   "description": "MCP server that turns your project documentation into a queryable knowledge base for AI coding agents",
   "type": "module",
   "main": "dist/index.js",
@@ -43,6 +43,7 @@
   },
   "files": [
     "dist/",
+    "defaults/",
     "LICENSE",
     "README.md"
   ],

@@ -1,7 +1,11 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
+import { fileURLToPath } from "url";
 import { Chunk } from "./ingest.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Learning Store — permanent operational rules that persist forever.
@@ -70,15 +74,76 @@ function ensureDir(): void {
   }
 }
 
-function loadStore(): LearningsStore {
-  if (existsSync(LEARNINGS_PATH)) {
+/**
+ * Load bundled starter learnings from the npm package's defaults/ directory.
+ * These are curated, universal best practices shipped with every install.
+ */
+function loadBundledDefaults(): Array<{ category: string; rule: string; context: string; tags: string[] }> {
+  // defaults/ sits next to dist/ in the package root
+  const defaultsPath = join(__dirname, "..", "defaults", "learnings.json");
+  if (existsSync(defaultsPath)) {
     try {
-      return JSON.parse(readFileSync(LEARNINGS_PATH, "utf-8"));
+      return JSON.parse(readFileSync(defaultsPath, "utf-8"));
     } catch {
-      // Corrupted file — start fresh
+      // Malformed defaults — skip silently
     }
   }
-  return { version: 1, count: 0, learnings: [] };
+  return [];
+}
+
+/**
+ * Merge bundled defaults into user store if they don't already exist.
+ * Uses rule text (lowercased) for dedup — user learnings always win.
+ */
+function mergeDefaults(store: LearningsStore): boolean {
+  const bundled = loadBundledDefaults();
+  if (bundled.length === 0) return false;
+
+  const existingRules = new Set(
+    store.learnings.map((l) => l.rule.toLowerCase().trim())
+  );
+
+  let added = 0;
+  const now = new Date().toISOString();
+
+  for (const def of bundled) {
+    if (existingRules.has(def.rule.toLowerCase().trim())) continue;
+
+    store.learnings.push({
+      id: generateId(),
+      category: def.category as LearningCategory,
+      rule: def.rule,
+      context: def.context,
+      tags: def.tags || [],
+      created: now,
+      updated: now,
+    });
+    existingRules.add(def.rule.toLowerCase().trim());
+    added++;
+  }
+
+  return added > 0;
+}
+
+function loadStore(): LearningsStore {
+  let store: LearningsStore;
+  if (existsSync(LEARNINGS_PATH)) {
+    try {
+      store = JSON.parse(readFileSync(LEARNINGS_PATH, "utf-8"));
+    } catch {
+      // Corrupted file — start fresh
+      store = { version: 1, count: 0, learnings: [] };
+    }
+  } else {
+    store = { version: 1, count: 0, learnings: [] };
+  }
+
+  // Auto-merge bundled defaults on first load or when new defaults are added
+  if (mergeDefaults(store)) {
+    saveStore(store);
+  }
+
+  return store;
 }
 
 function saveStore(store: LearningsStore): void {

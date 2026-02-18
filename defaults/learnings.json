@@ -1,0 +1,182 @@
+[
+  {
+    "category": "security",
+    "rule": "Auth on write endpoints is non-negotiable",
+    "context": "Write endpoints launched without auth = IDOR vulnerability. Client-supplied user_id in request body can be spoofed. Always extract identity from JWT/session.",
+    "tags": ["auth", "IDOR", "JWT", "API"]
+  },
+  {
+    "category": "security",
+    "rule": "Secrets must crash on startup, never fallback",
+    "context": "Dev fallback secrets (SECRET_KEY = os.getenv('SECRET', 'dev-fallback')) silently run in production with weak secrets. Crash on startup if production env vars are set but secrets are missing.",
+    "tags": ["secrets", "env-vars", "production", "startup"]
+  },
+  {
+    "category": "security",
+    "rule": "Rate-limit auth endpoints on day one",
+    "context": "Login/register without rate limiting = free brute-force. Apply rate limiting immediately: login 5-10/min, register 3-5/hr per IP.",
+    "tags": ["rate-limiting", "auth", "brute-force"]
+  },
+  {
+    "category": "security",
+    "rule": "Never embed tokens or secrets in frontend source",
+    "context": "Hardcoded tokens in frontend JS are visible to every user in the browser bundle. Use server-side token exchange or environment variables injected at build time.",
+    "tags": ["tokens", "frontend", "hardcoded-secrets"]
+  },
+  {
+    "category": "security",
+    "rule": "CSP and security headers on both CDN and API layers",
+    "context": "Headers in CDN config AND backend middleware. One layer alone leaves gaps. Update CSP when adding external domains (fonts, analytics, etc.).",
+    "tags": ["CSP", "headers", "defense-in-depth"]
+  },
+  {
+    "category": "architecture",
+    "rule": "Single source of truth for constants",
+    "context": "Duplicated values (API URLs, color codes, config) always drift. Create one canonical file and import everywhere. Time saved on future changes: massive.",
+    "tags": ["constants", "DRY", "refactoring"]
+  },
+  {
+    "category": "architecture",
+    "rule": "Shared database requires schema isolation",
+    "context": "When multiple apps share one PostgreSQL/MySQL instance, always use dedicated schemas or databases. Prevents accidental cross-contamination and simplifies migrations.",
+    "tags": ["PostgreSQL", "multi-app", "schema", "database"]
+  },
+  {
+    "category": "architecture",
+    "rule": "Extension modules prevent circular imports",
+    "context": "Shared instances (rate limiter, logger, DB) in a separate extensions/utils module break circular dependency between app entry point and route files. Applies to Flask, FastAPI, Express, etc.",
+    "tags": ["circular-imports", "extensions", "modules"]
+  },
+  {
+    "category": "deployment",
+    "rule": "Always install dependencies after file sync",
+    "context": "rsync/scp copies code but not installed packages. Missing dependencies cause crash loops that look like instability. Always run pip install / npm install / composer install after deploy.",
+    "tags": ["pip", "npm", "rsync", "dependencies"]
+  },
+  {
+    "category": "deployment",
+    "rule": "PM2 restart counter masks real crashes",
+    "context": "Hundreds of restarts can be a single missing module repeating. Use pm2 reset after fixing to clear noise. Check pm2 logs for the actual error before assuming instability.",
+    "tags": ["PM2", "debugging", "restart-counter"]
+  },
+  {
+    "category": "deployment",
+    "rule": "Sentry DSN must be optional in dev",
+    "context": "Guard with if env SENTRY_DSN exists. Works in dev (no DSN) and prod (DSN set). Never crash on missing monitoring config.",
+    "tags": ["Sentry", "env-vars", "optional"]
+  },
+  {
+    "category": "deployment",
+    "rule": "Version strings drift across files",
+    "context": "Backend health endpoint, frontend UI, package.json all showing different versions. Use a single source constant and update all locations together.",
+    "tags": ["versioning", "consistency", "drift"]
+  },
+  {
+    "category": "deployment",
+    "rule": "Docker cross-platform builds need explicit platform flag",
+    "context": "Apple Silicon (ARM64) images will not start on amd64 servers. Always use --platform linux/amd64 when building for x86 servers.",
+    "tags": ["docker", "arm64", "amd64", "cross-platform"]
+  },
+  {
+    "category": "deployment",
+    "rule": "Never pipe docker build through tee or other commands",
+    "context": "Pipeline signals kill the build process. Use nohup docker build > /tmp/log 2>&1 & instead. Then tail -f the log.",
+    "tags": ["docker", "build", "pipeline", "nohup"]
+  },
+  {
+    "category": "bug-patterns",
+    "rule": "Use == not >= for one-time reward thresholds",
+    "context": "if count >= 3: award() fires on 3, 4, 5, 6... Use == for exact threshold. This class of bug is invisible until data grows past the threshold.",
+    "tags": ["threshold", "comparison", "logic-error"]
+  },
+  {
+    "category": "bug-patterns",
+    "rule": "GPS drift between independent getCurrentPosition calls",
+    "context": "Each call returns different coords within accuracy radius (~35m). Use watchPosition for consistent tracking in location-aware apps.",
+    "tags": ["GPS", "geolocation", "drift", "mobile"]
+  },
+  {
+    "category": "frontend",
+    "rule": "Never put callback props in useEffect dependency arrays",
+    "context": "New function references on every render cause the effect to fire continuously. Store callbacks in useRef, keep deps minimal (e.g. [enabled] only).",
+    "tags": ["React", "useEffect", "hooks", "performance"]
+  },
+  {
+    "category": "frontend",
+    "rule": "Memoize arrays and objects passed as props",
+    "context": "Inline .map() or object literals in JSX create new references every render, triggering child re-renders or effect re-runs. Use useMemo/useCallback.",
+    "tags": ["React", "useMemo", "performance", "rendering"]
+  },
+  {
+    "category": "frontend",
+    "rule": "Run tsc --noEmit before every commit",
+    "context": "TypeScript errors silently accumulate when type-checking is not enforced. Zero-tolerance policy prevents drift. Add to CI or pre-commit hook.",
+    "tags": ["TypeScript", "CI", "type-checking"]
+  },
+  {
+    "category": "frontend",
+    "rule": "catch error must use unknown type with instanceof narrowing",
+    "context": "Never catch (error: any). Use catch (error: unknown) and narrow with: const msg = error instanceof Error ? error.message : 'Unknown error'.",
+    "tags": ["TypeScript", "error-handling", "type-narrowing"]
+  },
+  {
+    "category": "testing",
+    "rule": "SQLite in-memory for backend tests",
+    "context": "Override DATABASE_URL with sqlite:// in test config. No schema migration needed, instant teardown. Disable rate-limiters in test mode.",
+    "tags": ["SQLite", "pytest", "in-memory", "testing"]
+  },
+  {
+    "category": "testing",
+    "rule": "Test the contract not the implementation",
+    "context": "Assert on status codes, response shapes, and output values. Don't mock internal functions — test through the API boundary. Tests survive refactoring this way.",
+    "tags": ["contract-testing", "assertions", "API"]
+  },
+  {
+    "category": "testing",
+    "rule": "Clean between tests by deleting rows, not recreating schema",
+    "context": "db.session.query(Model).delete() in FK-safe order is faster than drop_all/create_all. Only recreate schema when migrations change.",
+    "tags": ["database", "cleanup", "FK-constraints", "performance"]
+  },
+  {
+    "category": "tooling",
+    "rule": "AI docs have the highest ROI for developer productivity",
+    "context": "Comprehensive copilot-instructions.md / CLAUDE.md gives AI agents full project context. Every bug fix should become a prevention rule in the instructions.",
+    "tags": ["copilot-instructions", "documentation", "AI-readiness"]
+  },
+  {
+    "category": "tooling",
+    "rule": "Architecture decision log prevents repeat mistakes",
+    "context": "A table of Date | Decision | Rationale | Impact ensures the same bug or wrong approach is never introduced twice. Each row is a force multiplier.",
+    "tags": ["ADL", "architecture-decisions", "documentation"]
+  },
+  {
+    "category": "tooling",
+    "rule": "Session docs enable multi-day AI continuity",
+    "context": "Structured session files with commits, file changes, and decisions let any AI agent pick up exactly where the last one left off across days or weeks.",
+    "tags": ["session-docs", "continuity", "AI-agents"]
+  },
+  {
+    "category": "tooling",
+    "rule": "Score your project early and often",
+    "context": "A structured rubric (tests, CI, docs, security, AI-readiness) reveals blind spots immediately. First audit often shows 30-50% — knowing the gaps drives prioritization.",
+    "tags": ["scoring", "audit", "prioritization"]
+  },
+  {
+    "category": "accessibility",
+    "rule": "All interactive elements need accessibility labels",
+    "context": "Every TouchableOpacity, Pressable, Button needs accessibilityLabel + accessibilityRole. Full coverage of a typical app (60-70 elements) takes ~20 minutes.",
+    "tags": ["accessibilityLabel", "a11y", "audit"]
+  },
+  {
+    "category": "accessibility",
+    "rule": "Toggle buttons need dynamic accessibility labels",
+    "context": "accessibilityLabel must reflect current state (e.g. 'Stop recording' vs 'Start recording'). Static labels on toggles are misleading for screen reader users.",
+    "tags": ["toggle", "dynamic-labels", "screen-readers"]
+  },
+  {
+    "category": "git",
+    "rule": "Push every 5-10 commits, never accumulate 20+",
+    "context": "Large push backlogs risk merge conflicts, lost work, and difficult rollbacks. Push frequently, especially after critical fixes. Auto-push hooks help enforce this.",
+    "tags": ["git", "push-frequency", "workflow"]
+  }
+]
