@@ -43,6 +43,17 @@ export interface ContextEngineConfig {
   collectOps?: boolean;
   /** Enable system-wide operational data (docker, pm2, nginx, cron, shell history) — default true */
   collectSystemOps?: boolean;
+  /**
+   * Plugin adapters — custom data source connectors.
+   * Each adapter is an ES module that implements the Adapter interface.
+   * @example [{ "name": "notion", "module": "./adapters/notion.js", "config": { "token": "$NOTION_TOKEN" } }]
+   */
+  adapters?: Array<{
+    name: string;
+    module: string;
+    config?: Record<string, unknown>;
+    enabled?: boolean;
+  }>;
 }
 
 const DEFAULT_PATTERNS = [

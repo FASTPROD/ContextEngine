@@ -2,7 +2,11 @@
 
 **An MCP server that turns your project documentation into a queryable knowledge base for AI agents.**
 
-ContextEngine indexes your `copilot-instructions.md`, `SKILLS.md`, `CLAUDE.md`, runbooks, and source code — then exposes it via the [Model Context Protocol](https://modelcontextprotocol.io) so AI coding assistants (GitHub Copilot, Claude, Cursor, Windsurf) can search your accumulated knowledge in real time.
+[![npm](https://img.shields.io/npm/v/@compr/contextengine-mcp)](https://www.npmjs.com/package/@compr/contextengine-mcp)
+[![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-blue?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTgiPvCfp6A8L3RleHQ+PC9zdmc+)](https://github.com/FASTPROD/ContextEngine/tree/main/skills/contextengine)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-green.svg)](LICENSE)
+
+ContextEngine indexes your `copilot-instructions.md`, `SKILLS.md`, `CLAUDE.md`, runbooks, and source code — then exposes it via the [Model Context Protocol](https://modelcontextprotocol.io) so AI coding assistants (GitHub Copilot, Claude, Cursor, Windsurf, OpenClaw) can search your accumulated knowledge in real time.
 
 ## Why
 
@@ -18,8 +22,9 @@ ContextEngine fixes this: **zero-config, fully local, privacy-first.**
 - 🔒 **Local-only** — nothing leaves your machine
 - ⚡ **Instant startup** — keyword search ready immediately, embeddings load in background
 - 💾 **Session Persistence** — AI agents can save/restore context across conversations
-- � **Learning Store** — permanent operational rules that auto-surface in search results
-- �🔌 **MCP native** — works with any MCP-compatible client
+- 💡 **Learning Store** — permanent operational rules that auto-surface in search results
+- 🔌 **Plugin Adapters** — extend with custom data sources (Notion, Jira, RSS, etc.)
+- 🧩 **MCP native** — works with any MCP-compatible client (VS Code, Claude, Cursor, OpenClaw)
 
 ## Quick Start
 
@@ -78,6 +83,27 @@ This makes ContextEngine available in **every VS Code workspace** automatically 
 }
 ```
 
+**OpenClaw** — add ContextEngine as an MCP server in your OpenClaw config, or use the bundled skill:
+
+```bash
+# Option 1: Copy the skill to your OpenClaw workspace
+cp -r node_modules/@compr/contextengine-mcp/skills/contextengine ~/.openclaw/workspace/skills/
+
+# Option 2: Add as MCP server in openclaw.json
+```
+
+```json
+{
+  "mcpServers": {
+    "contextengine": {
+      "command": "npx",
+      "args": ["-y", "@compr/contextengine-mcp"],
+      "env": { "CONTEXTENGINE_WORKSPACES": "~/Projects" }
+    }
+  }
+}
+```
+
 ### 3. Pin your config (recommended)
 
 If you have a `contextengine.json` with custom sources, add this to your shell profile (`~/.zshrc` or `~/.bashrc`):
@@ -129,7 +155,10 @@ For full control, create a `contextengine.json`:
     ".cursorrules",
     "AGENTS.md"
   ],
-  "codeDirs": ["src"]
+  "codeDirs": ["src"],
+  "adapters": [
+    { "name": "feeds", "module": "./adapters/rss-adapter.js", "config": { "feeds": ["https://blog.example.com/rss.xml"] } }
+  ]
 }
 ```
 
@@ -153,6 +182,65 @@ For full control, create a `contextengine.json`:
 | 3 | `~/.contextengine.json` |
 | 4 | `CONTEXTENGINE_WORKSPACES` env var |
 | 5 | `~/Projects` auto-discover |
+
+## Plugin Adapters
+
+Extend ContextEngine with custom data sources via the adapter interface. Adapters are ES modules that collect data and return searchable chunks.
+
+```json
+{
+  "adapters": [
+    {
+      "name": "notion",
+      "module": "./adapters/notion-adapter.js",
+      "config": { "token": "$NOTION_API_TOKEN" }
+    },
+    {
+      "name": "feeds",
+      "module": "./adapters/rss-adapter.js",
+      "config": { "feeds": ["https://blog.example.com/rss.xml"], "maxItems": 20 }
+    }
+  ]
+}
+```
+
+### Creating an Adapter
+
+An adapter is a JS/TS module that exports an object with a `collect()` method:
+
+```javascript
+// my-adapter.js
+export default {
+  name: "my-source",
+  description: "Fetches data from My Source",
+
+  validate(config) {
+    if (!config?.apiKey) return "Missing apiKey";
+    return null;
+  },
+
+  async collect(config) {
+    // Fetch data and return Chunk[]
+    return [{
+      source: "my-source",
+      section: "## Title",
+      content: "Content to index...",
+      lineStart: 1,
+      lineEnd: 1,
+    }];
+  },
+};
+```
+
+See [examples/adapters/](examples/adapters/) for complete Notion and RSS adapter examples.
+
+### Adapter Features
+
+- **Environment variable resolution** — use `"$ENV_VAR"` syntax in config
+- **Factory pattern** — export `createAdapter(config)` for per-instance configuration
+- **Validation** — optional `validate()` method checks config before collection
+- **Lifecycle hooks** — optional `init()` and `destroy()` for setup/cleanup
+- **Safe execution** — adapter failures never crash the server
 
 ## How It Works
 
@@ -198,9 +286,19 @@ src/
 ├── cache.ts         # Embedding cache - SHA-256 hash invalidation
 ├── code-chunker.ts  # Code parser - TS/JS/Python function extraction
 ├── collectors.ts    # 11 operational data collectors
+├── adapters.ts      # Plugin adapter system - custom data sources
 ├── agents.ts        # Compliance auditor, port checker, AI scorer
 ├── sessions.ts      # Session persistence - key-value store
 └── learnings.ts     # Permanent learning store - auto-indexed rules
+
+skills/
+└── contextengine/   # OpenClaw skill package
+    └── SKILL.md
+
+examples/
+└── adapters/        # Example adapter implementations
+    ├── notion-adapter.js
+    └── rss-adapter.js
 ```
 
 ## Development

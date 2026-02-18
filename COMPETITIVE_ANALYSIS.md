@@ -1,6 +1,6 @@
 # ContextEngine — Competitive Analysis
 
-> Last updated: 2026-02-14 · v1.9.43
+> Last updated: 2026-02-19 · v1.12.0
 
 ## Executive Summary
 
@@ -333,14 +333,49 @@ The MCP Knowledge & Memory space has **~20+ active projects** but is fragmented 
 - [x] Embedding cache ✅ v1.9.43 — instant restart
 - [x] AI-readiness scoring ✅ v1.9.43 — score_project tool
 - [x] Multi-pattern support ✅ v1.9.43 — 7 patterns
+- [x] Session context persistence ✅ v1.10.0 — save/load/list/delete sessions
+- [x] Learning store ✅ v1.11.0 — permanent operational rules, 30 bundled defaults
 - [ ] Knowledge graph (entities from chunks)
 - [ ] VS Code extension (for discoverability)
 
-### Phase 3: Dominate (v3.0)
-- [ ] npm publish (compiled dist only)
+### Phase 3: Dominate ✅ IN PROGRESS
+- [x] npm publish ✅ v1.11.0 — `@compr/contextengine-mcp` on npm
+- [x] Plugin adapter system ✅ v1.12.0 — custom data source connectors
+- [x] OpenClaw skill ✅ v1.12.0 — access to 208K-star community
+- [ ] ClawHub marketplace listing
 - [ ] Team features (shared knowledge bases)
 - [ ] Enterprise features (audit trail, access control)
-- [ ] Plugin system (custom data source adapters)
+
+---
+
+## OpenClaw — Strategic Complement (208K ⭐)
+
+| Metric | Value |
+|--------|-------|
+| Stars | **208K** (by far the largest in this space) |
+| Contributors | 683 |
+| License | MIT |
+| Creator | Peter Steinberger |
+| Approach | **Personal AI assistant** — chat → action across messaging platforms |
+
+**What it does**: General-purpose AI assistant that connects to WhatsApp, Telegram, Slack, Discord, Signal, iMessage, Teams, and WebChat. Runs locally on user's machine with a skills system (40+ bundled skills) and a marketplace (ClawHub).
+
+**NOT a competitor**: OpenClaw is a **chat agent** — it sends messages and takes actions. ContextEngine is a **knowledge engine** — it indexes, searches, and serves context. They're complementary layers.
+
+**Why this matters**: OpenClaw's 208K stars represent a massive distribution channel. ContextEngine fills a gap in OpenClaw's ecosystem:
+
+| Capability | OpenClaw | ContextEngine |
+|-----------|----------|---------------|
+| Chat agent | ✅ | ❌ |
+| Messaging platforms | ✅ (8+) | ❌ |
+| Structured knowledge search | ❌ | ✅ (hybrid BM25+semantic) |
+| Operational data (git/docker/pm2) | ❌ | ✅ (11 collectors) |
+| Persistent learnings | ❌ | ✅ (16 categories) |
+| Code indexing | ❌ | ✅ (TS/JS/Python) |
+| AI-readiness scoring | ❌ | ✅ |
+| Plugin adapter system | ❌ | ✅ |
+
+**Strategic opportunity**: ContextEngine as an OpenClaw skill gives every OpenClaw user a queryable knowledge base — something no other OpenClaw skill provides.
 
 ---
 
@@ -351,9 +386,10 @@ The MCP Knowledge & Memory space has **~20+ active projects** but is fragmented 
 | VS Code MCP users | ~500K | Based on Copilot extension installs |
 | Claude Code users | ~100K | Growing rapidly |
 | Cursor/Windsurf users | ~200K | MCP-native |
-| **Total addressable** | **~800K developers** | Who use AI coding assistants with MCP |
+| OpenClaw users | ~208K | GitHub stars, skill marketplace |
+| **Total addressable** | **~1M+ developers** | Who use AI coding assistants with MCP |
 
-Context7 proves demand: 1.2M downloads/week. Even capturing 0.1% = 800 active users.
+Context7 proves demand: 1.2M downloads/week. OpenClaw proves distribution: 208K stars with active skill ecosystem. Even capturing 0.1% = 1,000 active users.
 
 ---
 

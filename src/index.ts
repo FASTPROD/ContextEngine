@@ -49,6 +49,13 @@ import { readFileSync, existsSync, watch, statSync } from "fs";
 import { basename, join, dirname } from "path";
 import { execSync } from "child_process";
 import { scanCodeDir } from "./code-chunker.js";
+import {
+  loadAdapters,
+  collectFromAdapters,
+  destroyAdapters,
+  listRegisteredAdapters,
+  type AdapterEntry,
+} from "./adapters.js";
 
 // ---------------------------------------------------------------------------
 // State
@@ -120,6 +127,17 @@ async function reindex(): Promise<void> {
     console.error(
       `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index`
     );
+  }
+
+  // Collect from plugin adapters
+  if (config.adapters && config.adapters.length > 0) {
+    const adapterChunks = await collectFromAdapters(config.adapters as AdapterEntry[]);
+    if (adapterChunks.length > 0) {
+      chunks.push(...adapterChunks);
+      console.error(
+        `[ContextEngine] 🔌 Adapters contributed ${adapterChunks.length} chunks`
+      );
+    }
   }
 
   if (isEmbeddingsReady()) {
@@ -1093,6 +1111,20 @@ async function main() {
     console.error(
       `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index`
     );
+  }
+
+  // 1e. Load and collect from plugin adapters
+  if (config.adapters && config.adapters.length > 0) {
+    const adapterCount = await loadAdapters(config.adapters as AdapterEntry[]);
+    if (adapterCount > 0) {
+      const adapterChunks = await collectFromAdapters(config.adapters as AdapterEntry[]);
+      if (adapterChunks.length > 0) {
+        chunks.push(...adapterChunks);
+        console.error(
+          `[ContextEngine] 🔌 Adapters contributed ${adapterChunks.length} chunks from ${adapterCount} adapters`
+        );
+      }
+    }
   }
 
   // 2. Register MCP resources
