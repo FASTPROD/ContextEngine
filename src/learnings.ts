@@ -595,9 +595,9 @@ export function learningsToChunks(): Chunk[] {
       `**Rule:** ${l.rule}`,
       `**Category:** ${l.category}`,
       l.project ? `**Project:** ${l.project}` : "",
-      `**Context:** ${l.context}`,
-      `**Tags:** ${l.tags.join(", ")}`,
-      `_Learned: ${l.created.split("T")[0]}_`,
+      l.context ? `**Context:** ${l.context}` : "",
+      l.tags?.length ? `**Tags:** ${l.tags.join(", ")}` : "",
+      l.created ? `_Learned: ${l.created.split("T")[0]}_` : "",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -643,9 +643,9 @@ export function formatLearnings(learnings: Learning[]): string {
       lines.push(`### ${l.rule}`);
       lines.push(`- **ID:** \`${l.id}\``);
       if (l.project) lines.push(`- **Project:** ${l.project}`);
-      lines.push(`- **Context:** ${l.context}`);
-      lines.push(`- **Tags:** ${l.tags.join(", ")}`);
-      lines.push(`- **Learned:** ${l.created.split("T")[0]}`);
+      if (l.context) lines.push(`- **Context:** ${l.context}`);
+      if (l.tags?.length) lines.push(`- **Tags:** ${l.tags.join(", ")}`);
+      if (l.created) lines.push(`- **Learned:** ${l.created.split("T")[0]}`);
       lines.push("");
     }
   }

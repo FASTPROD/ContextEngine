@@ -116,6 +116,41 @@ Without this, ContextEngine falls back to auto-discovery (finds `copilot-instruc
 
 That's it. ContextEngine auto-discovers your docs in `~/Projects`.
 
+## CLI Usage (no MCP required)
+
+ContextEngine also works as a **standalone CLI tool** — no MCP client setup needed:
+
+```bash
+# Search across all your project knowledge
+npx @compr/contextengine-mcp search "docker nginx"
+npx @compr/contextengine-mcp search "rate limiting" -n 10
+
+# List all indexed sources
+npx @compr/contextengine-mcp list-sources
+
+# Discover and analyze all projects
+npx @compr/contextengine-mcp list-projects
+
+# AI-readiness score (one or all projects)
+npx @compr/contextengine-mcp score
+npx @compr/contextengine-mcp score ContextEngine
+
+# List permanent learnings (optionally by category)
+npx @compr/contextengine-mcp list-learnings
+npx @compr/contextengine-mcp list-learnings security
+
+# Run compliance audit across all projects
+npx @compr/contextengine-mcp audit
+
+# Scaffold config for a new project
+npx @compr/contextengine-mcp init
+
+# Show all commands
+npx @compr/contextengine-mcp help
+```
+
+CLI mode uses keyword search (BM25) which is instant — no model loading required.
+
 ## Tools (15)
 
 | Tool | Description |
@@ -277,7 +312,7 @@ Your Project Files           ContextEngine              AI Agent
 
 ```
 src/
-├── cli.ts           # CLI - init scaffolding, help, routes to MCP
+├── cli.ts           # CLI - 6 subcommands + init + MCP server routing
 ├── index.ts         # MCP server - 15 tools, resources, file watcher
 ├── config.ts        # Config loading, auto-discovery, 7 patterns
 ├── ingest.ts        # Markdown heading-based chunker

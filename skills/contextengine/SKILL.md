@@ -34,6 +34,20 @@ ContextEngine auto-discovers documentation files from 7 common patterns:
 - `.cursor/rules`
 - `AGENTS.md`
 
+## CLI Usage (no MCP required)
+
+ContextEngine also works as a standalone CLI tool — no MCP client needed:
+
+```bash
+npx @compr/contextengine-mcp search "docker nginx"    # Search knowledge base
+npx @compr/contextengine-mcp list-sources              # Show indexed sources
+npx @compr/contextengine-mcp list-projects             # Discover all projects
+npx @compr/contextengine-mcp score                     # AI-readiness score
+npx @compr/contextengine-mcp list-learnings security   # List learnings by category
+npx @compr/contextengine-mcp audit                     # Compliance audit
+npx @compr/contextengine-mcp help                      # Show all commands
+```
+
 ## MCP Server Setup
 
 ContextEngine runs as an **MCP server** via stdio transport. Configure it in your MCP client:

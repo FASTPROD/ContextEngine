@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 
 /**
- * ContextEngine CLI — `npx contextengine init` scaffolds a new project config.
+ * ContextEngine CLI — standalone tool access + MCP server.
  *
  * Usage:
- *   npx contextengine init   — interactive scaffolding
- *   npx contextengine        — start MCP server (default)
+ *   contextengine                     Start MCP server (stdio transport)
+ *   contextengine init                Scaffold contextengine.json + copilot-instructions.md
+ *   contextengine search <query>      Search across all indexed knowledge
+ *   contextengine list-sources        Show all indexed sources with chunk counts
+ *   contextengine list-projects       Discover and analyze all projects
+ *   contextengine list-learnings      List all permanent learnings
+ *   contextengine score [project]     AI-readiness score (one or all projects)
+ *   contextengine audit               Run compliance audit across all projects
+ *   contextengine help                Show this message
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
@@ -223,7 +230,166 @@ async function runInit(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Main — route to init or MCP server
+// CLI Engine — shared initialization for all CLI subcommands
+// ---------------------------------------------------------------------------
+
+import { loadSources, loadProjectDirs, loadConfig, type KnowledgeSource } from "./config.js";
+import { ingestSources, type Chunk } from "./ingest.js";
+import { searchChunks } from "./search.js";
+import { collectProjectOps, collectSystemOps } from "./collectors.js";
+import { scanCodeDir } from "./code-chunker.js";
+import {
+  listProjects,
+  checkPorts,
+  runComplianceAudit,
+  formatProjectList,
+  formatPortMap,
+  formatPlan,
+  scoreProject,
+  formatScoreReport,
+} from "./agents.js";
+import {
+  listLearnings,
+  learningsToChunks,
+  formatLearnings,
+} from "./learnings.js";
+
+interface EngineState {
+  sources: KnowledgeSource[];
+  chunks: Chunk[];
+}
+
+/**
+ * Initialize the engine (load sources, ingest, collect ops, learnings).
+ * This is the same logic as index.ts main() but WITHOUT MCP server or embeddings.
+ * Keyword search is instant and sufficient for CLI usage.
+ */
+async function initEngine(): Promise<EngineState> {
+  const sources = loadSources();
+  const chunks = ingestSources(sources);
+
+  const config = loadConfig();
+
+  // Collect operational data
+  if (config.collectOps !== false) {
+    const projectDirs = loadProjectDirs();
+    for (const dir of projectDirs) {
+      const ops = collectProjectOps(dir.path, dir.name);
+      chunks.push(...ops);
+    }
+  }
+  if (config.collectSystemOps !== false) {
+    const sysOps = collectSystemOps();
+    chunks.push(...sysOps);
+  }
+
+  // Scan code files
+  if (config.codeDirs && config.codeDirs.length > 0) {
+    const projectDirs = loadProjectDirs();
+    for (const dir of projectDirs) {
+      for (const codeDir of config.codeDirs) {
+        const codePath = join(dir.path, codeDir);
+        if (existsSync(codePath)) {
+          const codeResults = scanCodeDir(codePath, dir.name);
+          chunks.push(...codeResults);
+        }
+      }
+    }
+  }
+
+  // Inject learnings
+  const learningChunks = learningsToChunks();
+  chunks.push(...learningChunks);
+
+  return { sources, chunks };
+}
+
+// ---------------------------------------------------------------------------
+// CLI Subcommands
+// ---------------------------------------------------------------------------
+
+async function cliSearch(query: string, topK: number): Promise<void> {
+  const { chunks } = await initEngine();
+  const results = searchChunks(chunks, query, topK);
+
+  if (results.length === 0) {
+    console.log(`No results found for: "${query}"`);
+    return;
+  }
+
+  console.log(`\n🔍 Search: "${query}" | ${results.length} results (keyword/BM25)\n`);
+
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    console.log(`--- Result ${i + 1} (score: ${r.score.toFixed(3)}) ---`);
+    console.log(`Source: ${r.chunk.source}`);
+    console.log(`Section: ${r.chunk.section}`);
+    console.log(`Lines: ${r.chunk.lineStart}-${r.chunk.lineEnd}`);
+    console.log("");
+    console.log(r.chunk.content);
+    console.log("");
+  }
+}
+
+async function cliListSources(): Promise<void> {
+  const { sources, chunks } = await initEngine();
+
+  console.log(`\n📚 ContextEngine — ${sources.length} sources | ${chunks.length} chunks\n`);
+
+  for (const s of sources) {
+    const exists = existsSync(s.path);
+    const count = chunks.filter((c) => c.source === s.name).length;
+    const status = exists ? `✅ ${count} chunks` : "⚠ file not found";
+    console.log(`  ${s.name}: ${status}`);
+    console.log(`    ${s.path}`);
+  }
+  console.log("");
+}
+
+async function cliListProjects(): Promise<void> {
+  const projectDirs = loadProjectDirs();
+  const projects = listProjects(projectDirs);
+  const text = formatProjectList(projects);
+  console.log(`\n${text}`);
+}
+
+async function cliListLearnings(category?: string): Promise<void> {
+  const learnings = listLearnings(category);
+  const text = formatLearnings(learnings);
+  console.log(`\n${text}`);
+}
+
+async function cliScore(project?: string): Promise<void> {
+  const projectDirs = loadProjectDirs();
+
+  if (project) {
+    const dir = projectDirs.find(
+      (d) => d.name.toLowerCase() === project.toLowerCase()
+    );
+    if (!dir) {
+      console.error(`❌ Project not found: "${project}"`);
+      console.error(`Available: ${projectDirs.map((d) => d.name).join(", ")}`);
+      process.exit(1);
+    }
+    const score = scoreProject(dir);
+    const text = formatScoreReport([score]);
+    console.log(`\n${text}`);
+  } else {
+    const scores = projectDirs.map((d) => scoreProject(d));
+    const text = formatScoreReport(scores);
+    console.log(`\n${text}`);
+  }
+}
+
+async function cliAudit(): Promise<void> {
+  const projectDirs = loadProjectDirs();
+  const plan = runComplianceAudit(projectDirs);
+  const text = formatPlan(plan);
+  console.log(`\n${text}`);
+}
+
+// ---------------------------------------------------------------------------
+// Main — route to init, CLI subcommand, or MCP server
 // ---------------------------------------------------------------------------
 const command = process.argv[2];
 
@@ -234,15 +400,76 @@ if (command === "init") {
   });
 } else if (command === "help" || command === "--help" || command === "-h") {
   console.log(`
-ContextEngine — MCP server for AI coding agents
+ContextEngine — queryable knowledge base for AI coding agents
 
 Usage:
-  contextengine           Start MCP server (stdio transport)
-  contextengine init      Scaffold contextengine.json + copilot-instructions.md
-  contextengine help      Show this message
+  contextengine                        Start MCP server (stdio transport)
+  contextengine init                   Scaffold contextengine.json + copilot-instructions.md
+  contextengine search <query> [-n N]  Search indexed knowledge (default: top 5)
+  contextengine list-sources           Show all indexed sources with chunk counts
+  contextengine list-projects          Discover and analyze all projects
+  contextengine list-learnings [cat]   List all learnings (optional: filter by category)
+  contextengine score [project]        AI-readiness score (one or all projects)
+  contextengine audit                  Run compliance audit across all projects
+  contextengine help                   Show this message
+
+Examples:
+  npx @compr/contextengine-mcp search "docker nginx"
+  npx @compr/contextengine-mcp score ContextEngine
+  npx @compr/contextengine-mcp list-projects
+  npx @compr/contextengine-mcp list-learnings security
 
 Docs: https://github.com/FASTPROD/ContextEngine
+npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
 `);
+} else if (command === "search") {
+  const queryParts: string[] = [];
+  let topK = 5;
+  const args = process.argv.slice(3);
+  for (let i = 0; i < args.length; i++) {
+    if ((args[i] === "-n" || args[i] === "--top") && args[i + 1]) {
+      topK = parseInt(args[i + 1], 10) || 5;
+      i++; // skip next
+    } else {
+      queryParts.push(args[i]);
+    }
+  }
+  const query = queryParts.join(" ");
+  if (!query) {
+    console.error("Usage: contextengine search <query> [-n N]");
+    process.exit(1);
+  }
+  cliSearch(query, topK).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "list-sources") {
+  cliListSources().catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "list-projects") {
+  cliListProjects().catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "list-learnings") {
+  const category = process.argv[3];
+  cliListLearnings(category).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "score") {
+  const project = process.argv[3];
+  cliScore(project).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "audit") {
+  cliAudit().catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
 } else {
   // Default: start MCP server
   import("./index.js");

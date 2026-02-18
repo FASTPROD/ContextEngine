@@ -3,10 +3,11 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.12.0
+- **Version**: v1.13.0
 - **Branch**: `main`
 - **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
+- **CLI**: 6 standalone subcommands — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `audit` (no MCP required)
 - **npm account**: `compr` (yannick@compr.ch)
 - **npm token**: granular, expires March 18, 2026
 
@@ -31,7 +32,7 @@
 ## Source Files
 | File | Purpose |
 |------|---------|
-| `src/cli.ts` | CLI entry point — `init` scaffolding, `help`, routes to MCP server |
+| `src/cli.ts` | CLI entry point — 6 standalone subcommands + `init` scaffolding + MCP server routing |
 | `src/index.ts` | MCP server entry point — 15 tools, MCP resources, file watcher, startup |
 | `src/config.ts` | Configuration loading — contextengine.json, env vars, auto-discovery |
 | `src/ingest.ts` | Markdown parser — heading-based chunking with section hierarchy, 4-line overlap, SHA-256 dedup |
