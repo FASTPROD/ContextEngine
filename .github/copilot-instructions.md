@@ -78,6 +78,12 @@
    - Update `~/Projects/EXO/SKILLS.md` (new capabilities learned)
    - Append session summary to `~/FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md`
    - Git commit + push ALL changed repos (ContextEngine, EXO, FASTPROD)
+8. **⛔ MANDATORY: `save_learning` in real-time** — when you discover a reusable pattern, bug fix, architecture decision, security rule, or operational insight during ANY session:
+   - **ALWAYS call `save_learning`** immediately via the ContextEngine MCP tool — do NOT write learnings into markdown files (SCORE.md, SESSION docs, etc.) as a substitute
+   - The learning store (`~/.contextengine/learnings.json`) is the **single source of truth** — markdown docs are for humans, the tool is for agents
+   - Categories: `architecture`, `security`, `bug-patterns`, `deployment`, `testing`, `api`, `frontend`, `backend`, `infrastructure`, `tooling`, `devops`, `git`, `data`, `dependencies`, `performance`, `accessibility`
+   - If ContextEngine MCP is not connected in the current workspace, **say so** and ask the user to connect it — do NOT silently skip
+   - This rule exists because learnings written to markdown files are stranded — they don't auto-surface in `search_context` results
 
 ## Stats (as of v1.10.0)
 - 555+ chunks from 13+ sources auto-discovered (with 4-line overlap at section boundaries)
