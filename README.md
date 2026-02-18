@@ -33,18 +33,24 @@ Detects your project type, creates `contextengine.json` + `.github/copilot-instr
 
 ### 2. Add to your MCP client
 
-**VS Code** — add to `~/.vscode/mcp.json` (global) or `.vscode/mcp.json` (per-project):
+**VS Code (recommended — global setup)**
+
+Create `~/Library/Application Support/Code/User/mcp.json` (macOS) or `~/.config/Code/User/mcp.json` (Linux):
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "ContextEngine": {
       "command": "npx",
-      "args": ["@compr/contextengine-mcp"]
+      "args": ["-y", "@compr/contextengine-mcp"]
     }
   }
 }
 ```
+
+This makes ContextEngine available in **every VS Code workspace** automatically — no per-project config needed.
+
+> **Per-project alternative:** Create `.vscode/mcp.json` in any repo with the same content. This only activates ContextEngine when that workspace is open.
 
 **Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
@@ -53,7 +59,7 @@ Detects your project type, creates `contextengine.json` + `.github/copilot-instr
   "mcpServers": {
     "ContextEngine": {
       "command": "npx",
-      "args": ["@compr/contextengine-mcp"]
+      "args": ["-y", "@compr/contextengine-mcp"]
     }
   }
 }
@@ -66,11 +72,21 @@ Detects your project type, creates `contextengine.json` + `.github/copilot-instr
   "mcpServers": {
     "ContextEngine": {
       "command": "npx",
-      "args": ["@compr/contextengine-mcp"]
+      "args": ["-y", "@compr/contextengine-mcp"]
     }
   }
 }
 ```
+
+### 3. Pin your config (recommended)
+
+If you have a `contextengine.json` with custom sources, add this to your shell profile (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+export CONTEXTENGINE_CONFIG="$HOME/path/to/contextengine.json"
+```
+
+Without this, ContextEngine falls back to auto-discovery (finds `copilot-instructions.md` etc.) but won't load your explicit sources, code dirs, or custom patterns.
 
 That's it. ContextEngine auto-discovers your docs in `~/Projects`.
 
@@ -174,7 +190,7 @@ Your Project Files           ContextEngine              AI Agent
 ```
 src/
 ├── cli.ts           # CLI - init scaffolding, help, routes to MCP
-├── index.ts         # MCP server - 14 tools, resources, file watcher
+├── index.ts         # MCP server - 15 tools, resources, file watcher
 ├── config.ts        # Config loading, auto-discovery, 7 patterns
 ├── ingest.ts        # Markdown heading-based chunker
 ├── search.ts        # Keyword search - term overlap scoring

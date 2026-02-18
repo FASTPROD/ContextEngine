@@ -23,6 +23,12 @@
 		{
 			"name": "EXO",
 			"path": "../EXO"
+		},
+		{
+			"path": "../KONIVE.com"
+		},
+		{
+			"path": "../FC_project"
 		}
 	],
 	"settings": {
