@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.10.0
+- **Version**: v1.10.1
 - **Branch**: `main`
 - **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
@@ -85,11 +85,11 @@
    - If ContextEngine MCP is not connected in the current workspace, **say so** and ask the user to connect it — do NOT silently skip
    - This rule exists because learnings written to markdown files are stranded — they don't auto-surface in `search_context` results
 
-## Stats (as of v1.10.0)
+## Stats (as of v1.10.1)
 - 555+ chunks from 13+ sources auto-discovered (with 4-line overlap at section boundaries)
 - 127+ operational chunks from 19 projects
 - 76 code chunks from TS/JS/Python source files
-- 107 learnings across 14 categories (seeded from SKILLS.md, FC_project, operational rules)
+- 151 learnings across 16 categories (seeded from SKILLS.md, FC_project, CROWLR.io, operational rules)
 - Keyword search: instant (BM25 with IDF — rare terms rank higher)
 - Temporal decay: 90-day half-life (recent content boosted, old content demoted)
 - Semantic search: ~15s model load (first run), ~200ms from cache
