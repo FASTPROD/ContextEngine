@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.10.1
+- **Version**: v1.11.0
 - **Branch**: `main`
 - **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
@@ -22,6 +22,7 @@
 - **Auto-discovery**: 7 patterns (copilot-instructions, SKILLS, CLAUDE.md, .cursorrules, .cursor/rules, AGENTS.md)
 - **Session persistence**: `~/.contextengine/sessions/` — key-value store per named session, persists across restarts
 - **Learning store**: `~/.contextengine/learnings.json` — permanent operational rules, auto-surface in search_context results
+- **Bundled defaults**: 30 curated universal learnings ship with npm — auto-merged on first load (dedup by rule text)
 - **Bulk import**: `import_learnings` tool parses Markdown (H2=category, H3=rule, bullets=context) or JSON arrays
 - **CLI**: `npx @compr/contextengine-mcp init` — scaffolds contextengine.json + copilot-instructions.md template
 
@@ -38,7 +39,8 @@
 | `src/collectors.ts` | 11 operational data collectors — git, package.json, composer, .env, docker, pm2, nginx, cron |
 | `src/agents.ts` | Multi-agent — project analyzer, port conflict detector, compliance auditor, AI-readiness scorer |
 | `src/sessions.ts` | Session persistence — save/load/list/delete named sessions to disk |
-| `src/learnings.ts` | Learning store — permanent operational rules, 18 categories, auto-tag extraction, bulk import |
+| `src/learnings.ts` | Learning store — permanent operational rules, 18 categories, auto-tag extraction, bulk import, bundled defaults |
+| `defaults/learnings.json` | 30 curated universal best practices — shipped with npm, auto-merged on first load |
 | `src/code-chunker.ts` | Code parser — regex-based TS/JS/Python function/class/interface extraction |
 | `src/test.ts` | Test harness — validates keyword + semantic search on real data |
 
@@ -85,11 +87,12 @@
    - If ContextEngine MCP is not connected in the current workspace, **say so** and ask the user to connect it — do NOT silently skip
    - This rule exists because learnings written to markdown files are stranded — they don't auto-surface in `search_context` results
 
-## Stats (as of v1.10.1)
+## Stats (as of v1.11.0)
 - 555+ chunks from 13+ sources auto-discovered (with 4-line overlap at section boundaries)
 - 127+ operational chunks from 19 projects
 - 76 code chunks from TS/JS/Python source files
-- 151 learnings across 16 categories (seeded from SKILLS.md, FC_project, CROWLR.io, operational rules)
+- 151+ learnings across 16 categories (151 user + 30 bundled defaults, deduped on merge)
+- 30 bundled starter learnings ship with npm (security, deployment, architecture, frontend, testing, tooling, git, accessibility, bug-patterns)
 - Keyword search: instant (BM25 with IDF — rare terms rank higher)
 - Temporal decay: 90-day half-life (recent content boosted, old content demoted)
 - Semantic search: ~15s model load (first run), ~200ms from cache
