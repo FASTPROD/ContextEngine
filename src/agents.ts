@@ -1632,10 +1632,10 @@ export function generateScoreHTML(scores: ProjectScore[]): string {
     <div class="stat-value">${sorted[0]?.project || "—"}</div>
     <div class="stat-label">Top Project (${sorted[0]?.percentage || 0}%)</div>
   </div>
-  <div class="stat-card">
+  ${scores.length > 1 ? `<div class="stat-card">
     <div class="stat-label" style="margin-bottom:8px">Grade Distribution</div>
     ${gradeBars}
-  </div>
+  </div>` : ""}
 </div>
 
 <div class="anti-gaming">
