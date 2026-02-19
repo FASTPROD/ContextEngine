@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.13.0
+- **Version**: v1.14.0
 - **Branch**: `main`
 - **License**: AGPL-3.0 (open-source, copyleft — modifications must be shared)
 - **npm**: `@compr/contextengine-mcp` — `npx @compr/contextengine-mcp`
@@ -40,7 +40,7 @@
 | `src/embeddings.ts` | Vector embeddings — MiniLM-L6-v2 pipeline, cosine similarity, batch embedding |
 | `src/cache.ts` | Embedding cache v2 — SHA-256 hash, disk persistence, instant restart |
 | `src/collectors.ts` | 11 operational data collectors — git, package.json, composer, .env, docker, pm2, nginx, cron |
-| `src/agents.ts` | Multi-agent — project analyzer, port conflict detector, compliance auditor, AI-readiness scorer |
+| `src/agents.ts` | Multi-agent — project analyzer, port conflict detector, compliance auditor, AI-readiness scorer (anti-gaming v2), HTML report generator |
 | `src/sessions.ts` | Session persistence — save/load/list/delete named sessions to disk |
 | `src/learnings.ts` | Learning store — permanent operational rules, 18 categories, auto-tag extraction, bulk import, bundled defaults |
 | `defaults/learnings.json` | 30 curated universal best practices — shipped with npm, auto-merged on first load |
@@ -60,7 +60,7 @@
 | `list_projects` | Discover and analyze all projects (tech stack, git, docker, pm2) |
 | `check_ports` | Scan all projects for port conflicts |
 | `run_audit` | Compliance agent — git remotes, hooks, .env, Docker, PM2, versions |
-| `score_project` | AI-readiness scoring 0-100% with letter grades (A+ to F) |
+| `score_project` | AI-readiness scoring 0-100% with anti-gaming v2 (symlink/ghost config detection) |
 | `save_session` | Save key-value entry to a named session for cross-session persistence |
 | `load_session` | Load all entries from a named session |
 | `list_sessions` | List all saved sessions with entry counts and timestamps |

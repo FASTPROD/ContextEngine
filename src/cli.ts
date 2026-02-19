@@ -18,6 +18,8 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, basename } from "path";
 import { createInterface } from "readline";
+import { tmpdir } from "os";
+import { execSync } from "child_process";
 
 // ---------------------------------------------------------------------------
 // Detect project characteristics
@@ -247,6 +249,8 @@ import {
   formatPlan,
   scoreProject,
   formatScoreReport,
+  generateScoreHTML,
+  type ProjectScore,
 } from "./agents.js";
 import {
   listLearnings,
@@ -359,9 +363,10 @@ async function cliListLearnings(category?: string): Promise<void> {
   console.log(`\n${text}`);
 }
 
-async function cliScore(project?: string): Promise<void> {
+async function cliScore(project?: string, html = false): Promise<void> {
   const projectDirs = loadProjectDirs();
 
+  let scores: ProjectScore[];
   if (project) {
     const dir = projectDirs.find(
       (d) => d.name.toLowerCase() === project.toLowerCase()
@@ -371,11 +376,25 @@ async function cliScore(project?: string): Promise<void> {
       console.error(`Available: ${projectDirs.map((d) => d.name).join(", ")}`);
       process.exit(1);
     }
-    const score = scoreProject(dir);
-    const text = formatScoreReport([score]);
-    console.log(`\n${text}`);
+    scores = [scoreProject(dir)];
   } else {
-    const scores = projectDirs.map((d) => scoreProject(d));
+    scores = projectDirs.map((d) => scoreProject(d));
+  }
+
+  if (html) {
+    const htmlContent = generateScoreHTML(scores);
+    const tmpPath = join(tmpdir(), "contextengine-score.html");
+    writeFileSync(tmpPath, htmlContent, "utf-8");
+    console.log(`\n📊 HTML report written to: ${tmpPath}`);
+    // Open in default browser
+    const openCmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+    try {
+      execSync(`${openCmd} "${tmpPath}"`);
+      console.log("🌐 Opened in browser\n");
+    } catch {
+      console.log(`Open manually: file://${tmpPath}\n`);
+    }
+  } else {
     const text = formatScoreReport(scores);
     console.log(`\n${text}`);
   }
@@ -409,13 +428,14 @@ Usage:
   contextengine list-sources           Show all indexed sources with chunk counts
   contextengine list-projects          Discover and analyze all projects
   contextengine list-learnings [cat]   List all learnings (optional: filter by category)
-  contextengine score [project]        AI-readiness score (one or all projects)
+  contextengine score [project] [--html] AI-readiness score (one or all projects)
   contextengine audit                  Run compliance audit across all projects
   contextengine help                   Show this message
 
 Examples:
   npx @compr/contextengine-mcp search "docker nginx"
   npx @compr/contextengine-mcp score ContextEngine
+  npx @compr/contextengine-mcp score --html
   npx @compr/contextengine-mcp list-projects
   npx @compr/contextengine-mcp list-learnings security
 
@@ -460,8 +480,10 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
     process.exit(1);
   });
 } else if (command === "score") {
-  const project = process.argv[3];
-  cliScore(project).catch((err) => {
+  const args = process.argv.slice(3);
+  const htmlFlag = args.includes("--html");
+  const project = args.filter(a => !a.startsWith("--"))[0];
+  cliScore(project, htmlFlag).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });

@@ -43,6 +43,7 @@ npx @compr/contextengine-mcp search "docker nginx"    # Search knowledge base
 npx @compr/contextengine-mcp list-sources              # Show indexed sources
 npx @compr/contextengine-mcp list-projects             # Discover all projects
 npx @compr/contextengine-mcp score                     # AI-readiness score
+npx @compr/contextengine-mcp score --html               # Visual HTML report
 npx @compr/contextengine-mcp list-learnings security   # List learnings by category
 npx @compr/contextengine-mcp audit                     # Compliance audit
 npx @compr/contextengine-mcp help                      # Show all commands
@@ -117,7 +118,7 @@ Add to your OpenClaw `openclaw.json` MCP servers section:
 | `list_projects` | Discover and analyze all projects (tech stack, git, docker, pm2) |
 | `check_ports` | Scan all projects for port conflicts |
 | `run_audit` | Compliance agent — git remotes, hooks, .env, Docker, PM2, versions |
-| `score_project` | AI-readiness scoring 0-100% with letter grades (A+ to F) |
+| `score_project` | AI-readiness scoring 0-100% with anti-gaming v2 (symlink/ghost config detection) |
 | `save_session` | Save key-value entry to a named session for cross-session persistence |
 | `load_session` | Load all entries from a named session |
 | `list_sessions` | List all saved sessions with entry counts and timestamps |

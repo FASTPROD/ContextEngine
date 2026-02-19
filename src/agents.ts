@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { readFileSync, existsSync, readdirSync, statSync } from "fs";
+import { readFileSync, existsSync, readdirSync, statSync, lstatSync } from "fs";
 import { resolve, join, basename } from "path";
 import { homedir } from "os";
 import type { ProjectDirectory } from "./config.js";
@@ -81,6 +81,63 @@ function exec(cmd: string, cwd?: string): string {
     }).trim();
   } catch {
     return "";
+  }
+}
+
+/**
+ * Check if a path is a symlink. Returns true if file exists AND is a symlink.
+ */
+function isSymlink(filePath: string): boolean {
+  try {
+    return lstatSync(filePath).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if an ESLint config is actually backed by installed packages.
+ * Returns true if at least `eslint` itself is installed in node_modules.
+ */
+function isLintInstalled(projectPath: string): boolean {
+  // Check for ESLint
+  if (existsSync(join(projectPath, "node_modules", "eslint")) ||
+      existsSync(join(projectPath, "node_modules", ".package-lock.json"))) {
+    // If node_modules exists, check if eslint is actually there
+    if (existsSync(join(projectPath, "node_modules", "eslint"))) return true;
+    // Also accept if there's no node_modules at all (monorepo with hoisted deps)
+    if (!existsSync(join(projectPath, "node_modules"))) return true;
+  }
+  // For PHP projects, check phpcs is runnable
+  if (existsSync(join(projectPath, "vendor", "bin", "phpcs"))) return true;
+  // No node_modules but has lint config → ghost config
+  return !existsSync(join(projectPath, "node_modules"));
+}
+
+/**
+ * Count real test files recursively (not just directories or symlinks).
+ * Returns the number of actual test files (*.test.*, *.spec.*, *_test.*).
+ */
+function countTestFiles(dirPath: string, depth: number = 0): number {
+  if (depth > 3) return 0; // Don't recurse too deep
+  try {
+    const entries = readdirSync(dirPath, { withFileTypes: true });
+    let count = 0;
+    for (const entry of entries) {
+      const fullPath = join(dirPath, entry.name);
+      if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
+        count += countTestFiles(fullPath, depth + 1);
+      } else if (entry.isFile()) {
+        if (/\.(test|spec|_test)\.(ts|tsx|js|jsx|py|php)$/.test(entry.name) ||
+            entry.name.startsWith("test_") ||
+            entry.name.endsWith("_test.py")) {
+          count++;
+        }
+      }
+    }
+    return count;
+  } catch {
+    return 0;
   }
 }
 
@@ -1020,12 +1077,17 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   // copilot-instructions.md (10 pts)
   const copilotPath = join(p, ".github", "copilot-instructions.md");
   if (existsSync(copilotPath)) {
+    const copilotIsSymlink = isSymlink(copilotPath);
     const content = readFileSync(copilotPath, "utf-8");
     const lines = content.split("\n").length;
-    if (lines > 50) {
+    if (copilotIsSymlink) {
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 4, maxPoints: 10, status: "partial", detail: `⚠ Symlink (${lines} lines) — should be a real file with project-specific context` });
+    } else if (lines > 50) {
       checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 10, maxPoints: 10, status: "pass", detail: `${lines} lines — comprehensive` });
-    } else {
+    } else if (lines > 15) {
       checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 6, maxPoints: 10, status: "partial", detail: `${lines} lines — could be more detailed` });
+    } else {
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 3, maxPoints: 10, status: "partial", detail: `${lines} lines — too sparse, add architecture, rules, key files` });
     }
   } else {
     checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 0, maxPoints: 10, status: "fail", detail: "Missing — AI agents lack project context" });
@@ -1048,10 +1110,17 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   // CLAUDE.md / .cursorrules / AGENTS.md (6 pts)
   const altPatterns = ["CLAUDE.md", ".cursorrules", ".cursor/rules", "AGENTS.md"];
   const foundAlt = altPatterns.filter(pat => existsSync(join(p, pat)));
-  if (foundAlt.length >= 2) {
-    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 6, maxPoints: 6, status: "pass", detail: `Found: ${foundAlt.join(", ")}` });
+  const realAlt = foundAlt.filter(pat => !isSymlink(join(p, pat)));
+  const symlinkAlt = foundAlt.filter(pat => isSymlink(join(p, pat)));
+  if (realAlt.length >= 2) {
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 6, maxPoints: 6, status: "pass", detail: `Found: ${realAlt.join(", ")}` });
+  } else if (realAlt.length === 1 && symlinkAlt.length >= 1) {
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 4, maxPoints: 6, status: "partial", detail: `${realAlt[0]} + ${symlinkAlt.length} symlink(s) — symlinks count as partial` });
+  } else if (foundAlt.length >= 2 && realAlt.length === 0) {
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 2, maxPoints: 6, status: "partial", detail: `${foundAlt.join(", ")} — all symlinks, create real per-agent files` });
   } else if (foundAlt.length === 1) {
-    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 3, maxPoints: 6, status: "partial", detail: `Found: ${foundAlt[0]} only` });
+    const pts = isSymlink(join(p, foundAlt[0])) ? 1 : 3;
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: pts, maxPoints: 6, status: "partial", detail: `Found: ${foundAlt[0]}${isSymlink(join(p, foundAlt[0])) ? " (symlink)" : ""} only` });
   } else {
     checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 0, maxPoints: 6, status: "fail", detail: "No CLAUDE.md, .cursorrules, or AGENTS.md" });
   }
@@ -1059,7 +1128,13 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   // .github/SKILLS.md (3 pts)
   const skillsPath = join(p, ".github", "SKILLS.md");
   if (existsSync(skillsPath)) {
-    checks.push({ name: "SKILLS.md", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: "Present" });
+    const skillsContent = readFileSync(skillsPath, "utf-8");
+    const skillsLines = skillsContent.split("\n").length;
+    if (skillsLines > 10 && !isSymlink(skillsPath)) {
+      checks.push({ name: "SKILLS.md", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: `${skillsLines} lines` });
+    } else {
+      checks.push({ name: "SKILLS.md", category: "Documentation", points: 1, maxPoints: 3, status: "partial", detail: `${skillsLines} lines${isSymlink(skillsPath) ? " (symlink)" : ""} — add real skill descriptions` });
+    }
   } else {
     checks.push({ name: "SKILLS.md", category: "Documentation", points: 0, maxPoints: 3, status: "fail", detail: "Missing — agents can't discover capabilities" });
   }
@@ -1118,11 +1193,18 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     checks.push({ name: "CI/CD", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "No CI pipeline" });
   }
 
-  // Deploy script (4 pts)
+  // Deploy script (4 pts) — verifies real content, not empty placeholder
   const deployPaths = ["deploy.sh", "deploy.js", "Makefile"];
   const foundDeploy = deployPaths.filter(d => existsSync(join(p, d)));
   if (foundDeploy.length > 0) {
-    checks.push({ name: "Deploy script", category: "Infrastructure", points: 4, maxPoints: 4, status: "pass", detail: foundDeploy.join(", ") });
+    const deployFile = join(p, foundDeploy[0]);
+    const deployContent = readFileSync(deployFile, "utf-8");
+    const deployLines = deployContent.split("\n").filter(l => l.trim() && !l.trim().startsWith("#")).length;
+    if (deployLines >= 3) {
+      checks.push({ name: "Deploy script", category: "Infrastructure", points: 4, maxPoints: 4, status: "pass", detail: `${foundDeploy[0]} (${deployLines} effective lines)` });
+    } else {
+      checks.push({ name: "Deploy script", category: "Infrastructure", points: 1, maxPoints: 4, status: "partial", detail: `${foundDeploy[0]} — only ${deployLines} effective lines, looks like a placeholder` });
+    }
   } else {
     checks.push({ name: "Deploy script", category: "Infrastructure", points: 0, maxPoints: 4, status: "fail", detail: "No deploy automation" });
   }
@@ -1136,39 +1218,68 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
 
   // --- Code Quality (20 points max) ---
 
-  // Tests directory (8 pts)
+  // Tests directory (8 pts) — checks for real test files, detects symlinks
   const testDirs = ["tests", "test", "__tests__", "spec", "src/__tests__"];
   const foundTests = testDirs.filter(td => existsSync(join(p, td)));
   if (foundTests.length > 0) {
-    const testDir = join(p, foundTests[0]);
-    try {
-      const hasFiles = readdirSync(testDir).length > 0;
-      if (hasFiles) {
-        checks.push({ name: "Tests", category: "Code Quality", points: 8, maxPoints: 8, status: "pass", detail: `${foundTests[0]}/ directory with files` });
-      } else {
-        checks.push({ name: "Tests", category: "Code Quality", points: 3, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ exists but empty` });
+    const testDirPath = join(p, foundTests[0]);
+    const testIsSymlink = isSymlink(testDirPath);
+    const testFileCount = countTestFiles(testDirPath);
+    if (testIsSymlink) {
+      checks.push({ name: "Tests", category: "Code Quality", points: 3, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ is a symlink (${testFileCount} test files) — should be real test directory` });
+    } else if (testFileCount >= 5) {
+      checks.push({ name: "Tests", category: "Code Quality", points: 8, maxPoints: 8, status: "pass", detail: `${foundTests[0]}/ — ${testFileCount} test files` });
+    } else if (testFileCount > 0) {
+      checks.push({ name: "Tests", category: "Code Quality", points: 5, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ — only ${testFileCount} test files` });
+    } else {
+      try {
+        const hasAnyFiles = readdirSync(testDirPath).length > 0;
+        if (hasAnyFiles) {
+          checks.push({ name: "Tests", category: "Code Quality", points: 4, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ has files but no standard test files detected` });
+        } else {
+          checks.push({ name: "Tests", category: "Code Quality", points: 1, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ exists but empty` });
+        }
+      } catch {
+        checks.push({ name: "Tests", category: "Code Quality", points: 1, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ exists but unreadable` });
       }
-    } catch {
-      checks.push({ name: "Tests", category: "Code Quality", points: 3, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ exists` });
     }
   } else {
     checks.push({ name: "Tests", category: "Code Quality", points: 0, maxPoints: 8, status: "fail", detail: "No test directory" });
   }
 
   // TypeScript / type checking (5 pts)
-  if (existsSync(join(p, "tsconfig.json"))) {
-    checks.push({ name: "TypeScript", category: "Code Quality", points: 5, maxPoints: 5, status: "pass", detail: "tsconfig.json present" });
+  const tsconfigPath = join(p, "tsconfig.json");
+  if (existsSync(tsconfigPath)) {
+    const tsconfigContent = readFileSync(tsconfigPath, "utf-8").trim();
+    const tsconfigIsSymlink = isSymlink(tsconfigPath);
+    // Detect minimal/reference-only tsconfigs (just project references with no real config)
+    const isSubstantive = tsconfigContent.length > 50 && (tsconfigContent.includes('"compilerOptions"') || tsconfigContent.includes('"extends"'));
+    if (tsconfigIsSymlink) {
+      checks.push({ name: "TypeScript", category: "Code Quality", points: 2, maxPoints: 5, status: "partial", detail: "tsconfig.json is a symlink — create root config" });
+    } else if (isSubstantive) {
+      checks.push({ name: "TypeScript", category: "Code Quality", points: 5, maxPoints: 5, status: "pass", detail: "tsconfig.json present" });
+    } else {
+      checks.push({ name: "TypeScript", category: "Code Quality", points: 3, maxPoints: 5, status: "partial", detail: "tsconfig.json is minimal — add compilerOptions for full type safety" });
+    }
   } else if (existsSync(join(p, "jsconfig.json"))) {
     checks.push({ name: "Type checking", category: "Code Quality", points: 2, maxPoints: 5, status: "partial", detail: "jsconfig.json only" });
   } else {
     checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "fail", detail: "No tsconfig/jsconfig" });
   }
 
-  // Linting config (4 pts)
+  // Linting config (4 pts) — verifies linting tools are installed, not just config
   const lintConfigs = [".eslintrc.js", ".eslintrc.json", ".eslintrc.yml", "eslint.config.js", "eslint.config.mjs", ".prettierrc", "phpcs.xml"];
   const foundLint = lintConfigs.filter(l => existsSync(join(p, l)));
+  const lintSymlinks = foundLint.filter(l => isSymlink(join(p, l)));
   if (foundLint.length > 0) {
-    checks.push({ name: "Linting", category: "Code Quality", points: 4, maxPoints: 4, status: "pass", detail: foundLint.join(", ") });
+    const lintToolsInstalled = isLintInstalled(p);
+    if (lintSymlinks.length === foundLint.length) {
+      checks.push({ name: "Linting", category: "Code Quality", points: 1, maxPoints: 4, status: "partial", detail: `${foundLint.join(", ")} — all symlinks, create root lint config` });
+    } else if (!lintToolsInstalled) {
+      checks.push({ name: "Linting", category: "Code Quality", points: 2, maxPoints: 4, status: "partial", detail: `${foundLint.join(", ")} — ⚠ config exists but linting tools not installed` });
+    } else {
+      checks.push({ name: "Linting", category: "Code Quality", points: 4, maxPoints: 4, status: "pass", detail: foundLint.join(", ") });
+    }
   } else {
     checks.push({ name: "Linting", category: "Code Quality", points: 0, maxPoints: 4, status: "fail", detail: "No lint config" });
   }
@@ -1330,4 +1441,213 @@ export function formatScoreReport(scores: ProjectScore[]): string {
   lines.push(`\n---\n**${scores.length} projects scanned** | Average AI-readiness: **${avgScore}%**`);
 
   return lines.join("\n");
+}
+
+/**
+ * Generate an HTML visual report for project scores.
+ * Produces a self-contained HTML page with embedded CSS — no external dependencies.
+ */
+export function generateScoreHTML(scores: ProjectScore[]): string {
+  const sorted = [...scores].sort((a, b) => b.percentage - a.percentage);
+  const avgScore = Math.round(scores.reduce((sum, s) => sum + s.percentage, 0) / scores.length);
+  const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
+
+  function gradeColor(pct: number): string {
+    if (pct >= 80) return "#22c55e";
+    if (pct >= 60) return "#eab308";
+    if (pct >= 40) return "#f97316";
+    return "#ef4444";
+  }
+
+  function statusIcon(status: string): string {
+    if (status === "pass") return "✅";
+    if (status === "partial") return "🟡";
+    return "❌";
+  }
+
+  function categoryByScore(checks: ScoreCheck[]): Map<string, { pts: number; max: number }> {
+    const m = new Map<string, { pts: number; max: number }>();
+    for (const c of checks) {
+      const cat = m.get(c.category) || { pts: 0, max: 0 };
+      cat.pts += c.points;
+      cat.max += c.maxPoints;
+      m.set(c.category, cat);
+    }
+    return m;
+  }
+
+  const categoryColors: Record<string, string> = {
+    Documentation: "#3b82f6",
+    Infrastructure: "#8b5cf6",
+    "Code Quality": "#06b6d4",
+    Security: "#f59e0b",
+  };
+
+  // Build project cards
+  const projectCards = sorted.map(s => {
+    const cats = categoryByScore(s.checks);
+    const gc = gradeColor(s.percentage);
+
+    const categoryBars = ["Documentation", "Infrastructure", "Code Quality", "Security"]
+      .map(cat => {
+        const data = cats.get(cat) || { pts: 0, max: 0 };
+        const pct = data.max > 0 ? Math.round((data.pts / data.max) * 100) : 0;
+        const color = categoryColors[cat] || "#888";
+        return `
+          <div class="cat-row">
+            <span class="cat-label">${cat}</span>
+            <div class="bar-bg">
+              <div class="bar-fill" style="width:${pct}%;background:${color}"></div>
+            </div>
+            <span class="cat-score">${data.pts}/${data.max}</span>
+          </div>`;
+      }).join("");
+
+    const checkRows = s.checks.map(c => {
+      const barPct = c.maxPoints > 0 ? Math.round((c.points / c.maxPoints) * 100) : 0;
+      const isSymlinkWarning = c.detail.includes("symlink") || c.detail.includes("Symlink");
+      return `
+        <tr${isSymlinkWarning ? ' class="symlink-warning"' : ""}>
+          <td>${statusIcon(c.status)}</td>
+          <td>${c.name}</td>
+          <td><span class="badge" style="background:${categoryColors[c.category] || "#888"}22;color:${categoryColors[c.category] || "#888"}">${c.category}</span></td>
+          <td>
+            <div class="mini-bar-bg"><div class="mini-bar-fill" style="width:${barPct}%;background:${gradeColor(barPct)}"></div></div>
+            <span class="check-score">${c.points}/${c.maxPoints}</span>
+          </td>
+          <td class="detail">${c.detail}</td>
+        </tr>`;
+    }).join("");
+
+    return `
+      <div class="card">
+        <div class="card-header">
+          <div class="project-info">
+            <h2>${s.project}</h2>
+            <span class="project-path">${s.path}</span>
+          </div>
+          <div class="grade-circle" style="border-color:${gc}">
+            <span class="grade-pct">${s.percentage}%</span>
+            <span class="grade-letter" style="color:${gc}">${s.grade}</span>
+          </div>
+        </div>
+        <div class="category-bars">${categoryBars}</div>
+        <details>
+          <summary>Show ${s.checks.length} checks</summary>
+          <table class="checks-table">
+            <thead>
+              <tr><th></th><th>Check</th><th>Category</th><th>Score</th><th>Detail</th></tr>
+            </thead>
+            <tbody>${checkRows}</tbody>
+          </table>
+        </details>
+      </div>`;
+  }).join("");
+
+  // Summary stats
+  const gradeDistribution = { "A+": 0, A: 0, B: 0, C: 0, D: 0, F: 0 };
+  for (const s of scores) {
+    gradeDistribution[s.grade as keyof typeof gradeDistribution]++;
+  }
+  const gradeBars = Object.entries(gradeDistribution)
+    .filter(([, count]) => count > 0)
+    .map(([grade, count]) => {
+      const pct = Math.round((count / scores.length) * 100);
+      const color = grade.startsWith("A") ? "#22c55e" : grade === "B" ? "#3b82f6" : grade === "C" ? "#eab308" : "#ef4444";
+      return `<div class="dist-bar"><span class="dist-label">${grade}</span><div class="dist-fill" style="width:${pct}%;background:${color}"></div><span class="dist-count">${count}</span></div>`;
+    }).join("");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ContextEngine Score Report</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --accent: #3b82f6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 24px; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 1.75rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 0.875rem; margin-bottom: 24px; }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+  .stat-value { font-size: 2rem; font-weight: 700; }
+  .stat-label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+  .dist-bar { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .dist-label { width: 24px; font-weight: 600; font-size: 0.85rem; }
+  .dist-fill { height: 18px; border-radius: 4px; min-width: 4px; transition: width 0.5s; }
+  .dist-count { color: var(--muted); font-size: 0.8rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 16px; }
+  .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .project-info h2 { font-size: 1.2rem; }
+  .project-path { color: var(--muted); font-size: 0.75rem; font-family: monospace; }
+  .grade-circle { width: 72px; height: 72px; border-radius: 50%; border: 3px solid; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
+  .grade-pct { font-size: 1.1rem; font-weight: 700; line-height: 1.2; }
+  .grade-letter { font-size: 0.75rem; font-weight: 600; }
+  .category-bars { margin-bottom: 12px; }
+  .cat-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .cat-label { width: 110px; font-size: 0.8rem; color: var(--muted); flex-shrink: 0; }
+  .bar-bg { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s; }
+  .cat-score { width: 40px; text-align: right; font-size: 0.8rem; font-weight: 600; flex-shrink: 0; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--accent); font-size: 0.85rem; padding: 4px 0; }
+  .checks-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.8rem; }
+  .checks-table th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 500; }
+  .checks-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .checks-table tr:last-child td { border-bottom: none; }
+  .checks-table tr.symlink-warning td { background: #f59e0b11; }
+  .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+  .mini-bar-bg { display: inline-block; width: 48px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 4px; }
+  .mini-bar-fill { height: 100%; border-radius: 3px; }
+  .check-score { font-size: 0.75rem; }
+  .detail { color: var(--muted); max-width: 350px; }
+  .footer { text-align: center; color: var(--muted); font-size: 0.75rem; margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .anti-gaming { background: #f59e0b11; border: 1px solid #f59e0b44; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; font-size: 0.8rem; color: #fbbf24; }
+  .anti-gaming strong { color: #f59e0b; }
+  @media (max-width: 640px) {
+    .card-header { flex-direction: column; gap: 12px; text-align: center; }
+    .summary { grid-template-columns: 1fr 1fr; }
+    .detail { max-width: 180px; }
+  }
+</style>
+</head>
+<body>
+<h1>🎯 AI-Readiness Score Report</h1>
+<p class="subtitle">Generated by ContextEngine v1.14.0 · ${timestamp}</p>
+
+<div class="summary">
+  <div class="stat-card">
+    <div class="stat-value">${scores.length}</div>
+    <div class="stat-label">Projects Scanned</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value" style="color:${gradeColor(avgScore)}">${avgScore}%</div>
+    <div class="stat-label">Average Score</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">${sorted[0]?.project || "—"}</div>
+    <div class="stat-label">Top Project (${sorted[0]?.percentage || 0}%)</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label" style="margin-bottom:8px">Grade Distribution</div>
+    ${gradeBars}
+  </div>
+</div>
+
+<div class="anti-gaming">
+  <strong>⚠ Anti-gaming v2:</strong> Symlinks, ghost configs (ESLint without packages), empty test dirs, and placeholder files are detected and scored as partial. Only genuine project artifacts earn full points.
+</div>
+
+${projectCards}
+
+<div class="footer">
+  <p>ContextEngine · <a href="https://www.npmjs.com/package/@compr/contextengine-mcp" style="color:var(--accent)">npm</a> · <a href="https://github.com/FASTPROD/ContextEngine" style="color:var(--accent)">GitHub</a></p>
+  <p style="margin-top:4px">Scoring: Documentation (30pts) · Infrastructure (30pts) · Code Quality (20pts) · Security (20pts)</p>
+</div>
+</body>
+</html>`;
 }

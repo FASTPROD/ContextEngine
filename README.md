@@ -135,6 +135,10 @@ npx @compr/contextengine-mcp list-projects
 npx @compr/contextengine-mcp score
 npx @compr/contextengine-mcp score ContextEngine
 
+# Visual HTML report (opens in browser)
+npx @compr/contextengine-mcp score --html
+npx @compr/contextengine-mcp score ContextEngine --html
+
 # List permanent learnings (optionally by category)
 npx @compr/contextengine-mcp list-learnings
 npx @compr/contextengine-mcp list-learnings security
@@ -307,6 +311,41 @@ Your Project Files           ContextEngine              AI Agent
 | Embedding cache | `~/.contextengine/embedding-cache.json` |
 | Session storage | `~/.contextengine/sessions/` |
 | Learnings storage | `~/.contextengine/learnings.json` |
+
+## Scoring Methodology
+
+The `score` command evaluates project AI-readiness across 4 categories (100 points total):
+
+| Category | Max Points | What's Checked |
+|----------|-----------|----------------|
+| **Documentation** (30pts) | 30 | copilot-instructions.md, README, CLAUDE.md/.cursorrules/AGENTS.md, SKILLS.md, .env.example |
+| **Infrastructure** (30pts) | 30 | Git, .gitignore, hooks, Docker, CI/CD, deploy script, process manager |
+| **Code Quality** (20pts) | 20 | Tests, TypeScript/type checking, linting, npm scripts |
+| **Security** (20pts) | 20 | .env in .gitignore, no tracked secrets, lockfile, deps gitignored |
+
+**Grade scale:** A+ (90%+) · A (80%+) · B (70%+) · C (60%+) · D (50%+) · F (<50%)
+
+### Anti-Gaming (v2)
+
+The scorer detects and penalizes common shortcuts:
+
+| Gaming Attempt | Detection | Penalty |
+|---------------|-----------|---------|
+| **Symlinks** (`ln -s CLAUDE.md .cursorrules`) | `lstatSync().isSymbolicLink()` | Partial score only |
+| **Ghost ESLint** (config exists, packages not installed) | Checks `node_modules/eslint` or `node_modules/.bin/eslint` | Config-only = partial |
+| **Empty test dirs** | `countTestFiles()` recursively counts `*.test.*`, `*.spec.*` | Empty dir = 1pt, real tests = 8pts |
+| **Placeholder files** (empty `deploy.sh`, stub `tsconfig.json`) | Line count, content validation | Stubs get partial score |
+| **Symlinked test dirs** (`tests/ → backend/tests/`) | Symlink detection on directories | Marked as symlink, partial |
+
+### Project Naming & Structure Tips
+
+The scorer discovers projects from your configured `workspaces` directories (default: `~/Projects`).
+Each subdirectory is treated as a separate project. For best results:
+
+- **Use descriptive folder names** — the folder name becomes the project name in reports
+- **Keep one project per directory** — monorepos should have a root `copilot-instructions.md`
+- **Real files over symlinks** — each project should have its own configs with project-specific content
+- **Install your tools** — a linting config without the linter installed doesn't count as linting
 
 ## Architecture
 
