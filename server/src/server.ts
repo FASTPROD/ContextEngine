@@ -13,6 +13,7 @@
 import express from "express";
 import helmet from "helmet";
 import cors from "cors";
+import rateLimit from "express-rate-limit";
 import Database from "better-sqlite3";
 import { createHash, createCipheriv, randomBytes } from "crypto";
 import { existsSync, readFileSync, mkdirSync } from "fs";
@@ -167,8 +168,29 @@ function logAudit(
 // ---------------------------------------------------------------------------
 const app = express();
 app.use(helmet());
-app.use(cors({ origin: true }));
+app.use(cors({
+  origin: [
+    "https://compr.ch",
+    "https://www.compr.ch",
+    "https://api.compr.ch",
+    "https://compr.app",
+    "https://www.compr.app",
+    "https://app.compr.app",
+    /^http:\/\/localhost(:\d+)?$/,
+  ],
+}));
 app.use(express.json({ limit: "1mb" }));
+
+// Rate limiting — 5 requests per minute per IP on activation endpoints
+const activationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: "Too many requests. Try again in 1 minute." },
+});
+app.use("/contextengine/activate", activationLimiter);
+app.use("/contextengine/heartbeat", activationLimiter);
 
 // Trust proxy (for X-Forwarded-For behind nginx)
 app.set("trust proxy", 1);
@@ -391,7 +413,7 @@ app.get("/contextengine/health", (_req, res) => {
 // ---------------------------------------------------------------------------
 // Start server
 // ---------------------------------------------------------------------------
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   const deltaModules = loadDeltaModules();
   console.log(`🔑 ContextEngine Activation Server`);
   console.log(`   Port: ${PORT}`);
@@ -399,3 +421,19 @@ app.listen(PORT, () => {
   console.log(`   Delta modules: ${deltaModules.length} loaded from ${DELTA_DIR}`);
   console.log(`   Ready.\n`);
 });
+
+// ---------------------------------------------------------------------------
+// Graceful shutdown
+// ---------------------------------------------------------------------------
+function shutdown(signal: string) {
+  console.log(`\n🛑 ${signal} received — shutting down...`);
+  server.close(() => {
+    db.close();
+    console.log("   DB closed. Goodbye.");
+    process.exit(0);
+  });
+  // Force exit after 5s if connections hang
+  setTimeout(() => process.exit(1), 5000);
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
