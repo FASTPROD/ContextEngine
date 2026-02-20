@@ -1,0 +1,29 @@
+{
+  "name": "@compr/contextengine-activation-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "License activation & delta module server for ContextEngine Pro",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch & node --watch dist/server.js",
+    "start": "node dist/server.js",
+    "seed": "node dist/seed.js",
+    "gen-delta": "node dist/gen-delta.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "better-sqlite3": "^11.0.0",
+    "helmet": "^7.1.0",
+    "cors": "^2.8.5",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/cors": "^2.8.17",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.5.0"
+  }
+}

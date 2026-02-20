@@ -26,7 +26,8 @@ import { createHash, createDecipheriv } from "crypto";
 
 const DELTA_DIR = join(homedir(), ".contextengine", "delta");
 const LICENSE_FILE = join(homedir(), ".contextengine", "license.json");
-const ACTIVATION_API = "https://api.compr.ch/contextengine/activate";
+const ACTIVATION_API_BASE = process.env.CONTEXTENGINE_API || "https://api.compr.ch/contextengine";
+const ACTIVATION_API = `${ACTIVATION_API_BASE}/activate`;
 const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily check
 
 // Premium modules that require activation
@@ -283,7 +284,7 @@ export async function heartbeat(): Promise<boolean> {
   if (now - lastBeat < HEARTBEAT_INTERVAL_MS) return true;
   
   try {
-    const response = await fetch(`${ACTIVATION_API}/heartbeat`, {
+    const response = await fetch(`${ACTIVATION_API_BASE}/heartbeat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
