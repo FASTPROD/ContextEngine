@@ -295,47 +295,17 @@ Your Project Files           ContextEngine              AI Agent
                             stdio (MCP)
 ```
 
-1. **Parse** — markdown heading-based chunker + code parser (TS/JS/Python)
-2. **Embed** — `all-MiniLM-L6-v2` sentence embeddings (384-dim, local CPU)
-3. **Search** — hybrid scoring: 40% keyword overlap + 60% cosine similarity
-4. **Collect** — operational data from git, package.json, Docker, PM2, nginx, cron
+1. **Parse** — chunks markdown + extracts functions from source code
+2. **Embed** — sentence embeddings run locally on CPU (no API keys)
+3. **Search** — hybrid keyword + semantic scoring
+4. **Collect** — operational data from git, package.json, Docker, PM2, nginx
 5. **Audit** — compliance checks, port conflicts, AI-readiness scoring
 
-### Performance
+## Scoring
 
-| Metric | Value |
-|--------|-------|
-| Startup (keyword ready) | Instant |
-| Startup (semantic ready) | ~200ms from cache, ~15s first run |
-| Embedding speed | ~50 chunks/sec (Apple Silicon) |
-| Embedding cache | `~/.contextengine/embedding-cache.json` |
-| Session storage | `~/.contextengine/sessions/` |
-| Learnings storage | `~/.contextengine/learnings.json` |
-
-## Scoring Methodology
-
-The `score` command evaluates project AI-readiness across 4 categories (100 points total):
-
-| Category | Max Points | What's Checked |
-|----------|-----------|----------------|
-| **Documentation** (30pts) | 30 | copilot-instructions.md, README, CLAUDE.md/.cursorrules/AGENTS.md, SKILLS.md, .env.example |
-| **Infrastructure** (30pts) | 30 | Git, .gitignore, hooks, Docker, CI/CD, deploy script, process manager |
-| **Code Quality** (20pts) | 20 | Tests, TypeScript/type checking, linting, npm scripts |
-| **Security** (20pts) | 20 | .env in .gitignore, no tracked secrets, lockfile, deps gitignored |
+The `score` command evaluates project AI-readiness across **documentation, infrastructure, code quality, and security** — producing a letter grade from A+ to F.
 
 **Grade scale:** A+ (90%+) · A (80%+) · B (70%+) · C (60%+) · D (50%+) · F (<50%)
-
-### Anti-Gaming (v2)
-
-The scorer detects and penalizes common shortcuts:
-
-| Gaming Attempt | Detection | Penalty |
-|---------------|-----------|---------|
-| **Symlinks** (`ln -s CLAUDE.md .cursorrules`) | `lstatSync().isSymbolicLink()` | Partial score only |
-| **Ghost ESLint** (config exists, packages not installed) | Checks `node_modules/eslint` or `node_modules/.bin/eslint` | Config-only = partial |
-| **Empty test dirs** | `countTestFiles()` recursively counts `*.test.*`, `*.spec.*` | Empty dir = 1pt, real tests = 8pts |
-| **Placeholder files** (empty `deploy.sh`, stub `tsconfig.json`) | Line count, content validation | Stubs get partial score |
-| **Symlinked test dirs** (`tests/ → backend/tests/`) | Symlink detection on directories | Marked as symlink, partial |
 
 ### Project Naming & Structure Tips
 
@@ -349,31 +319,9 @@ Each subdirectory is treated as a separate project. For best results:
 
 ## Architecture
 
-```
-src/
-├── cli.ts           # CLI - 6 subcommands + init + MCP server routing
-├── index.ts         # MCP server - 15 tools, resources, file watcher
-├── config.ts        # Config loading, auto-discovery, 7 patterns
-├── ingest.ts        # Markdown heading-based chunker
-├── search.ts        # Keyword search - term overlap scoring
-├── embeddings.ts    # MiniLM-L6-v2 - vector search, cosine similarity
-├── cache.ts         # Embedding cache - SHA-256 hash invalidation
-├── code-chunker.ts  # Code parser - TS/JS/Python function extraction
-├── collectors.ts    # 11 operational data collectors
-├── adapters.ts      # Plugin adapter system - custom data sources
-├── agents.ts        # Compliance auditor, port checker, AI scorer
-├── sessions.ts      # Session persistence - key-value store
-└── learnings.ts     # Permanent learning store - auto-indexed rules
+TypeScript monorepo — MCP server + CLI + search engine + operational collectors.
 
-skills/
-└── contextengine/   # OpenClaw skill package
-    └── SKILL.md
-
-examples/
-└── adapters/        # Example adapter implementations
-    ├── notion-adapter.js
-    └── rss-adapter.js
-```
+See the source at [github.com/FASTPROD/ContextEngine](https://github.com/FASTPROD/ContextEngine) for development setup.
 
 ## Development
 
