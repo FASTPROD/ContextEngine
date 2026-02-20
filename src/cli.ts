@@ -257,6 +257,12 @@ import {
   learningsToChunks,
   formatLearnings,
 } from "./learnings.js";
+import {
+  activate,
+  deactivate,
+  getActivationStatus,
+  gateCheck,
+} from "./activation.js";
 
 interface EngineState {
   sources: KnowledgeSource[];
@@ -351,6 +357,8 @@ async function cliListSources(): Promise<void> {
 }
 
 async function cliListProjects(): Promise<void> {
+  const gate = gateCheck("list_projects");
+  if (gate) { console.error(gate); process.exit(1); }
   const projectDirs = loadProjectDirs();
   const projects = listProjects(projectDirs);
   const text = formatProjectList(projects);
@@ -364,6 +372,8 @@ async function cliListLearnings(category?: string): Promise<void> {
 }
 
 async function cliScore(project?: string, html = false): Promise<void> {
+  const gate = gateCheck("score_project");
+  if (gate) { console.error(gate); process.exit(1); }
   const projectDirs = loadProjectDirs();
 
   let scores: ProjectScore[];
@@ -401,6 +411,8 @@ async function cliScore(project?: string, html = false): Promise<void> {
 }
 
 async function cliAudit(): Promise<void> {
+  const gate = gateCheck("run_audit");
+  if (gate) { console.error(gate); process.exit(1); }
   const projectDirs = loadProjectDirs();
   const plan = runComplianceAudit(projectDirs);
   const text = formatPlan(plan);
@@ -426,10 +438,13 @@ Usage:
   contextengine init                   Scaffold contextengine.json + copilot-instructions.md
   contextengine search <query> [-n N]  Search indexed knowledge (default: top 5)
   contextengine list-sources           Show all indexed sources with chunk counts
-  contextengine list-projects          Discover and analyze all projects
+  contextengine list-projects          Discover and analyze all projects (Pro)
   contextengine list-learnings [cat]   List all learnings (optional: filter by category)
-  contextengine score [project] [--html] AI-readiness score (one or all projects)
-  contextengine audit                  Run compliance audit across all projects
+  contextengine score [project] [--html] AI-readiness score (Pro)
+  contextengine audit                  Run compliance audit (Pro)
+  contextengine activate <key> <email> Activate a Pro license
+  contextengine deactivate             Remove license and premium modules
+  contextengine status                 Show license status
   contextengine help                   Show this message
 
 Examples:
@@ -492,6 +507,38 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
     console.error("Error:", err);
     process.exit(1);
   });
+} else if (command === "activate") {
+  const key = process.argv[3];
+  const email = process.argv[4];
+  if (!key || !email) {
+    console.error("Usage: contextengine activate <license-key> <email>");
+    console.error("Get a license: https://compr.ch/contextengine/pricing");
+    process.exit(1);
+  }
+  activate(key, email).then((result) => {
+    console.log(result.message);
+    process.exit(result.success ? 0 : 1);
+  }).catch((err) => {
+    console.error("Activation error:", err);
+    process.exit(1);
+  });
+} else if (command === "deactivate") {
+  deactivate();
+  console.log("✅ License removed. Premium features disabled.");
+} else if (command === "status") {
+  const status = getActivationStatus();
+  console.log(`\n🔑 ContextEngine License Status\n`);
+  console.log(`  Activated:     ${status.activated ? "✅ Yes" : "❌ No"}`);
+  console.log(`  Plan:          ${status.plan}`);
+  console.log(`  Expires:       ${status.expiresAt}`);
+  console.log(`  Delta version: ${status.deltaVersion}`);
+  console.log(`  Machine ID:    ${status.machineId}`);
+  if (status.premiumTools.length > 0) {
+    console.log(`\n  🔓 Premium tools: ${status.premiumTools.join(", ")}`);
+  } else {
+    console.log(`\n  🔒 Premium tools locked. Activate: contextengine activate <key> <email>`);
+  }
+  console.log("");
 } else {
   // Default: start MCP server
   import("./index.js");

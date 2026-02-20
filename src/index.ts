@@ -56,6 +56,14 @@ import {
   listRegisteredAdapters,
   type AdapterEntry,
 } from "./adapters.js";
+import {
+  gateCheck,
+  activate,
+  deactivate,
+  getActivationStatus,
+  heartbeat,
+  loadLicense,
+} from "./activation.js";
 
 // ---------------------------------------------------------------------------
 // State
@@ -507,9 +515,11 @@ server.tool(
 // ---------------------------------------------------------------------------
 server.tool(
   "list_projects",
-  "Discover and analyze all projects in the workspace. Shows tech stack (framework, runtime, key dependencies), infrastructure (git, docker, pm2), and git remote status for each project.",
+  "Discover and analyze all projects in the workspace. Shows tech stack (framework, runtime, key dependencies), infrastructure (git, docker, pm2), and git remote status for each project. Requires Pro license.",
   {},
   async () => {
+    const gate = gateCheck("list_projects");
+    if (gate) return { content: [{ type: "text" as const, text: gate }] };
     const projectDirs = loadProjectDirs();
     const projects = listProjects(projectDirs);
     const text = formatProjectList(projects);
@@ -524,9 +534,11 @@ server.tool(
 // ---------------------------------------------------------------------------
 server.tool(
   "check_ports",
-  "Scan all projects for port declarations (ecosystem.config.js, docker-compose.yml, .env, package.json) and detect port conflicts. Returns a port allocation map with conflict warnings.",
+  "Scan all projects for port declarations (ecosystem.config.js, docker-compose.yml, .env, package.json) and detect port conflicts. Returns a port allocation map with conflict warnings. Requires Pro license.",
   {},
   async () => {
+    const gate = gateCheck("check_ports");
+    if (gate) return { content: [{ type: "text" as const, text: gate }] };
     const projectDirs = loadProjectDirs();
     const { ports, conflicts } = checkPorts(projectDirs);
     const text = formatPortMap(ports, conflicts);
@@ -549,6 +561,8 @@ server.tool(
       .describe("Audit scope: all checks, compliance only, version checks only, or port conflicts only"),
   },
   async ({ scope }) => {
+    const gate = gateCheck("run_audit");
+    if (gate) return { content: [{ type: "text" as const, text: gate }] };
     const projectDirs = loadProjectDirs();
     const plan = runComplianceAudit(projectDirs);
     const text = formatPlan(plan);
@@ -571,6 +585,8 @@ server.tool(
       .describe("Project name to score. Omit to score all projects."),
   },
   async ({ project }) => {
+    const gate = gateCheck("score_project");
+    if (gate) return { content: [{ type: "text" as const, text: gate }] };
     const projectDirs = loadProjectDirs();
 
     let scores;
@@ -1003,6 +1019,60 @@ server.tool(
 
     lines.push(`\nAll imported learnings now auto-surface in \`search_context\` results.`);
 
+    return {
+      content: [{ type: "text" as const, text: lines.join("\n") }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: activate (License Activation)
+// ---------------------------------------------------------------------------
+server.tool(
+  "activate",
+  "Activate a ContextEngine Pro license to unlock premium tools (score_project, run_audit, check_ports, list_projects, HTML reports). Get a license at https://compr.ch/contextengine/pricing",
+  {
+    license_key: z.string().describe("Your ContextEngine license key"),
+    email: z.string().describe("Email associated with the license"),
+  },
+  async ({ license_key, email }) => {
+    const result = await activate(license_key, email);
+    return {
+      content: [{ type: "text" as const, text: result.message }],
+    };
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: activation_status (Check License)
+// ---------------------------------------------------------------------------
+server.tool(
+  "activation_status",
+  "Check current ContextEngine license status, plan, and available premium tools.",
+  {},
+  async () => {
+    const status = getActivationStatus();
+    const lines = [
+      `## ContextEngine License Status\n`,
+      `- **Activated**: ${status.activated ? "✅ Yes" : "❌ No"}`,
+      `- **Plan**: ${status.plan}`,
+      `- **Expires**: ${status.expiresAt}`,
+      `- **Delta version**: ${status.deltaVersion}`,
+      `- **Machine ID**: ${status.machineId}`,
+      ``,
+    ];
+    if (status.premiumTools.length > 0) {
+      lines.push(`### 🔓 Premium Tools Available`);
+      for (const t of status.premiumTools) {
+        lines.push(`- ${t}`);
+      }
+    } else {
+      lines.push(`### 🔒 Premium Tools (requires activation)`);
+      lines.push(`- score_project, run_audit, check_ports, list_projects`);
+      lines.push(``);
+      lines.push(`Get a license: https://compr.ch/contextengine/pricing`);
+      lines.push(`Activate: \`npx contextengine activate <key> <email>\``);
+    }
     return {
       content: [{ type: "text" as const, text: lines.join("\n") }],
     };
