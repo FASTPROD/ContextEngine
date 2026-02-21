@@ -10,6 +10,7 @@
  *   contextengine list-sources        Show all indexed sources with chunk counts
  *   contextengine list-projects       Discover and analyze all projects
  *   contextengine list-learnings      List all permanent learnings
+ *   contextengine save-learning        Save a learning (terminal fallback for MCP)
  *   contextengine score [project]     AI-readiness score (one or all projects)
  *   contextengine audit               Run compliance audit across all projects
  *   contextengine help                Show this message
@@ -256,6 +257,9 @@ import {
   listLearnings,
   learningsToChunks,
   formatLearnings,
+  saveLearning,
+  deleteLearning,
+  LEARNING_CATEGORIES,
 } from "./learnings.js";
 import {
   activate,
@@ -371,6 +375,63 @@ async function cliListLearnings(category?: string): Promise<void> {
   console.log(`\n${text}`);
 }
 
+async function cliSaveLearning(args: string[]): Promise<void> {
+  // Parse: save-learning "rule text" -c category [-p project] [--context "..."]
+  let rule = "";
+  let category = "";
+  let project: string | undefined;
+  let context = "";
+
+  for (let i = 0; i < args.length; i++) {
+    if ((args[i] === "-c" || args[i] === "--category") && args[i + 1]) {
+      category = args[++i];
+    } else if ((args[i] === "-p" || args[i] === "--project") && args[i + 1]) {
+      project = args[++i];
+    } else if (args[i] === "--context" && args[i + 1]) {
+      context = args[++i];
+    } else if (!rule) {
+      rule = args[i];
+    } else {
+      // Additional words become part of the rule if not quoted
+      rule += " " + args[i];
+    }
+  }
+
+  if (!rule || !category) {
+    console.error("Usage: contextengine save-learning \"<rule text>\" -c <category> [-p project] [--context \"...\"]");
+    console.error(`\nCategories: ${(LEARNING_CATEGORIES as readonly string[]).join(", ")}`);
+    process.exit(1);
+  }
+
+  if (!(LEARNING_CATEGORIES as readonly string[]).includes(category)) {
+    console.error(`❌ Invalid category: "${category}"`);
+    console.error(`Valid: ${(LEARNING_CATEGORIES as readonly string[]).join(", ")}`);
+    process.exit(1);
+  }
+
+  const learning = saveLearning(category, rule, context, project);
+  console.log(`✅ Learning saved: ${learning.id}`);
+  console.log(`   Category: ${learning.category}`);
+  console.log(`   Rule:     ${learning.rule}`);
+  if (learning.project) console.log(`   Project:  ${learning.project}`);
+  if (learning.context) console.log(`   Context:  ${learning.context}`);
+  console.log(`   Tags:     ${learning.tags.join(", ")}`);
+}
+
+async function cliDeleteLearning(id: string): Promise<void> {
+  if (!id) {
+    console.error("Usage: contextengine delete-learning <id>");
+    process.exit(1);
+  }
+  const deleted = deleteLearning(id);
+  if (deleted) {
+    console.log(`✅ Learning ${id} deleted.`);
+  } else {
+    console.error(`❌ Learning not found: ${id}`);
+    process.exit(1);
+  }
+}
+
 async function cliScore(project?: string, html = false): Promise<void> {
   const gate = gateCheck("score_project");
   if (gate) { console.error(gate); process.exit(1); }
@@ -440,6 +501,8 @@ Usage:
   contextengine list-sources           Show all indexed sources with chunk counts
   contextengine list-projects          Discover and analyze all projects (Pro)
   contextengine list-learnings [cat]   List all learnings (optional: filter by category)
+  contextengine save-learning <text> -c <category>  Save a learning (terminal fallback for MCP)
+  contextengine delete-learning <id>   Delete a learning by ID
   contextengine score [project] [--html] AI-readiness score (Pro)
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
@@ -453,6 +516,8 @@ Examples:
   npx @compr/contextengine-mcp score --html
   npx @compr/contextengine-mcp list-projects
   npx @compr/contextengine-mcp list-learnings security
+  npx @compr/contextengine-mcp save-learning "Always pin better-sqlite3 on Debian Buster" -c deployment
+  npx @compr/contextengine-mcp delete-learning abc123
 
 Docs: https://github.com/FASTPROD/ContextEngine
 npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
@@ -491,6 +556,17 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
 } else if (command === "list-learnings") {
   const category = process.argv[3];
   cliListLearnings(category).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "save-learning") {
+  cliSaveLearning(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "delete-learning") {
+  const id = process.argv[3];
+  cliDeleteLearning(id).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });
