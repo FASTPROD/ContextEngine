@@ -1,0 +1,35 @@
+# ContextEngine — Cursor / Multi-Agent Rules
+
+## Project
+TypeScript MCP server — queryable knowledge base for AI coding agents.
+npm: `@compr/contextengine-mcp` · License: BSL-1.1
+
+## Build & Run
+```bash
+npm run build          # tsc compile
+npm start              # MCP server (stdio)
+npm test               # vitest (25 tests)
+npm run lint           # eslint
+npx . search "query"   # CLI search
+npx . score            # Score all projects
+npx . save-learning "rule" -c category  # CLI learning fallback
+```
+
+## Architecture
+- `src/index.ts` — MCP server entry, 17 tool registrations, stdio transport
+- `src/cli.ts` — CLI entry, 10 subcommands
+- `src/search.ts` — BM25 keyword + semantic embeddings (all-MiniLM-L6-v2)
+- `src/activation.ts` — License validation, AES-256-CBC delta decryption, heartbeat
+- `src/scoring.ts` — Project health scoring (12 checks, weighted rubric)
+- `src/audit.ts` — Compliance audit (security, perf, DX)
+- `server/` — Activation server (Express + SQLite3), NOT published to npm
+
+## Critical Rules
+1. Never expose scoring weights/thresholds in README or public docs
+2. `console.log` pollutes MCP stdio — use `console.error` for diagnostics
+3. Delta modules (`agents.ts`, `collectors.ts`, `search.ts`) are premium IP — never include in npm
+4. `server/` is excluded from npm publish via `files` in package.json
+5. All shell exec calls must use hardcoded strings — never interpolate user input
+6. Embedding model runs local-only — no API keys, no data leaves machine
+7. When MCP unavailable, use CLI fallback: `node dist/cli.js save-learning "rule" -c category`
+8. Production API: https://api.compr.ch/contextengine/ (Gandi VPS, SSL)
