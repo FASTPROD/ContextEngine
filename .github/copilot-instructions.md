@@ -41,6 +41,19 @@
 - **Audit logging**: All activation attempts logged with timestamp + IP
 - **Parameterized SQL**: All queries use `?` placeholders (no string interpolation)
 
+### Stripe Payment Integration (Feb 21, 2026)
+- **Server module**: `server/src/stripe.ts` — Checkout session creation, webhook handler, license provisioning, email delivery
+- **Webhook**: `POST /contextengine/webhook` — receives Stripe events (raw body, registered BEFORE express.json middleware)
+- **Checkout**: `POST /contextengine/create-checkout-session` — creates Stripe Checkout URL for a plan
+- **Events handled**: `checkout.session.completed` (auto-seed license + email key), `customer.subscription.deleted` (deactivate), `invoice.payment_failed` (log)
+- **License email**: HTML template via Gandi SMTP (`mail.gandi.net:465`)
+- **Graceful degradation**: Server runs without `STRIPE_SECRET_KEY` — payment endpoints simply not mounted
+- **Plans**: Pro ($2/mo, 2 machines), Team ($12/mo, 5 machines), Enterprise ($36/mo, 10 machines)
+- **Price IDs**: 6 env vars (`STRIPE_PRICE_PRO_MONTHLY`, `..._ANNUAL`, etc.) — set from Stripe Dashboard
+- **License dedup**: If same email+plan already has active license, extends expiry instead of creating duplicate
+- **stripe_mapping table**: Tracks `subscription_id → license_id` for cancellation handling
+- **⚠ Stripe SDK API version**: Must match `LatestApiVersion` in `node_modules/stripe/types/lib.d.ts` — stripe@14.25 expects `2023-10-16`
+
 ## Infrastructure
 - **Production URL**: `https://api.compr.ch/contextengine/` (live, SSL)
 - **Production server**: Gandi VPS `92.243.24.157` (Debian 10 Buster, admin user)
@@ -49,7 +62,7 @@
 - **Dist path**: `/var/www/contextengine-dist/` (main ContextEngine compiled output, for gen-delta)
 - **Delta modules**: `/var/www/contextengine-server/delta-modules/` — agents.mjs (66.9KB), collectors.mjs (22.3KB), search-adv.mjs (3.6KB)
 - **License DB**: `/var/www/contextengine-server/data/licenses.db` (seeded: `CE-F03F-0457-F812-B486`, enterprise, 10 machines, expires 2027-02-20)
-- **Process**: Raw `node dist/server.js` (PM2 not globally installed on VPS — needs `sudo npm install -g pm2` + `pm2 startup`)
+- **Process**: PM2 `contextengine-api` on port 8010
 - **Port**: 8010 (localhost only, proxied via nginx)
 - **Nginx**: `/etc/nginx/sites-enabled/api.compr.ch` — `proxy_pass http://127.0.0.1:8010` for `/contextengine/`
 - **SSL**: Let's Encrypt via certbot, cert at `/etc/letsencrypt/live/api.compr.ch/`, expires 2026-05-22
@@ -57,7 +70,7 @@
 - **better-sqlite3**: Pinned to v9.4.3 on VPS (g++ 8.3 = C++17 max, v11+ needs C++20)
 - **Same VPS as**: admin.CROWLR (Docker PHP 8.2), VOILA.tips (PHP 7.4)
 - **CI**: GitHub Actions `.github/workflows/ci.yml` — Node 18/20/22, lint + build + test + smoke
-- **Deploy**: `server/deploy.sh` — interactive rsync to VPS
+- **Deploy**: `./deploy.sh [npm|server|all]` — dual-mode: npm publish + VPS rsync (sshpass password auth)
 
 ### VPS Deployment (2026-02-21)
 - rsync'd server/ -> `/var/www/contextengine-server/`, dist/ -> `/var/www/contextengine-dist/`
@@ -82,7 +95,8 @@
 | `src/chunker.ts` | Markdown/code-aware chunking with 4-line overlap |
 | `src/config.ts` | `contextengine.json` loader, project aliases |
 | `src/activation.ts` | License validation, delta decryption, machine fingerprint, heartbeat |
-| `server/src/server.ts` | Activation server — Express + SQLite3 + rate-limit + CORS + graceful shutdown |
+| `server/src/server.ts` | Activation server — Express + SQLite3 + Stripe webhook + rate-limit + CORS + graceful shutdown |
+| `server/src/stripe.ts` | Stripe payment — checkout sessions, webhook handler, license provisioning, SMTP email |
 | `server/src/seed.ts` | License key generator — `CE-XXXX-XXXX-XXXX-XXXX` format |
 | `server/src/gen-delta.ts` | Delta module extractor — reads `CONTEXTENGINE_DIST` env var, falls back to `../../dist` |
 | `server/deploy.sh` | Production deploy script — rsync + PM2 + nginx config |
@@ -111,16 +125,18 @@
 | `activation_status` | Check current license status | Free |
 
 ## Stats (as of v1.15.0)
-- 7,527 lines of source code (6,946 src/ + 581 server/)
+- ~8,000 lines of source code (6,946 src/ + ~1,050 server/)
 - 17 MCP tools (13 free + 4 gated)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 175 learnings across 16 categories in store
+- 189 learnings across 16 categories in store
 - 30 bundled starter learnings ship with npm
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
 - Keyword search: instant (BM25 with IDF)
 - Semantic search: ~200ms from cache, ~15s first run
 - CI: GitHub Actions — Node 18/20/22, lint + build + test + smoke
+- Score: 89% A (30/30 doc, 22/30 infra, 17/20 quality, 20/20 security)
+- E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 21, 2026)
 
 ## Critical Rules
 1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)
