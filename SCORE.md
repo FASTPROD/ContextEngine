@@ -1,11 +1,11 @@
 # ContextEngine — AI-Readiness Score
 
-**Score: 96/100 — Grade: A+**
+**Score: 89/100 — Grade: A**
 **Scored:** February 21, 2026 — via ContextEngine `score_project`
 
 ## Stack
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
-- **npm**: @compr/contextengine-mcp v1.14.1 (public, BSL-1.1)
+- **npm**: @compr/contextengine-mcp v1.15.0 (public, BSL-1.1)
 - **Runtime**: Node.js 18+, ES2022, ESM modules
 - **Embeddings**: all-MiniLM-L6-v2 via @huggingface/transformers (local CPU)
 - **Activation Server**: Express + SQLite3 + Helmet, port 8010
