@@ -2,9 +2,11 @@
  * ContextEngine Activation Server
  *
  * Endpoints:
- *   POST /contextengine/activate     — validate license, return encrypted delta
- *   POST /contextengine/heartbeat    — periodic license check
- *   GET  /contextengine/health       — health check
+ *   POST /contextengine/activate               — validate license, return encrypted delta
+ *   POST /contextengine/heartbeat              — periodic license check
+ *   GET  /contextengine/health                 — health check
+ *   POST /contextengine/create-checkout-session — Stripe Checkout for purchasing a plan
+ *   POST /contextengine/webhook                — Stripe webhook (auto-provisions license)
  *
  * Database: SQLite (licenses.db) — simple, no external deps
  * Delta: Pre-built encrypted module bundles in ./delta-modules/
@@ -19,6 +21,14 @@ import { createHash, createCipheriv, randomBytes } from "crypto";
 import { existsSync, readFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import {
+  getStripe,
+  isStripeEnabled,
+  getWebhookSecret,
+  provisionLicense,
+  deactivateLicenseByStripe,
+  sendLicenseEmail,
+} from "./stripe.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -179,6 +189,94 @@ app.use(cors({
     /^http:\/\/localhost(:\d+)?$/,
   ],
 }));
+
+// ⚠ Stripe webhook MUST receive raw body — register BEFORE express.json()
+if (isStripeEnabled()) {
+  app.post(
+    "/contextengine/webhook",
+    express.raw({ type: "application/json" }),
+    async (req, res) => {
+      const stripe = getStripe()!;
+      const sig = req.headers["stripe-signature"] as string;
+      const webhookSecret = getWebhookSecret();
+
+      if (!webhookSecret) {
+        console.error("❌ STRIPE_WEBHOOK_SECRET not configured");
+        return res.status(500).json({ error: "Webhook secret not configured" });
+      }
+
+      let event;
+      try {
+        event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      } catch (err) {
+        console.error("❌ Webhook signature verification failed:", (err as Error).message);
+        return res.status(400).json({ error: "Invalid signature" });
+      }
+
+      const ip = req.ip || req.socket.remoteAddress || "unknown";
+
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object as any;
+          const email = session.customer_email || session.customer_details?.email;
+          const planKey = session.metadata?.plan_key;
+          const customerId = session.customer;
+          const subscriptionId = session.subscription;
+
+          if (!email || !planKey) {
+            console.error("❌ Webhook missing email or plan_key in metadata:", { email, planKey });
+            logAudit(db, "stripe_webhook_missing_data", null, null, ip, JSON.stringify({ email, planKey }));
+            return res.json({ received: true, warning: "Missing email or plan_key" });
+          }
+
+          try {
+            const result = provisionLicense(db, email, planKey, customerId, subscriptionId);
+            logAudit(db, "stripe_license_provisioned", result.key, null, ip,
+              `Plan: ${result.plan}, Email: ${email}, Stripe: ${subscriptionId}`);
+
+            // Send license key email (async, don't block response)
+            sendLicenseEmail(email, result.key, result.plan, result.expiresAt).catch((err) =>
+              console.error("Failed to send license email:", err)
+            );
+
+            console.log(`✅ License provisioned: ${result.key} → ${email} (${result.plan})`);
+          } catch (err) {
+            console.error("❌ License provisioning failed:", (err as Error).message);
+            logAudit(db, "stripe_provision_error", null, null, ip, (err as Error).message);
+          }
+          break;
+        }
+
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object as any;
+          const subscriptionId = subscription.id;
+
+          const deactivated = deactivateLicenseByStripe(db, subscriptionId);
+          logAudit(db, "stripe_subscription_deleted", null, null, ip,
+            `Sub: ${subscriptionId}, Deactivated: ${deactivated}`);
+
+          console.log(`🔴 Subscription canceled: ${subscriptionId}, license deactivated: ${deactivated}`);
+          break;
+        }
+
+        case "invoice.payment_failed": {
+          const invoice = event.data.object as any;
+          console.warn(`⚠ Payment failed for customer ${invoice.customer}: ${invoice.id}`);
+          logAudit(db, "stripe_payment_failed", null, null, ip,
+            `Customer: ${invoice.customer}, Invoice: ${invoice.id}`);
+          break;
+        }
+
+        default:
+          // Unhandled event type — log but don't fail
+          break;
+      }
+
+      return res.json({ received: true });
+    }
+  );
+}
+
 app.use(express.json({ limit: "1mb" }));
 
 // Rate limiting — 5 requests per minute per IP on activation endpoints
@@ -393,6 +491,54 @@ app.post("/contextengine/heartbeat", (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /contextengine/create-checkout-session (Stripe)
+// ---------------------------------------------------------------------------
+if (isStripeEnabled()) {
+  // Price IDs — set these from your Stripe Dashboard products
+  const PRICE_IDS: Record<string, string> = {
+    pro_monthly: process.env.STRIPE_PRICE_PRO_MONTHLY || "",
+    pro_annual: process.env.STRIPE_PRICE_PRO_ANNUAL || "",
+    team_monthly: process.env.STRIPE_PRICE_TEAM_MONTHLY || "",
+    team_annual: process.env.STRIPE_PRICE_TEAM_ANNUAL || "",
+    enterprise_monthly: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY || "",
+    enterprise_annual: process.env.STRIPE_PRICE_ENTERPRISE_ANNUAL || "",
+  };
+
+  app.post("/contextengine/create-checkout-session", async (req, res) => {
+    const stripe = getStripe()!;
+    const { planKey, successUrl, cancelUrl } = req.body;
+
+    if (!planKey || !PRICE_IDS[planKey]) {
+      return res.status(400).json({
+        error: `Invalid plan. Valid: ${Object.keys(PRICE_IDS).join(", ")}`,
+      });
+    }
+
+    const priceId = PRICE_IDS[planKey];
+    if (!priceId) {
+      return res.status(500).json({ error: `Price ID not configured for plan: ${planKey}` });
+    }
+
+    try {
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        payment_method_types: ["card"],
+        line_items: [{ price: priceId, quantity: 1 }],
+        metadata: { plan_key: planKey },
+        success_url: successUrl || "https://compr.ch/contextengine/success?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url: cancelUrl || "https://compr.ch/contextengine/pricing",
+        allow_promotion_codes: true,
+      });
+
+      return res.json({ url: session.url });
+    } catch (err) {
+      console.error("Checkout session error:", err);
+      return res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
 // GET /contextengine/health
 // ---------------------------------------------------------------------------
 app.get("/contextengine/health", (_req, res) => {
@@ -406,6 +552,7 @@ app.get("/contextengine/health", (_req, res) => {
     deltaModules: deltaModules.length,
     activeLicenses: licenseCount,
     activeActivations: activationCount,
+    stripeEnabled: isStripeEnabled(),
     timestamp: new Date().toISOString(),
   });
 });
