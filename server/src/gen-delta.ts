@@ -19,7 +19,8 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const CONTEXTENGINE_DIST = join(__dirname, "..", "..", "dist");
+// Support CONTEXTENGINE_DIST env var for VPS where dist/ is at a different path
+const CONTEXTENGINE_DIST = process.env.CONTEXTENGINE_DIST || join(__dirname, "..", "..", "dist");
 const DELTA_DIR = join(__dirname, "..", "delta-modules");
 
 // Premium modules to extract (these are the files with the real IP)
