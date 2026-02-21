@@ -18,11 +18,20 @@
 - **Parameterized SQL** — all SQLite queries use `?` placeholders
 
 ## Server & Infrastructure
-- **Express 4** — activation/licensing server, 3 endpoints
+- **Express 4** — activation/licensing server, 5 endpoints (activate, heartbeat, health, checkout, webhook)
 - **SQLite3** (better-sqlite3) — license database, synchronous API
 - **PM2** — process manager on Gandi VPS (Debian 10)
-- **Nginx** — reverse proxy with path-based routing
-- **GitHub Actions CI** — Node 18/20/22 matrix, build + smoke test
+- **Nginx** — reverse proxy with path-based routing (`/contextengine/` → port 8010)
+- **GitHub Actions CI** — Node 18/20/22 matrix, build + lint + test + smoke
+- **Let's Encrypt SSL** — certbot auto-renewal on `api.compr.ch`
+
+## Stripe Payment Integration
+- **Stripe SDK v14** — checkout session creation, webhook handler (signature verification)
+- **Webhook events** — `checkout.session.completed`, `customer.subscription.deleted`, `invoice.payment_failed`
+- **License provisioning** — auto-seeds license on payment, dedup via email+plan match
+- **Email delivery** — Nodemailer v6, Gandi SMTP (`mail.gandi.net:465`), HTML templates
+- **Graceful degradation** — server runs without `STRIPE_SECRET_KEY` (payment endpoints not mounted)
+- **Plan mapping** — `metadata.plan_key` in Stripe checkout → `PLAN_CONFIG` → maxMachines + months
 
 ## npm Publishing
 - **Scoped package** — `@compr/contextengine-mcp` on npmjs.com
@@ -30,12 +39,24 @@
 - **Selective files** — only `dist/`, `defaults/`, `skills/`, `examples/` published
 - **Bundled defaults** — 30 starter learnings ship with npm
 
+## Deploy Automation
+- **Root `deploy.sh`** — unified script: `npm` (publish), `server` (VPS rsync + PM2), `all`
+- **VPS auth** — sshpass password-based SSH (key passphrase lost)
+- **rsync excludes** — `node_modules/`, `data/`, `delta-modules/` preserved on server
+- **Post-deploy** — `npm install` + `npx tsc` + gen-delta on VPS, PM2 restart
+
+## CLI Capabilities
+- **10 subcommands** — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `audit`, `activate`, `deactivate`, `status`
+- **No MCP required** — CLI works standalone, useful as fallback when MCP not connected
+- **Learning fallback** — `node dist/cli.js save-learning "rule" -c category -p project --context "..."` when MCP tools unavailable
+
 ## Development Patterns
 - **Zero-config** — auto-discovers project docs, git context, deps without setup
 - **Plugin adapters** — auto-configure Claude Desktop, VS Code, Cursor
 - **Append-only store** — learnings in `~/.contextengine/learnings.json`, never overwritten
 - **Activation gate** — premium tools check license before execution
 - **Offline grace** — 7-day window without heartbeat before lockout
+- **Delta modules** — premium code extracted, AES-encrypted per-machine, decrypted at runtime
 
 ## Key Learnings Applied
 - SSH keys with passphrases block CI/agent automation — use deploy scripts
@@ -43,3 +64,6 @@
 - `express-rate-limit` pattern: separate limiter instances per route group
 - `better-sqlite3` is synchronous — no async/await needed, simpler error handling
 - Heredoc in zsh terminals can corrupt with special characters — use file-based approach
+- Stripe apiVersion must match SDK's `LatestApiVersion` type — check `node_modules/stripe/types/lib.d.ts`
+- Stripe webhook needs `express.raw()` registered BEFORE `express.json()` middleware
+- Session protocol rules in copilot-instructions are necessary but insufficient — agents skip housekeeping under task focus
