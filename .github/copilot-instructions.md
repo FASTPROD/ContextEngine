@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.14.1
+- **Version**: v1.15.0
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
 - **License**: BSL-1.1 (Business Source License)
@@ -17,7 +17,7 @@
 - Learnings store: append-only JSON in `~/.contextengine/learnings.json`
 - Plugin adapters: `adapters/` — Claude Desktop, VS Code, Cursor auto-config
 
-## Activation / Licensing System (v1.14.1)
+## Activation / Licensing System (v1.15.0)
 - **Client** (`src/activation.ts`): License validation, AES-256-CBC delta decryption, machine fingerprinting, daily heartbeat
 - **Server** (`server/`): Express + SQLite3 + Helmet, port 8010
   - `POST /contextengine/activate` — validate license, return encrypted delta bundle
@@ -63,7 +63,7 @@
 - rsync'd server/ -> `/var/www/contextengine-server/`, dist/ -> `/var/www/contextengine-dist/`
 - `npm install` on VPS (better-sqlite3@9.4.3 pinned for C++17 compatibility)
 - `npx tsc` on VPS (cosmetic type errors from missing @types/* — JS emits fine)
-- gen-delta: `CONTEXTENGINE_DIST=/var/www/contextengine-dist node dist/gen-delta.js 1.14.1`
+- gen-delta: `CONTEXTENGINE_DIST=/var/www/contextengine-dist node dist/gen-delta.js 1.15.0`
 - License seeded: `node dist/seed.js yannick@compr.ch enterprise 12`
 - Health: `curl https://api.compr.ch/contextengine/health` -> `{"status":"healthy","deltaModules":3,"activeLicenses":1}`
 
@@ -110,7 +110,7 @@
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.14.1)
+## Stats (as of v1.15.0)
 - 7,527 lines of source code (6,946 src/ + 581 server/)
 - 17 MCP tools (13 free + 4 gated)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
