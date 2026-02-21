@@ -1,7 +1,7 @@
 # ContextEngine — AI-Readiness Score
 
-**Score: 88/100 — Grade: A**
-**Scored:** February 20, 2026 — via ContextEngine `score_project`
+**Score: 96/100 — Grade: A+**
+**Scored:** February 21, 2026 — via ContextEngine `score_project`
 
 ## Stack
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
@@ -9,6 +9,7 @@
 - **Runtime**: Node.js 18+, ES2022, ESM modules
 - **Embeddings**: all-MiniLM-L6-v2 via @huggingface/transformers (local CPU)
 - **Activation Server**: Express + SQLite3 + Helmet, port 8010
+- **Production**: https://api.compr.ch/contextengine/ (SSL, Gandi VPS)
 
 ## Results
 
@@ -17,7 +18,7 @@
 | Git repo | 5 | 5 | ✅ main branch |
 | Git remotes | 5 | 5 | ✅ origin (GitHub) + gdrive |
 | Post-commit hook | 3 | 3 | ✅ Auto-push to origin + gdrive |
-| AI docs (copilot-instructions) | 10 | 10 | ✅ 118 lines — activation, security, infrastructure, 17 tools |
+| AI docs (copilot-instructions) | 10 | 10 | ✅ 135 lines — activation, security, infrastructure, deployment, 17 tools |
 | Multi-agent docs (CLAUDE.md) | 5 | 5 | ✅ 40 lines — 9 critical rules |
 | SKILLS.md | 5 | 5 | ✅ Technologies, security, patterns |
 | README | 5 | 5 | ✅ Trimmed — no IP leaks |
@@ -25,28 +26,29 @@
 | .gitignore | 3 | 5 | ⚠️ Covers node_modules, dist, .contextengine — could add more |
 | Package manager | 5 | 5 | ✅ package-lock.json |
 | Build tool | 5 | 5 | ✅ TypeScript compiler (tsc) |
-| Linter | 0 | 5 | ❌ No ESLint config |
-| Tests | 2 | 10 | ⚠️ CI smoke tests only — no unit test framework |
-| CI/CD | 8 | 10 | ✅ GitHub Actions — Node 18/20/22 matrix, build + smoke |
+| Linter | 5 | 5 | ✅ ESLint typescript-eslint flat config (0 errors, 36 warnings) |
+| Tests | 10 | 10 | ✅ 25 vitest tests (search 11, activation 8, learnings 6) |
+| CI/CD | 10 | 10 | ✅ GitHub Actions — Node 18/20/22, lint + build + test + smoke |
 | Security | 10 | 10 | ✅ Rate-limit, CORS whitelist, Helmet, parameterized SQL, graceful shutdown |
 | npm publishing | 5 | 5 | ✅ Scoped package, selective files, BSL-1.1 |
-| Deploy script | 3 | 3 | ✅ server/deploy.sh — rsync + PM2 + nginx |
+| Deploy script | 3 | 3 | ✅ server/deploy.sh — rsync + nginx + VPS live |
 
 ## Deductions
-- -5: No ESLint configuration
-- -8: No unit test framework (jest/vitest) — only CI smoke tests
-- -2: .gitignore could be more comprehensive
+- -2: .gitignore could be more comprehensive (OS/editor patterns)
+- -2: PM2 not globally installed on VPS (server runs as raw node process, no auto-restart on reboot)
 
-## Improvements Since v1.12.0 (Score: 72 → 88)
+## Improvements Since v1.12.0 (Score: 72 -> 88 -> 96)
 - ✅ CLAUDE.md created (+5)
 - ✅ SKILLS.md created (+5)
-- ✅ CI/CD via GitHub Actions (+8)
+- ✅ CI/CD via GitHub Actions (+8 -> +10 with lint+test)
 - ✅ Security hardening — rate-limit, CORS, graceful shutdown (+10)
 - ✅ Deploy script (+3)
-- ✅ copilot-instructions updated to 118 lines (+2)
+- ✅ copilot-instructions updated to 135 lines (+2)
 - ✅ 0 npm vulnerabilities (was 3)
+- ✅ ESLint typescript-eslint flat config (+5) — commit 36ad8f0
+- ✅ 25 vitest unit tests (+8) — commit 36ad8f0
+- ✅ VPS deployment live with SSL — commit ff26ba6
 
-## Next Steps (to reach 95+)
-1. Add ESLint with TypeScript rules (+5)
-2. Add vitest with unit tests for search, scoring, activation (+8)
-3. Expand .gitignore (+2)
+## Next Steps (to reach 100)
+1. Install PM2 globally on VPS + startup script for auto-restart (+2)
+2. Expand .gitignore with OS/editor patterns (+2)
