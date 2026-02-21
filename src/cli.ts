@@ -11,7 +11,7 @@
  *   contextengine list-projects       Discover and analyze all projects
  *   contextengine list-learnings      List all permanent learnings
  *   contextengine save-learning        Save a learning (terminal fallback for MCP)
- *   contextengine score [project]     AI-readiness score (one or all projects)
+ *   contextengine score [project]     AI-readiness score (writes SCORE.md to each project)
  *   contextengine audit               Run compliance audit across all projects
  *   contextengine help                Show this message
  */
@@ -251,6 +251,7 @@ import {
   scoreProject,
   formatScoreReport,
   generateScoreHTML,
+  generateProjectScoreMD,
   type ProjectScore,
 } from "./agents.js";
 import {
@@ -432,7 +433,7 @@ async function cliDeleteLearning(id: string): Promise<void> {
   }
 }
 
-async function cliScore(project?: string, html = false): Promise<void> {
+async function cliScore(project?: string, html = false, save = true): Promise<void> {
   const gate = gateCheck("score_project");
   if (gate) { console.error(gate); process.exit(1); }
   const projectDirs = loadProjectDirs();
@@ -469,6 +470,16 @@ async function cliScore(project?: string, html = false): Promise<void> {
     const text = formatScoreReport(scores);
     console.log(`\n${text}`);
   }
+
+  // Auto-write SCORE.md to each project root
+  if (save) {
+    for (const s of scores) {
+      const scorePath = join(s.path, "SCORE.md");
+      const md = generateProjectScoreMD(s);
+      writeFileSync(scorePath, md, "utf-8");
+      console.log(`📝 SCORE.md written to ${scorePath}`);
+    }
+  }
 }
 
 async function cliAudit(): Promise<void> {
@@ -503,7 +514,7 @@ Usage:
   contextengine list-learnings [cat]   List all learnings (optional: filter by category)
   contextengine save-learning <text> -c <category>  Save a learning (terminal fallback for MCP)
   contextengine delete-learning <id>   Delete a learning by ID
-  contextengine score [project] [--html] AI-readiness score (Pro)
+  contextengine score [project] [--html] [--no-save] AI-readiness score (Pro, writes SCORE.md)
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
   contextengine deactivate             Remove license and premium modules
@@ -573,8 +584,9 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
 } else if (command === "score") {
   const args = process.argv.slice(3);
   const htmlFlag = args.includes("--html");
+  const noSaveFlag = args.includes("--no-save");
   const project = args.filter(a => !a.startsWith("--"))[0];
-  cliScore(project, htmlFlag).catch((err) => {
+  cliScore(project, htmlFlag, !noSaveFlag).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });
