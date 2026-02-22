@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <!-- Gradient for the shield background -->
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4FC3F7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1565C0;stop-opacity:1" />
+    </linearGradient>
+    <!-- Glow effect -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Subtle shadow -->
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#0D47A1" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#0D1B2A" />
+  <circle cx="128" cy="128" r="116" fill="none" stroke="#1B3A5C" stroke-width="1.5" />
+  
+  <!-- Shield shape -->
+  <path d="M128 30 L200 65 L200 140 C200 185 165 215 128 230 C91 215 56 185 56 140 L56 65 Z" 
+        fill="url(#shieldGrad)" opacity="0.15" filter="url(#shadow)"/>
+  <path d="M128 30 L200 65 L200 140 C200 185 165 215 128 230 C91 215 56 185 56 140 L56 65 Z" 
+        fill="none" stroke="url(#shieldGrad)" stroke-width="3" opacity="0.6"/>
+  
+  <!-- Brain — left hemisphere -->
+  <path d="M88 120 C88 96 96 80 110 75 C106 70 104 62 108 55 C112 48 120 46 126 48
+           C126 42 130 38 128 38" 
+        fill="none" stroke="#4FC3F7" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M88 120 C84 112 82 104 84 96 C86 88 92 82 98 80"
+        fill="none" stroke="#4FC3F7" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M88 120 C86 128 88 136 92 142 C96 148 104 152 110 154 C118 156 124 154 128 150"
+        fill="none" stroke="#4FC3F7" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  
+  <!-- Brain — right hemisphere -->
+  <path d="M168 120 C168 96 160 80 146 75 C150 70 152 62 148 55 C144 48 136 46 130 48
+           C130 42 128 38 128 38"
+        fill="none" stroke="#4FC3F7" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M168 120 C172 112 174 104 172 96 C170 88 164 82 158 80"
+        fill="none" stroke="#4FC3F7" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M168 120 C170 128 168 136 164 142 C160 148 152 152 146 154 C138 156 132 154 128 150"
+        fill="none" stroke="#4FC3F7" stroke-width="3" stroke-linecap="round" filter="url(#glow)"/>
+  
+  <!-- Central dividing line -->
+  <line x1="128" y1="38" x2="128" y2="150" stroke="#4FC3F7" stroke-width="2" opacity="0.4"/>
+  
+  <!-- Neural connection dots -->
+  <circle cx="105" cy="90" r="3" fill="#4FC3F7" opacity="0.8"/>
+  <circle cx="151" cy="90" r="3" fill="#4FC3F7" opacity="0.8"/>
+  <circle cx="98" cy="110" r="3" fill="#4FC3F7" opacity="0.8"/>
+  <circle cx="158" cy="110" r="3" fill="#4FC3F7" opacity="0.8"/>
+  <circle cx="110" cy="130" r="3" fill="#4FC3F7" opacity="0.8"/>
+  <circle cx="146" cy="130" r="3" fill="#4FC3F7" opacity="0.8"/>
+  <circle cx="128" cy="100" r="4" fill="#E3F2FD" opacity="0.9" filter="url(#glow)"/>
+  
+  <!-- Cross-hemisphere connections (neural pathways) -->
+  <line x1="105" y1="90" x2="128" y2="100" stroke="#4FC3F7" stroke-width="1" opacity="0.4"/>
+  <line x1="151" y1="90" x2="128" y2="100" stroke="#4FC3F7" stroke-width="1" opacity="0.4"/>
+  <line x1="98" y1="110" x2="128" y2="100" stroke="#4FC3F7" stroke-width="1" opacity="0.3"/>
+  <line x1="158" y1="110" x2="128" y2="100" stroke="#4FC3F7" stroke-width="1" opacity="0.3"/>
+  
+  <!-- Gear teeth around the brain (engine concept) — small notches on shield -->
+  <g stroke="#4FC3F7" stroke-width="2" opacity="0.5">
+    <line x1="128" y1="28" x2="128" y2="18"/>
+    <line x1="155" y1="33" x2="160" y2="24"/>
+    <line x1="178" y1="48" x2="186" y2="42"/>
+    <line x1="195" y1="70" x2="204" y2="66"/>
+    <line x1="101" y1="33" x2="96" y2="24"/>
+    <line x1="78" y1="48" x2="70" y2="42"/>
+    <line x1="61" y1="70" x2="52" y2="66"/>
+  </g>
+  
+  <!-- Reminder bell icon (bottom right) -->
+  <g transform="translate(175, 180)" filter="url(#glow)">
+    <path d="M0 0 C0 -12 -6 -18 -12 -20 L-12 -22 C-12 -24 -10 -26 -8 -26 C-6 -26 -4 -24 -4 -22 L-4 -20 C2 -18 8 -12 8 0 L10 4 L-18 4 L-16 0 Z" 
+          fill="#FFB300" stroke="#FF8F00" stroke-width="1"/>
+    <circle cx="-4" cy="7" r="3" fill="#FFB300"/>
+    <!-- Exclamation pulse -->
+    <circle cx="-4" cy="-10" r="8" fill="none" stroke="#FF8F00" stroke-width="1" opacity="0.4">
+      <animate attributeName="r" from="8" to="14" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" from="0.4" to="0" dur="2s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  
+  <!-- "CE" text -->
+  <text x="128" y="195" text-anchor="middle" font-family="SF Mono, Menlo, Consolas, monospace" 
+        font-size="28" font-weight="700" fill="#E3F2FD" letter-spacing="4" filter="url(#glow)">
+    CE
+  </text>
+  
+  <!-- Tagline -->
+  <text x="128" y="215" text-anchor="middle" font-family="SF Pro, Helvetica, Arial, sans-serif" 
+        font-size="10" fill="#4FC3F7" opacity="0.7" letter-spacing="3">
+    ENFORCE
+  </text>
+</svg>
