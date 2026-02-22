@@ -3,9 +3,10 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.15.0
+- **Version**: v1.16.0
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
+- **VS Code Extension**: `css-llc.contextengine` — https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **License**: BSL-1.1 (Business Source License)
 
 ## Architecture
@@ -182,3 +183,36 @@
 - Stub Dockerfiles (< 3 effective lines) and empty docker-compose (no `image:` or `build:`) get minimal credit (1 pt vs 5)
 - Projects deploying via managed platforms (Vercel, Netlify, Render, Fly) get full infrastructure points without needing Docker
 - Prevents agents from creating dummy files to game the score
+
+## VS Code Extension (v0.2.0)
+- **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
+- **Publisher**: `css-llc` (Azure DevOps org `css-llc`, personal MS account `ymolinier@hotmail.com`)
+- **PAT**: stored in Azure DevOps — Marketplace → Manage scope, 1-year expiry
+- **Source**: `vscode-extension/` (7 TypeScript source files, ~900 lines)
+- **Icon**: Red compr.app logo (256x256 PNG, from `COMPR-app/pwa_assets/compr/logo512.png` hue-shifted)
+
+### Extension Architecture
+| File | Purpose |
+|---|---|
+| `vscode-extension/src/extension.ts` | Entry point — activation, command registration, wiring |
+| `vscode-extension/src/gitMonitor.ts` | Periodic git status scanning, `GitSnapshot` type, `onSnapshot()` event |
+| `vscode-extension/src/statusBar.ts` | `StatusBarController` — persistent CE:N indicator with escalating colors |
+| `vscode-extension/src/infoPanel.ts` | `InfoStatusBarController` — ℹ️ icon, WebView panel with monitoring checklist |
+| `vscode-extension/src/notifications.ts` | Escalating warning notifications with cooldown |
+| `vscode-extension/src/chatParticipant.ts` | `@contextengine` chat participant — `/status`, `/commit`, `/search`, `/remind` |
+| `vscode-extension/src/contextEngineClient.ts` | CLI delegation for search/sessions + direct git operations |
+
+### Extension Features
+- **CE:N status bar** — live count of uncommitted files across all workspace repos (green→yellow→red)
+- **ℹ️ info panel** — WebView showing what ContextEngine monitors (7-item checklist with FREE/PRO badges), end-of-session protocol, architecture overview
+- **`@contextengine` chat** — Chat Participant with 4 slash commands for agent interaction
+- **Notifications** — Escalating warnings when files are uncommitted (5-min cooldown)
+- **Commit All** — One-click commit across all workspace repos
+
+### Publishing Workflow
+```bash
+cd vscode-extension
+npx @vscode/vsce package        # → contextengine-X.Y.Z.vsix
+echo '<PAT>' | npx @vscode/vsce publish  # → marketplace
+code --install-extension contextengine-X.Y.Z.vsix  # local test
+```
