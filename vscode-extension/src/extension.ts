@@ -30,6 +30,7 @@ import { GitMonitor } from "./gitMonitor";
 import { StatusBarController } from "./statusBar";
 import { NotificationManager } from "./notifications";
 import { registerChatParticipant } from "./chatParticipant";
+import { InfoStatusBarController, showInfoPanel, updateInfoPanel } from "./infoPanel";
 import * as client from "./contextEngineClient";
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,7 @@ import * as client from "./contextEngineClient";
 
 let gitMonitor: GitMonitor;
 let statusBar: StatusBarController;
+let infoBar: InfoStatusBarController;
 let notifications: NotificationManager;
 const disposables: vscode.Disposable[] = [];
 
@@ -67,8 +69,15 @@ export function activate(context: vscode.ExtensionContext): void {
   disposables.push(
     gitMonitor.onSnapshot((snapshot) => {
       statusBar.update(snapshot);
+      updateInfoPanel(snapshot);
     })
   );
+
+  // -----------------------------------------------------------------------
+  // 2b. Info Status Bar (ℹ️ icon)
+  // -----------------------------------------------------------------------
+  infoBar = new InfoStatusBarController();
+  disposables.push(infoBar);
 
   // -----------------------------------------------------------------------
   // 3. Notifications
@@ -101,6 +110,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("contextengine")) {
         statusBar.refreshConfig();
+        infoBar.refreshConfig();
 
         // Restart git monitor with new interval
         const config = vscode.workspace.getConfiguration("contextengine");
@@ -349,6 +359,16 @@ function registerCommands(
           }
         }
       );
+    })
+  );
+
+  // -----------------------------------------------------------------------
+  // contextengine.showInfo — Open the info panel WebView
+  // -----------------------------------------------------------------------
+  context.subscriptions.push(
+    vscode.commands.registerCommand("contextengine.showInfo", async () => {
+      const snapshot = await gitMonitor.forceScan();
+      showInfoPanel(context, snapshot);
     })
   );
 
