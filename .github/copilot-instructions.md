@@ -11,7 +11,7 @@
 
 ## Architecture
 - MCP protocol over `stdio` transport — works with Claude Desktop, VS Code Copilot, Cursor, etc.
-- **CLI**: 10 subcommands — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `audit`, `activate`, `deactivate`, `status` (no MCP required)
+- **CLI**: 15 subcommands — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `audit`, `activate`, `deactivate`, `status`, `save-session`, `load-session`, `list-sessions`, `end-session`, `import-learnings` (no MCP required)
 - Dual search: BM25 keyword (instant) + semantic embeddings (Xenova `all-MiniLM-L6-v2`, ~200ms from cache)
 - Sources auto-discovered: `copilot-instructions.md`, `CLAUDE.md`, `SKILLS.md`, `contextengine.json`, session docs
 - Operational context: git log, branch, recent commits, file tree, dependency versions
@@ -126,11 +126,11 @@
 | `activation_status` | Check current license status | Free |
 
 ## Stats (as of v1.16.0)
-- ~8,500 lines of source code (~7,400 src/ + ~1,050 server/)
+- ~9,400 lines of source code (~7,400 src/ + ~1,050 server/ + ~900 vscode-extension/)
 - 17 MCP tools (13 free + 4 gated)
 - 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 189 learnings across 16 categories in store
+- 219 learnings across 16 categories in store
 - 30 bundled starter learnings ship with npm
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
@@ -138,6 +138,7 @@
 - Semantic search: ~200ms from cache, ~15s first run
 - CI: GitHub Actions — Node 18/20/22, lint + build + test + smoke
 - Score: 89% A (30/30 doc, 22/30 infra, 17/20 quality, 20/20 security)
+- VS Code Extension: v0.2.0 published on marketplace (css-llc.contextengine)
 - E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 21, 2026)
 
 ## Critical Rules
