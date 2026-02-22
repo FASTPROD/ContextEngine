@@ -71,6 +71,7 @@ import {
 let sources: KnowledgeSource[] = [];
 let chunks: Chunk[] = [];
 let embeddedChunks: EmbeddedChunk[] = [];
+let activeProjectNames: string[] = [];
 
 /**
  * (Re-)ingest all sources. Called at startup and on file changes.
@@ -81,8 +82,9 @@ async function reindex(): Promise<void> {
 
   // Collect operational data from project directories
   const config = loadConfig();
+  const projectDirs = loadProjectDirs();
+  activeProjectNames = projectDirs.map((d) => d.name);
   if (config.collectOps !== false) {
-    const projectDirs = loadProjectDirs();
     let opsChunks = 0;
     for (const dir of projectDirs) {
       const ops = collectProjectOps(dir.path, dir.name);
@@ -128,12 +130,12 @@ async function reindex(): Promise<void> {
     }
   }
 
-  // Inject learnings as searchable chunks
-  const learningChunks = learningsToChunks();
+  // Inject learnings as searchable chunks (project-scoped to prevent IP leakage)
+  const learningChunks = learningsToChunks(activeProjectNames);
   if (learningChunks.length > 0) {
     chunks.push(...learningChunks);
     console.error(
-      `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index`
+      `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index (scoped to ${activeProjectNames.length} projects)`
     );
   }
 
@@ -1006,8 +1008,8 @@ server.tool(
     const learning = saveLearning(category, rule, context, project);
     const stats = learningsStats();
 
-    // Re-inject learnings into search index
-    const newChunks = learningsToChunks();
+    // Re-inject learnings into search index (project-scoped)
+    const newChunks = learningsToChunks(activeProjectNames);
     // Remove old learning chunks and add new ones
     const nonLearningChunks = chunks.filter((c) => c.source !== "💡 Learnings Store");
     chunks.length = 0;
@@ -1050,7 +1052,8 @@ server.tool(
       .describe("Filter by category (deployment, api, database, etc.). Omit to show all."),
   },
   async ({ category }) => {
-    const learnings = category ? listLearnings(category) : listLearnings();
+    // Project-scoped: only show learnings for active workspace projects + universal (no project)
+    const learnings = listLearnings(category, activeProjectNames);
     const text = formatLearnings(learnings);
     return {
       content: [{ type: "text" as const, text }],
@@ -1084,8 +1087,8 @@ server.tool(
       project,
     );
 
-    // Re-inject learnings into search index
-    const newChunks = learningsToChunks();
+    // Re-inject learnings into search index (project-scoped)
+    const newChunks = learningsToChunks(activeProjectNames);
     const nonLearningChunks = chunks.filter((c) => c.source !== "💡 Learnings Store");
     chunks.length = 0;
     chunks.push(...nonLearningChunks, ...newChunks);
@@ -1268,12 +1271,12 @@ async function main() {
     }
   }
 
-  // 1d. Inject learnings into search index
-  const learningChunks = learningsToChunks();
+  // 1d. Inject learnings into search index (project-scoped)
+  const learningChunks = learningsToChunks(activeProjectNames);
   if (learningChunks.length > 0) {
     chunks.push(...learningChunks);
     console.error(
-      `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index`
+      `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index (scoped)`
     );
   }
 

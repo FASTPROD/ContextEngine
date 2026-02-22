@@ -270,16 +270,33 @@ export function searchLearnings(query: string): Learning[] {
 }
 
 /**
- * Get all learnings, optionally filtered by category.
+ * Get learnings, optionally filtered by category and/or project.
+ *
+ * When `projects` is provided, only returns learnings that:
+ * - match one of the given project names (case-insensitive), OR
+ * - have no project set (universal learnings)
+ *
+ * This prevents cross-project IP leakage — e.g. CROWLR learnings
+ * won't appear when working on VOILA.
  */
-export function listLearnings(category?: string): Learning[] {
+export function listLearnings(category?: string, projects?: string[]): Learning[] {
   const store = loadStore();
+  let result = store.learnings;
+
+  if (projects && projects.length > 0) {
+    const lowerProjects = projects.map((p) => p.toLowerCase());
+    result = result.filter(
+      (l) => !l.project || lowerProjects.includes(l.project.toLowerCase())
+    );
+  }
+
   if (category) {
-    return store.learnings.filter(
+    result = result.filter(
       (l) => l.category.toLowerCase() === category.toLowerCase()
     );
   }
-  return store.learnings;
+
+  return result;
 }
 
 /**
@@ -585,10 +602,23 @@ function normalizeCategory(heading: string): LearningCategory {
 /**
  * Convert learnings to Chunks so they can be included in search_context.
  * This is the key integration — learnings auto-surface in hybrid search.
+ *
+ * When `projects` is provided, only includes learnings for those projects
+ * (+ universal learnings with no project). This prevents cross-project
+ * IP leakage — CROWLR secrets won't appear when searching in VOILA.
  */
-export function learningsToChunks(): Chunk[] {
+export function learningsToChunks(projects?: string[]): Chunk[] {
   const store = loadStore();
-  return store.learnings.map((l) => ({
+  let learnings = store.learnings;
+
+  if (projects && projects.length > 0) {
+    const lowerProjects = projects.map((p) => p.toLowerCase());
+    learnings = learnings.filter(
+      (l) => !l.project || lowerProjects.includes(l.project.toLowerCase())
+    );
+  }
+
+  return learnings.map((l) => ({
     source: "💡 Learnings Store",
     section: `[${l.category}] ${l.rule}`,
     content: [
