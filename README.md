@@ -10,9 +10,18 @@ ContextEngine indexes your `copilot-instructions.md`, `SKILLS.md`, `CLAUDE.md`, 
 
 ## Why
 
-AI coding agents are powerful — but they forget everything between sessions. Your team's hard-won knowledge lives in scattered markdown files that agents can't search.
+AI coding agents are powerful — but they forget everything between sessions. They skip best practices, leave code uncommitted, create dummy files to satisfy checklists, and ignore their own documentation.
 
-ContextEngine fixes this: **zero-config, fully local, privacy-first.**
+**ContextEngine won't make your agents perfect** — nothing will, yet. But it will solve many real pain points and save you time:
+
+- 🧠 **Persistent memory** — learnings and session state survive across conversations
+- 📋 **Systematic enforcement** — agents get nudged to commit, document, and follow protocol
+- 🏗️ **Best practices by default** — scoring and auditing catch gaps before they become problems
+- ⏱️ **Time saved** — auto-discovery means zero setup, search means no re-explaining context
+
+Think of it as guardrails and muscle memory for your AI agents — **practical structure while we wait for these agents to become smarter.**
+
+ContextEngine fixes the biggest gap: **zero-config, fully local, privacy-first.**
 
 - 🔍 **Hybrid Search** — keyword + semantic (vector embeddings) across all your docs
 - 🧠 **Semantic Search** — `all-MiniLM-L6-v2` runs locally on CPU (no API keys)

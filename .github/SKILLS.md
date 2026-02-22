@@ -55,9 +55,12 @@
 - **Learning fallback** — `node dist/cli.js save-learning "rule" -c category -p project --context "..."` when MCP tools unavailable
 
 ## Agent Enforcement (v1.16.0)
-- **Session nudge** — after every 15 MCP tool calls without `save_session`, appends a reminder to `search_context` and `list_sources` responses
+- **Session nudge** — after 15 MCP tool calls without `save_session`, appends a reminder to `search_context` and `list_sources` responses
+- **Escalating urgency** — at 30 calls the nudge becomes 🚨 URGENT, making it harder for agents to ignore
+- **Git status checks** — every 2 minutes of tool activity, checks all workspace projects for uncommitted changes and warns the agent
 - **Auto-session inject** — on MCP startup, loads the most recent session (<72 hours old) and injects it into search chunks, providing continuity without requiring explicit `load_session`
 - **Protocol compliance** — nudge resets when agent calls `save_session`, rewarding good behavior
+- **Context-aware scoring** — Docker points only awarded for real deployment use, not placeholder files; managed platforms (Vercel/Netlify/Render) get full credit
 
 ## Development Patterns
 - **Zero-config** — auto-discovers project docs, git context, deps without setup
