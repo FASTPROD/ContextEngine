@@ -1,7 +1,7 @@
 # ContextEngine — Skills & Capabilities
 
 ## Core Technologies
-- **TypeScript** (ES2022, strict mode) — entire codebase, ~7,500 lines
+- **TypeScript** (ES2022, strict mode) — entire codebase, ~8,000 lines
 - **MCP Protocol** (Model Context Protocol) — stdio transport, JSON-RPC 2.0, 17 tools
 - **Node.js 18+** — ESM modules, native crypto, child_process for git
 
@@ -45,10 +45,19 @@
 - **rsync excludes** — `node_modules/`, `data/`, `delta-modules/` preserved on server
 - **Post-deploy** — `npm install` + `npx tsc` + gen-delta on VPS, PM2 restart
 
-## CLI Capabilities
-- **10 subcommands** — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `audit`, `activate`, `deactivate`, `status`
+## CLI Capabilities (v1.16.0)
+- **15 subcommands** — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `save-session`, `load-session`, `list-sessions`, `end-session`, `import-learnings`, `audit`, `activate`, `deactivate`, `status`
+- **Session management** — `save-session`, `load-session`, `list-sessions` bring session persistence to CLI (was MCP-only before v1.16.0)
+- **End-session protocol** — `end-session` checks uncommitted git changes + doc freshness across all projects, exits code 1 on failures
+- **Non-interactive mode** — `--yes` / `-y` flag or piped input (`!process.stdin.isTTY`) auto-accepts all prompts; enables agent automation without `yes |` hacks
+- **Import learnings** — `import-learnings <file>` bulk-imports from Markdown or JSON
 - **No MCP required** — CLI works standalone, useful as fallback when MCP not connected
 - **Learning fallback** — `node dist/cli.js save-learning "rule" -c category -p project --context "..."` when MCP tools unavailable
+
+## Agent Enforcement (v1.16.0)
+- **Session nudge** — after every 15 MCP tool calls without `save_session`, appends a reminder to `search_context` and `list_sources` responses
+- **Auto-session inject** — on MCP startup, loads the most recent session (<72 hours old) and injects it into search chunks, providing continuity without requiring explicit `load_session`
+- **Protocol compliance** — nudge resets when agent calls `save_session`, rewarding good behavior
 
 ## Development Patterns
 - **Zero-config** — auto-discovers project docs, git context, deps without setup
@@ -67,3 +76,5 @@
 - Stripe apiVersion must match SDK's `LatestApiVersion` type — check `node_modules/stripe/types/lib.d.ts`
 - Stripe webhook needs `express.raw()` registered BEFORE `express.json()` middleware
 - Session protocol rules in copilot-instructions are necessary but insufficient — agents skip housekeeping under task focus
+- Non-interactive CLI detection: `!process.stdin.isTTY || --yes || -y` covers pipes, cron, and CI
+- Enforcement nudges in tool responses are more effective than rules in docs — agents actually read tool output

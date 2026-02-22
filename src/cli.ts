@@ -199,7 +199,7 @@ async function runInit(): Promise<void> {
     if (existsSync(configPath)) {
       console.log("  ⏭  contextengine.json already exists — skipping");
     } else {
-      const createConfig = await ask(rl, "  Create contextengine.json? [Y/n] ");
+      const createConfig = isNonInteractive ? "y" : await ask(rl, "  Create contextengine.json? [Y/n] ");
       if (createConfig.toLowerCase() !== "n") {
         const config = generateConfig(det, cwd);
         writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
@@ -212,7 +212,7 @@ async function runInit(): Promise<void> {
     if (existsSync(copilotPath)) {
       console.log("  ⏭  .github/copilot-instructions.md already exists — skipping");
     } else {
-      const createCopilot = await ask(rl, "  Create .github/copilot-instructions.md? [Y/n] ");
+      const createCopilot = isNonInteractive ? "y" : await ask(rl, "  Create .github/copilot-instructions.md? [Y/n] ");
       if (createCopilot.toLowerCase() !== "n") {
         mkdirSync(join(cwd, ".github"), { recursive: true });
         writeFileSync(copilotPath, generateCopilotInstructions(det));
@@ -260,14 +260,27 @@ import {
   formatLearnings,
   saveLearning,
   deleteLearning,
+  importLearningsFromFile,
   LEARNING_CATEGORIES,
 } from "./learnings.js";
+import {
+  saveSession,
+  loadSession,
+  listSessions,
+  formatSession,
+  formatSessionList,
+} from "./sessions.js";
 import {
   activate,
   deactivate,
   getActivationStatus,
   gateCheck,
 } from "./activation.js";
+
+// ---------------------------------------------------------------------------
+// Non-interactive mode: skip prompts when piped or --yes flag
+// ---------------------------------------------------------------------------
+const isNonInteractive = !process.stdin.isTTY || process.argv.includes("--yes") || process.argv.includes("-y");
 
 interface EngineState {
   sources: KnowledgeSource[];
@@ -492,6 +505,248 @@ async function cliAudit(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// CLI: Session management
+// ---------------------------------------------------------------------------
+
+async function cliSaveSession(args: string[]): Promise<void> {
+  // save-session <name> <key> <value>
+  // or: save-session <name> <key> --stdin (reads value from stdin)
+  let name = "";
+  let key = "";
+  let value = "";
+  let fromStdin = false;
+
+  const positional: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--stdin") {
+      fromStdin = true;
+    } else {
+      positional.push(args[i]);
+    }
+  }
+
+  name = positional[0] || "";
+  key = positional[1] || "";
+  value = positional.slice(2).join(" ");
+
+  if (!name || !key) {
+    console.error("Usage: contextengine save-session <name> <key> <value>");
+    console.error("       contextengine save-session <name> <key> --stdin");
+    console.error("\nExamples:");
+    console.error('  contextengine save-session my-project summary "Fixed auth bug, deployed to staging"');
+    console.error('  contextengine save-session my-project active_tasks "1. Deploy 2. Test 3. Monitor"');
+    console.error('  cat notes.md | contextengine save-session my-project notes --stdin');
+    process.exit(1);
+  }
+
+  if (fromStdin && !value) {
+    // Read from stdin
+    const chunks: Buffer[] = [];
+    for await (const chunk of process.stdin) {
+      chunks.push(Buffer.from(chunk));
+    }
+    value = Buffer.concat(chunks).toString("utf-8").trim();
+  }
+
+  if (!value) {
+    console.error("Error: No value provided. Pass as argument or use --stdin.");
+    process.exit(1);
+  }
+
+  const session = saveSession(name, key, value);
+  console.log(`✅ Session "${name}" updated — key "${key}" saved (${session.entries.length} total entries)`);
+}
+
+async function cliLoadSession(name: string): Promise<void> {
+  if (!name) {
+    console.error("Usage: contextengine load-session <name>");
+    process.exit(1);
+  }
+
+  const session = loadSession(name);
+  if (!session) {
+    console.error(`❌ Session not found: "${name}"`);
+    const sessions = listSessions();
+    if (sessions.length > 0) {
+      console.error(`\nAvailable sessions: ${sessions.map(s => s.name).join(", ")}`);
+    }
+    process.exit(1);
+  }
+
+  console.log(formatSession(session));
+}
+
+async function cliListSessions(): Promise<void> {
+  const sessions = listSessions();
+  console.log(`\n${formatSessionList(sessions)}`);
+}
+
+async function cliEndSession(): Promise<void> {
+  const projectDirs = loadProjectDirs();
+  const checks: string[] = [];
+  let passCount = 0;
+  let failCount = 0;
+
+  checks.push("# End-of-Session Protocol\n");
+
+  // --- Check 1: Uncommitted changes across all repos ---
+  checks.push("## 1. Uncommitted Changes\n");
+  const reposChecked = new Set<string>();
+
+  for (const dir of projectDirs) {
+    try {
+      const gitRoot = execSync("git rev-parse --show-toplevel", {
+        cwd: dir.path, encoding: "utf-8", timeout: 5000,
+      }).trim();
+
+      if (reposChecked.has(gitRoot)) continue;
+      reposChecked.add(gitRoot);
+
+      const status = execSync("git status --porcelain", {
+        cwd: gitRoot, encoding: "utf-8", timeout: 5000,
+      }).trim();
+
+      const repoName = basename(gitRoot);
+      if (status) {
+        const fileCount = status.split("\n").length;
+        checks.push(`- ❌ FAIL — ${repoName} has ${fileCount} uncommitted file(s)`);
+        const files = status.split("\n").slice(0, 5);
+        for (const f of files) {
+          checks.push(`  - ${f.trim()}`);
+        }
+        if (fileCount > 5) checks.push(`  - ... and ${fileCount - 5} more`);
+        failCount++;
+      } else {
+        checks.push(`- ✅ PASS — ${repoName} is clean`);
+        passCount++;
+      }
+    } catch {
+      // Not a git repo
+    }
+  }
+
+  // Also check common doc repos
+  const home = process.env.HOME || "";
+  const extraRepoPaths = [join(home, "FASTPROD")];
+  for (const repoPath of extraRepoPaths) {
+    if (!existsSync(repoPath) || reposChecked.has(repoPath)) continue;
+    try {
+      const gitRoot = execSync("git rev-parse --show-toplevel", {
+        cwd: repoPath, encoding: "utf-8", timeout: 5000,
+      }).trim();
+      if (reposChecked.has(gitRoot)) continue;
+      reposChecked.add(gitRoot);
+      const status = execSync("git status --porcelain", {
+        cwd: gitRoot, encoding: "utf-8", timeout: 5000,
+      }).trim();
+      const repoName = basename(gitRoot);
+      if (status) {
+        const fileCount = status.split("\n").length;
+        checks.push(`- ❌ FAIL — ${repoName} has ${fileCount} uncommitted file(s)`);
+        failCount++;
+      } else {
+        checks.push(`- ✅ PASS — ${repoName} is clean`);
+        passCount++;
+      }
+    } catch { /* Not a git repo */ }
+  }
+
+  checks.push("");
+
+  // --- Check 2: Documentation freshness ---
+  checks.push("## 2. Documentation Freshness\n");
+  const now = Date.now();
+  const SESSION_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+  for (const dir of projectDirs) {
+    const copilotPath = join(dir.path, ".github", "copilot-instructions.md");
+    if (existsSync(copilotPath)) {
+      const stat = statSync(copilotPath);
+      const ageMs = now - stat.mtimeMs;
+      if (ageMs < SESSION_THRESHOLD_MS) {
+        const mins = Math.round(ageMs / 60000);
+        checks.push(`- ✅ PASS — ${dir.name}/copilot-instructions.md updated ${mins}m ago`);
+        passCount++;
+      } else {
+        const hours = Math.round(ageMs / 3600000);
+        checks.push(`- ⚠️  CHECK — ${dir.name}/copilot-instructions.md last modified ${hours}h ago`);
+        failCount++;
+      }
+    }
+  }
+
+  // Check session doc
+  const sessionDocPath = join(home, "FASTPROD", "docs", "CROWLR_COMPR_APPS_SESSION.md");
+  if (existsSync(sessionDocPath)) {
+    const stat = statSync(sessionDocPath);
+    const ageMs = now - stat.mtimeMs;
+    if (ageMs < SESSION_THRESHOLD_MS) {
+      const mins = Math.round(ageMs / 60000);
+      checks.push(`- ✅ PASS — SESSION.md updated ${mins}m ago`);
+      passCount++;
+    } else {
+      const hours = Math.round(ageMs / 3600000);
+      checks.push(`- ⚠️  CHECK — SESSION.md last modified ${hours}h ago — append session summary`);
+      failCount++;
+    }
+  }
+
+  checks.push("");
+
+  // --- Summary ---
+  checks.push("## Summary\n");
+  const total = passCount + failCount;
+  if (failCount === 0) {
+    checks.push(`✅ ALL CLEAR — ${passCount}/${total} checks passed. Safe to end session.`);
+  } else {
+    checks.push(`⚠️  ${failCount} item(s) need attention — ${passCount}/${total} passed.`);
+    checks.push("");
+    checks.push("Before ending this session:");
+    checks.push("1. Commit and push all uncommitted changes");
+    checks.push("2. Update copilot-instructions.md with new facts");
+    checks.push("3. Append a session summary to SESSION.md");
+    checks.push("4. Run `contextengine end-session` again to verify");
+  }
+
+  console.log(checks.join("\n"));
+  process.exit(failCount > 0 ? 1 : 0);
+}
+
+async function cliImportLearnings(args: string[]): Promise<void> {
+  // import-learnings <file> [-c category] [-p project]
+  let filePath = "";
+  let category = "other";
+  let project: string | undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if ((args[i] === "-c" || args[i] === "--category") && args[i + 1]) {
+      category = args[++i];
+    } else if ((args[i] === "-p" || args[i] === "--project") && args[i + 1]) {
+      project = args[++i];
+    } else if (!filePath) {
+      filePath = args[i];
+    }
+  }
+
+  if (!filePath) {
+    console.error("Usage: contextengine import-learnings <file.md|file.json> [-c category] [-p project]");
+    process.exit(1);
+  }
+
+  const result = importLearningsFromFile(filePath, category, project);
+  console.log(`\n📥 Import Results:`);
+  console.log(`   Imported: ${result.imported}`);
+  console.log(`   Updated:  ${result.updated}`);
+  console.log(`   Skipped:  ${result.skipped}`);
+  if (result.errors.length > 0) {
+    console.log(`   Errors:`);
+    for (const err of result.errors) {
+      console.log(`     - ${err}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main — route to init, CLI subcommand, or MCP server
 // ---------------------------------------------------------------------------
 const command = process.argv[2];
@@ -512,8 +767,13 @@ Usage:
   contextengine list-sources           Show all indexed sources with chunk counts
   contextengine list-projects          Discover and analyze all projects (Pro)
   contextengine list-learnings [cat]   List all learnings (optional: filter by category)
-  contextengine save-learning <text> -c <category>  Save a learning (terminal fallback for MCP)
+  contextengine save-learning <text> -c <category>  Save a learning
   contextengine delete-learning <id>   Delete a learning by ID
+  contextengine import-learnings <file> [-c cat] [-p project]  Bulk-import learnings
+  contextengine save-session <name> <key> <value>   Save session context
+  contextengine load-session <name>    Restore session context
+  contextengine list-sessions          List all saved sessions
+  contextengine end-session            Pre-flight checklist (uncommitted changes, doc freshness)
   contextengine score [project] [--html] [--no-save] AI-readiness score (Pro, writes SCORE.md)
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
@@ -521,14 +781,19 @@ Usage:
   contextengine status                 Show license status
   contextengine help                   Show this message
 
+Flags:
+  --yes, -y   Skip all interactive prompts (auto-accept defaults)
+
 Examples:
   npx @compr/contextengine-mcp search "docker nginx"
   npx @compr/contextengine-mcp score ContextEngine
   npx @compr/contextengine-mcp score --html
-  npx @compr/contextengine-mcp list-projects
-  npx @compr/contextengine-mcp list-learnings security
-  npx @compr/contextengine-mcp save-learning "Always pin better-sqlite3 on Debian Buster" -c deployment
-  npx @compr/contextengine-mcp delete-learning abc123
+  npx @compr/contextengine-mcp save-session my-project summary "Deployed v2, fixed auth"
+  npx @compr/contextengine-mcp load-session my-project
+  npx @compr/contextengine-mcp end-session
+  npx @compr/contextengine-mcp import-learnings rules.md -c deployment
+  npx @compr/contextengine-mcp init --yes
+  echo "value" | npx @compr/contextengine-mcp save-session my-project notes --stdin
 
 Docs: https://github.com/FASTPROD/ContextEngine
 npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
@@ -592,6 +857,31 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
   });
 } else if (command === "audit") {
   cliAudit().catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "save-session") {
+  cliSaveSession(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "load-session") {
+  cliLoadSession(process.argv[3] || "").catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "list-sessions") {
+  cliListSessions().catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "end-session") {
+  cliEndSession().catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "import-learnings") {
+  cliImportLearnings(process.argv.slice(3)).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });
