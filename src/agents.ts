@@ -1174,12 +1174,52 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   }
 
   // Docker / containerization (5 pts)
+  // Context-aware: only award points if Docker is actually used for deployment.
+  // A project that deploys via rsync/PM2/Vercel/Netlify shouldn't be penalized
+  // for not having Docker, and shouldn't be rewarded for a dummy docker-compose.
   const hasDockerfile = existsSync(join(p, "Dockerfile"));
   const hasCompose = existsSync(join(p, "docker-compose.yml")) || existsSync(join(p, "docker-compose.prod.yml"));
-  if (hasDockerfile && hasCompose) {
-    checks.push({ name: "Docker", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "Dockerfile + compose" });
-  } else if (hasDockerfile || hasCompose) {
+
+  // Detect if project actually uses Docker in its deployment
+  const usesDockerForReal = (() => {
+    // If Dockerfile has real content (not just a stub), it's genuine
+    if (hasDockerfile) {
+      try {
+        const df = readFileSync(join(p, "Dockerfile"), "utf-8");
+        const effectiveLines = df.split("\n").filter(l => l.trim() && !l.trim().startsWith("#")).length;
+        if (effectiveLines >= 3) return true; // Real Dockerfile
+      } catch { /* ignore */ }
+    }
+    // If docker-compose has services with image/build, it's genuine
+    if (hasCompose) {
+      try {
+        const composePath = existsSync(join(p, "docker-compose.yml"))
+          ? join(p, "docker-compose.yml")
+          : join(p, "docker-compose.prod.yml");
+        const dc = readFileSync(composePath, "utf-8");
+        if (dc.includes("image:") || dc.includes("build:")) return true; // Real compose
+      } catch { /* ignore */ }
+    }
+    return false;
+  })();
+
+  // Check if project has alternative deploy methods (rsync, Vercel, Netlify, Render, etc.)
+  const hasAltDeploy = existsSync(join(p, "vercel.json")) ||
+    existsSync(join(p, "netlify.toml")) ||
+    existsSync(join(p, "render.yaml")) ||
+    existsSync(join(p, "fly.toml")) ||
+    existsSync(join(p, "railway.json"));
+
+  if (usesDockerForReal && hasDockerfile && hasCompose) {
+    checks.push({ name: "Docker", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "Dockerfile + compose (active deployment)" });
+  } else if (usesDockerForReal && (hasDockerfile || hasCompose)) {
     checks.push({ name: "Docker", category: "Infrastructure", points: 3, maxPoints: 5, status: "partial", detail: hasDockerfile ? "Dockerfile only" : "Compose only" });
+  } else if ((hasDockerfile || hasCompose) && !usesDockerForReal) {
+    // Files exist but look like stubs/placeholders — minimal credit
+    checks.push({ name: "Docker", category: "Infrastructure", points: 1, maxPoints: 5, status: "partial", detail: "Docker files exist but appear to be placeholders — not used in deployment" });
+  } else if (hasAltDeploy) {
+    // Project uses a different deploy platform — Docker is N/A, award full points
+    checks.push({ name: "Containerization", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "Uses managed platform (Vercel/Netlify/Render/Fly)" });
   } else {
     checks.push({ name: "Docker", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "Not containerized" });
   }

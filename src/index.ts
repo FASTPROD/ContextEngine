@@ -299,22 +299,92 @@ const server = new McpServer({
 });
 
 // ---------------------------------------------------------------------------
-// Enforcement: track tool calls to nudge agents toward session hygiene
+// Enforcement: proactive agent compliance — nudge, git checks, escalation
 // ---------------------------------------------------------------------------
 let toolCallCount = 0;
 let sessionSaved = false;
-const NUDGE_INTERVAL = 15; // Remind every N tool calls
+let lastCommitCheck = 0; // timestamp of last git status check
+const NUDGE_INTERVAL = 15;       // First nudge at 15 calls
+const ESCALATE_INTERVAL = 30;    // Escalate at 30 calls
+const GIT_CHECK_INTERVAL = 120_000; // Check git status every 2 minutes of tool activity
+
+/**
+ * Check git status across workspace projects.
+ * Returns a warning string if uncommitted changes are found.
+ * Cached to avoid hammering git on every tool call.
+ */
+function checkGitStatus(): string {
+  const now = Date.now();
+  if (now - lastCommitCheck < GIT_CHECK_INTERVAL) return "";
+  lastCommitCheck = now;
+
+  const dirty: string[] = [];
+  try {
+    // Check each discovered project directory for uncommitted changes
+    const workDirs = chunks
+      .map(c => c.source)
+      .filter((s, i, arr) => arr.indexOf(s) === i)
+      .map(s => {
+        // Extract directory from source path
+        const parts = s.split("/");
+        // Find the project root (directory containing .git)
+        for (let i = parts.length - 1; i >= 0; i--) {
+          const candidate = parts.slice(0, i + 1).join("/");
+          try {
+            if (existsSync(join(candidate, ".git"))) return candidate;
+          } catch { /* ignore */ }
+        }
+        return null;
+      })
+      .filter((d): d is string => d !== null)
+      .filter((d, i, arr) => arr.indexOf(d) === i);
+
+    for (const dir of workDirs.slice(0, 10)) { // Cap at 10 projects
+      try {
+        const status = execSync("git status --porcelain 2>/dev/null | head -5", {
+          cwd: dir, encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"]
+        }).trim();
+        if (status) {
+          const count = status.split("\n").length;
+          const name = basename(dir);
+          dirty.push(`${name} (${count} file${count > 1 ? "s" : ""})`);
+        }
+      } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+
+  if (dirty.length === 0) return "";
+  return `\n⚠️ **Uncommitted changes** in: ${dirty.join(", ")}. ` +
+    `Run \`git add -A && git commit\` before ending the session!`;
+}
 
 function maybeNudge(): string {
   toolCallCount++;
-  if (sessionSaved) return "";
-  if (toolCallCount > 0 && toolCallCount % NUDGE_INTERVAL === 0) {
-    return "\n\n---\n⏰ **ContextEngine reminder** — You've made " +
-      toolCallCount + " tool calls this session without saving context. " +
-      "Use `save_session` to persist decisions/progress, and `end_session` before wrapping up. " +
-      "This ensures the next agent can pick up where you left off.";
+  if (sessionSaved && toolCallCount < ESCALATE_INTERVAL) return "";
+
+  const parts: string[] = [];
+
+  // Escalating session nudge
+  if (!sessionSaved) {
+    if (toolCallCount >= ESCALATE_INTERVAL) {
+      parts.push(
+        `🚨 **URGENT** — ${toolCallCount} tool calls without \`save_session\`. ` +
+        `If this chat ends, ALL context is lost. Save NOW.`
+      );
+    } else if (toolCallCount > 0 && toolCallCount % NUDGE_INTERVAL === 0) {
+      parts.push(
+        `⏰ **ContextEngine reminder** — You've made ${toolCallCount} tool calls without saving context. ` +
+        `Use \`save_session\` to persist decisions/progress, and \`end_session\` before wrapping up.`
+      );
+    }
   }
-  return "";
+
+  // Git status check (runs on a time interval, not every call)
+  const gitWarning = checkGitStatus();
+  if (gitWarning) parts.push(gitWarning);
+
+  if (parts.length === 0) return "";
+  return "\n\n---\n" + parts.join("\n");
 }
 
 // ---------------------------------------------------------------------------

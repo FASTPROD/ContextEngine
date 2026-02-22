@@ -173,4 +173,12 @@
 ### Enforcement Nudge (MCP)
 - Tracks tool call count + whether `save_session` has been called
 - After every 15 tool calls without `save_session`, appends a reminder to `search_context` and `list_sources` responses
+- At 30 calls, escalates to 🚨 URGENT tone
+- Every 2 minutes of tool activity, checks git status across workspace projects and warns about uncommitted changes
 - Nudge resets when agent calls `save_session`
+
+### Context-Aware Scoring (v1.16.0)
+- Docker/containerization points now check file content quality, not just existence
+- Stub Dockerfiles (< 3 effective lines) and empty docker-compose (no `image:` or `build:`) get minimal credit (1 pt vs 5)
+- Projects deploying via managed platforms (Vercel, Netlify, Render, Fly) get full infrastructure points without needing Docker
+- Prevents agents from creating dummy files to game the score
