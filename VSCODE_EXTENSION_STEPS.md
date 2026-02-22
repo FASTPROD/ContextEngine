@@ -43,5 +43,3 @@ echo '<PAT>' | npx @vscode/vsce login css-llc
 ---
 
 ## Status: ✅ PUBLISHED
-
-When you're ready, do Steps 1-3 and give me the **publisher ID** and confirm the PAT is created. I'll handle everything else.
