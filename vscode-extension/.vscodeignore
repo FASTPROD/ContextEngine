@@ -8,3 +8,4 @@ tsconfig.json
 **/*.map
 *.md
 !README.md
+contextengine-*.vsix

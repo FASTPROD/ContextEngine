@@ -17,10 +17,10 @@
 
 | Check | Category | Score | Max | Status | Detail |
 |---|---|---|---|---|---|
-| copilot-instructions.md | Documentation | 10 | 10 | ✅ | 153 lines — comprehensive |
-| README.md | Documentation | 8 | 8 | ✅ | 352 lines |
+| copilot-instructions.md | Documentation | 10 | 10 | ✅ | 185 lines — comprehensive |
+| README.md | Documentation | 8 | 8 | ✅ | 361 lines |
 | Multi-agent patterns | Documentation | 6 | 6 | ✅ | Found: CLAUDE.md, .cursorrules |
-| SKILLS.md | Documentation | 3 | 3 | ✅ | 70 lines |
+| SKILLS.md | Documentation | 3 | 3 | ✅ | 84 lines |
 | .env.example | Documentation | 3 | 3 | ✅ | Present — agents know which env vars to set |
 | Git repository | Infrastructure | 5 | 5 | ✅ | Initialized |
 | .gitignore | Infrastructure | 3 | 3 | ✅ | Present |
