@@ -4,3 +4,4 @@ dist/
 .env
 .npmrc
 .DS_Store
+*.vsix
