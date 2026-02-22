@@ -1,7 +1,7 @@
 # ContextEngine — Skills & Capabilities
 
 ## Core Technologies
-- **TypeScript** (ES2022, strict mode) — entire codebase, ~8,000 lines
+- **TypeScript** (ES2022, strict mode) — entire codebase, ~9,400 lines
 - **MCP Protocol** (Model Context Protocol) — stdio transport, JSON-RPC 2.0, 17 tools
 - **Node.js 18+** — ESM modules, native crypto, child_process for git
 
@@ -78,6 +78,19 @@
 - Heredoc in zsh terminals can corrupt with special characters — use file-based approach
 - Stripe apiVersion must match SDK's `LatestApiVersion` type — check `node_modules/stripe/types/lib.d.ts`
 - Stripe webhook needs `express.raw()` registered BEFORE `express.json()` middleware
+
+## VS Code Extension (v0.2.0)
+- **Marketplace publishing** — `css-llc.contextengine` via Azure DevOps PAT + vsce CLI
+- **VS Code API** — StatusBarItem, WebviewPanel, ChatParticipant, EventEmitter, ExtensionContext
+- **Git monitoring** — child_process `git status --porcelain` across all workspace repos, periodic timer
+- **Status bar** — persistent CE:N indicator with threshold-based coloring (green→yellow→orange→red)
+- **Info panel** — WebView HTML/CSS panel with VS Code theme CSS variables, live data injection
+- **Chat Participant** — `@contextengine` with 4 slash commands, Copilot Chat integration
+- **Notifications** — escalating warnings with cooldown tracking
+- **CLI delegation** — executes ContextEngine CLI for search, sessions, git operations
+- **Publishing workflow** — `vsce package` → `.vsix` → `echo PAT | vsce publish` → marketplace
+- **Azure DevOps** — personal MS account (NOT enterprise), org `css-llc`, PAT with Marketplace scope
+- **Icon** — ImageMagick grayscale→red-tint from source PNG (256x256)
 - Session protocol rules in copilot-instructions are necessary but insufficient — agents skip housekeeping under task focus
 - Non-interactive CLI detection: `!process.stdin.isTTY || --yes || -y` covers pipes, cron, and CI
 - Enforcement nudges in tool responses are more effective than rules in docs — agents actually read tool output
