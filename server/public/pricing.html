@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ContextEngine — Pricing</title>
+  <meta name="description" content="Persistent memory and enforcement for AI coding agents. Free core, PRO for project intelligence." />
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #ffc107;
+      --accent-hover: #ffca28;
+      --green: #3fb950;
+      --blue: #58a6ff;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Header */
+    header {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    header .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 1.4em;
+      font-weight: 700;
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .logo span { color: var(--text); }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      margin-left: 24px;
+      font-size: 0.95em;
+    }
+
+    nav a:hover { color: var(--text); }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 60px 0 40px;
+    }
+
+    .hero h1 {
+      font-size: 2.8em;
+      font-weight: 800;
+      margin-bottom: 16px;
+    }
+
+    .hero h1 em {
+      font-style: normal;
+      color: var(--accent);
+    }
+
+    .hero p {
+      color: var(--muted);
+      font-size: 1.2em;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Pricing Grid */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      padding: 40px 0;
+    }
+
+    @media (max-width: 768px) {
+      .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; }
+    }
+
+    .plan {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px 28px;
+      position: relative;
+      transition: border-color 0.2s;
+    }
+
+    .plan:hover { border-color: var(--accent); }
+
+    .plan.featured {
+      border-color: var(--accent);
+      box-shadow: 0 0 30px rgba(255, 193, 7, 0.08);
+    }
+
+    .plan.featured::before {
+      content: 'MOST POPULAR';
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: #000;
+      padding: 4px 16px;
+      border-radius: 20px;
+      font-size: 0.75em;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .plan-name {
+      font-size: 1.3em;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .plan-desc {
+      color: var(--muted);
+      font-size: 0.9em;
+      margin-bottom: 20px;
+    }
+
+    .plan-price {
+      font-size: 3em;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .plan-price span {
+      font-size: 0.35em;
+      font-weight: 400;
+      color: var(--muted);
+    }
+
+    .plan-annual {
+      color: var(--muted);
+      font-size: 0.85em;
+      margin: 4px 0 24px;
+    }
+
+    .plan-cta {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      text-align: center;
+      transition: background 0.2s;
+      margin-bottom: 24px;
+    }
+
+    .cta-primary {
+      background: var(--accent);
+      color: #000;
+    }
+
+    .cta-primary:hover { background: var(--accent-hover); }
+
+    .cta-outline {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .cta-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+    .plan-features {
+      list-style: none;
+    }
+
+    .plan-features li {
+      padding: 6px 0;
+      font-size: 0.92em;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .plan-features li::before {
+      content: '✓';
+      color: var(--green);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .plan-features li.disabled {
+      color: var(--muted);
+    }
+
+    .plan-features li.disabled::before {
+      content: '—';
+      color: var(--muted);
+    }
+
+    /* Feature Comparison */
+    .comparison {
+      padding: 40px 0 60px;
+    }
+
+    .comparison h2 {
+      text-align: center;
+      font-size: 1.8em;
+      margin-bottom: 32px;
+    }
+
+    .comp-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .comp-table th,
+    .comp-table td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .comp-table th {
+      color: var(--muted);
+      font-size: 0.85em;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .comp-table td:nth-child(2),
+    .comp-table td:nth-child(3),
+    .comp-table th:nth-child(2),
+    .comp-table th:nth-child(3) {
+      text-align: center;
+      width: 120px;
+    }
+
+    .check { color: var(--green); }
+    .dash { color: var(--muted); }
+
+    /* How It Works */
+    .how-it-works {
+      padding: 40px 0;
+      text-align: center;
+    }
+
+    .how-it-works h2 {
+      font-size: 1.8em;
+      margin-bottom: 12px;
+    }
+
+    .how-it-works p {
+      color: var(--muted);
+      max-width: 500px;
+      margin: 0 auto 24px;
+    }
+
+    .steps {
+      display: flex;
+      gap: 32px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+
+    .step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 24px;
+      max-width: 260px;
+      text-align: center;
+    }
+
+    .step-num {
+      display: inline-block;
+      background: var(--accent);
+      color: #000;
+      width: 32px;
+      height: 32px;
+      line-height: 32px;
+      border-radius: 50%;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .step h3 { margin-bottom: 8px; }
+    .step p { color: var(--muted); font-size: 0.9em; }
+    .step code {
+      background: rgba(255,255,255,0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.9em;
+    }
+
+    footer a { color: var(--blue); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="container">
+      <a href="https://github.com/FASTPROD/ContextEngine" class="logo">🛡️ Context<span>Engine</span></a>
+      <nav>
+        <a href="https://github.com/FASTPROD/ContextEngine">GitHub</a>
+        <a href="https://www.npmjs.com/package/@compr/contextengine-mcp">npm</a>
+        <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">VS Code</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <h1>Guardrails for <em>AI Agents</em></h1>
+      <p>Persistent memory, session enforcement, and project intelligence for AI coding assistants. Free core — PRO for teams that ship.</p>
+    </div>
+  </section>
+
+  <!-- Pricing Cards -->
+  <section class="container">
+    <div class="pricing-grid">
+
+      <!-- Pro -->
+      <div class="plan">
+        <div class="plan-name">Pro</div>
+        <div class="plan-desc">Solo developer</div>
+        <div class="plan-price">$2<span>/mo</span></div>
+        <div class="plan-annual">or $20/year (save 17%)</div>
+        <a href="#activate" class="plan-cta cta-outline">Get Pro</a>
+        <ul class="plan-features">
+          <li>Everything in Free</li>
+          <li>Project health score (A+ to F)</li>
+          <li>Compliance audit</li>
+          <li>Port conflict detection</li>
+          <li>Multi-project discovery</li>
+          <li>HTML score reports</li>
+          <li>2 machines</li>
+        </ul>
+      </div>
+
+      <!-- Team -->
+      <div class="plan featured">
+        <div class="plan-name">Team</div>
+        <div class="plan-desc">Small teams</div>
+        <div class="plan-price">$12<span>/mo</span></div>
+        <div class="plan-annual">or $120/year (save 17%)</div>
+        <a href="#activate" class="plan-cta cta-primary">Get Team</a>
+        <ul class="plan-features">
+          <li>Everything in Pro</li>
+          <li>5 machines</li>
+          <li>Priority support</li>
+        </ul>
+      </div>
+
+      <!-- Enterprise -->
+      <div class="plan">
+        <div class="plan-name">Enterprise</div>
+        <div class="plan-desc">Larger teams</div>
+        <div class="plan-price">$36<span>/mo</span></div>
+        <div class="plan-annual">or $360/year (save 17%)</div>
+        <a href="#activate" class="plan-cta cta-outline">Get Enterprise</a>
+        <ul class="plan-features">
+          <li>Everything in Pro</li>
+          <li>10 machines</li>
+          <li>Priority support</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Feature Comparison -->
+  <section class="comparison">
+    <div class="container">
+      <h2>Feature Comparison</h2>
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Free</th>
+            <th>PRO</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Hybrid search (keyword + semantic)</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td>Persistent learnings store</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td>Session save / load / list</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td>End-of-session enforcement</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td>VS Code extension (git monitor, chat)</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td>Plugin adapters (Notion, RSS, custom)</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td>CLI (15 subcommands)</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td><strong>Project health score</strong> (A+ to F)</td><td class="dash">—</td><td class="check">✓</td></tr>
+          <tr><td><strong>Compliance audit</strong></td><td class="dash">—</td><td class="check">✓</td></tr>
+          <tr><td><strong>Port conflict detection</strong></td><td class="dash">—</td><td class="check">✓</td></tr>
+          <tr><td><strong>Multi-project discovery</strong></td><td class="dash">—</td><td class="check">✓</td></tr>
+          <tr><td><strong>HTML score reports</strong></td><td class="dash">—</td><td class="check">✓</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- How It Works -->
+  <section class="how-it-works">
+    <div class="container">
+      <h2>Get Started in 60 Seconds</h2>
+      <p>No API keys, no cloud accounts. Everything runs locally on your machine.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Install</h3>
+          <p>Add the MCP server config — or install the VS Code extension from the Marketplace.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Purchase</h3>
+          <p>Choose a plan. You'll receive a license key via email: <code>CE-XXXX-XXXX-XXXX-XXXX</code></p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Activate</h3>
+          <p>Run <code>npx @compr/contextengine-mcp activate</code> and paste your key. PRO tools unlock instantly.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Activate Section -->
+  <section id="activate" class="how-it-works" style="padding-top: 0;">
+    <div class="container">
+      <h2>Already Have a Key?</h2>
+      <p>Activate your license from the terminal:</p>
+      <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 24px; display: inline-block; margin-top: 12px;">
+        <code style="font-size: 1.1em; color: var(--green);">npx @compr/contextengine-mcp activate</code>
+      </div>
+      <p style="margin-top: 16px;">Questions? <a href="mailto:yannick@compr.ch" style="color: var(--blue);">yannick@compr.ch</a></p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>
+        © 2026 FASTPROD (PROD LLC) · BSL-1.1 License ·
+        <a href="https://github.com/FASTPROD/ContextEngine">GitHub</a> ·
+        <a href="https://www.npmjs.com/package/@compr/contextengine-mcp">npm</a> ·
+        <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">VS Code Extension</a>
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -3,32 +3,6 @@
 		{
 			"name": "ContextEngine",
 			"path": "."
-		},
-		{
-			"name": "VOILA.tips",
-			"path": "../VOILA.tips"
-		},
-		{
-			"name": "COMPR-app",
-			"path": "../COMPR-app"
-		},
-		{
-			"name": "app.CROWLR",
-			"path": "../app.CROWLR"
-		},
-		{
-			"name": "admin.CROWLR",
-			"path": "../admin.CROWLR"
-		},
-		{
-			"name": "EXO",
-			"path": "../EXO"
-		},
-		{
-			"path": "../KONIVE.com"
-		},
-		{
-			"path": "../FC_project"
 		}
 	],
 	"settings": {

@@ -558,6 +558,19 @@ app.get("/contextengine/health", (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /contextengine/pricing — static pricing page
+// ---------------------------------------------------------------------------
+const publicDir = join(__dirname, "..", "public");
+app.get("/contextengine/pricing", (_req, res) => {
+  const pricingPath = join(publicDir, "pricing.html");
+  if (existsSync(pricingPath)) {
+    res.sendFile(pricingPath);
+  } else {
+    res.redirect("https://github.com/FASTPROD/ContextEngine#-pro-features");
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Start server
 // ---------------------------------------------------------------------------
 const server = app.listen(PORT, () => {
