@@ -295,8 +295,27 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "1.10.0",
+  version: "1.16.0",
 });
+
+// ---------------------------------------------------------------------------
+// Enforcement: track tool calls to nudge agents toward session hygiene
+// ---------------------------------------------------------------------------
+let toolCallCount = 0;
+let sessionSaved = false;
+const NUDGE_INTERVAL = 15; // Remind every N tool calls
+
+function maybeNudge(): string {
+  toolCallCount++;
+  if (sessionSaved) return "";
+  if (toolCallCount > 0 && toolCallCount % NUDGE_INTERVAL === 0) {
+    return "\n\n---\n⏰ **ContextEngine reminder** — You've made " +
+      toolCallCount + " tool calls this session without saving context. " +
+      "Use `save_session` to persist decisions/progress, and `end_session` before wrapping up. " +
+      "This ensures the next agent can pick up where you left off.";
+  }
+  return "";
+}
 
 // ---------------------------------------------------------------------------
 // Tool: search_context (hybrid: keyword + vector)
@@ -393,8 +412,10 @@ server.tool(
       ),
     ].join("\n\n");
 
+    const nudge = maybeNudge();
+
     return {
-      content: [{ type: "text" as const, text }],
+      content: [{ type: "text" as const, text: text + nudge }],
     };
   }
 );
@@ -423,16 +444,18 @@ server.tool(
       ? `✅ ${embeddedChunks.length} vectors`
       : "⏳ loading...";
 
+    const nudge = maybeNudge();
+
     return {
       content: [
         {
           type: "text" as const,
           text: [
-            `ContextEngine v1.10.0`,
+            `ContextEngine v1.16.0`,
             `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
             "",
             ...lines,
-          ].join("\n"),
+          ].join("\n") + nudge,
         },
       ],
     };
@@ -635,6 +658,7 @@ server.tool(
   },
   async ({ session, key, value }) => {
     const result = saveSession(session, key, value);
+    sessionSaved = true;
     return {
       content: [
         {
@@ -1199,6 +1223,34 @@ async function main() {
 
   // 2. Register MCP resources
   registerResources();
+
+  // 2b. Auto-inject recent session context into search index
+  const recentSessions = listSessions();
+  if (recentSessions.length > 0) {
+    // Sort by updated desc, take the most recent
+    recentSessions.sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+    const recent = recentSessions[0];
+    const recentSession = loadSession(recent.name);
+    if (recentSession) {
+      const ageHours = (Date.now() - new Date(recentSession.updated).getTime()) / 3600000;
+      if (ageHours < 72) { // Only inject if session is less than 3 days old
+        const sessionContent = recentSession.entries
+          .map((e) => `### ${e.key}\n${e.value}`)
+          .join("\n\n");
+
+        chunks.push({
+          source: `Session: ${recentSession.name}`,
+          section: "Last Session Context",
+          content: `# Previous Session: ${recentSession.name}\n_Updated: ${recentSession.updated}_\n\n${sessionContent}`,
+          lineStart: 0,
+          lineEnd: 0,
+        });
+        console.error(
+          `[ContextEngine] 📋 Auto-injected session "${recentSession.name}" (${recentSession.entries.length} entries, ${Math.round(ageHours)}h ago)`
+        );
+      }
+    }
+  }
 
   // 3. Connect MCP transport (server is usable with keyword search now)
   const transport = new StdioServerTransport();

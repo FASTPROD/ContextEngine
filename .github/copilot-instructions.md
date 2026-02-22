@@ -84,7 +84,7 @@
 | File | Purpose |
 |---|---|
 | `src/index.ts` | MCP server entry — tool registration, stdio transport |
-| `src/cli.ts` | CLI entry — 9 subcommands (search, score, audit, activate, etc.) |
+| `src/cli.ts` | CLI entry — 15 subcommands (search, score, sessions, audit, activate, etc.) |
 | `src/search.ts` | BM25 keyword + semantic search, temporal decay, chunk ranking |
 | `src/sources.ts` | Auto-discovery of project docs, git context, dependency info |
 | `src/learnings.ts` | Append-only learning store, category validation, dedup |
@@ -124,9 +124,10 @@
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.15.0)
-- ~8,000 lines of source code (6,946 src/ + ~1,050 server/)
+## Stats (as of v1.16.0)
+- ~8,500 lines of source code (~7,400 src/ + ~1,050 server/)
 - 17 MCP tools (13 free + 4 gated)
+- 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
 - 189 learnings across 16 categories in store
 - 30 bundled starter learnings ship with npm
@@ -150,3 +151,26 @@
 9. **SSH to Gandi VPS** — Use `sshpass -p '<REDACTED_PASSWORD>' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`. SSH key passphrase is lost. For rsync: exclude `node_modules/`, `data/`, `delta-modules/`.
 10. **End-of-session protocol** — before ending ANY session, the agent MUST: (a) update `copilot-instructions.md` with new facts, (b) create/update `SKILLS.md`, (c) call `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit with descriptive message, (f) push to all remotes.
 11. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
+
+## v1.16.0 — Agent DX Improvements (Feb 2026)
+### New CLI Commands (5)
+- `contextengine save-session <name> <key> <value>` — persist session data to `~/.contextengine/sessions/`. Supports `--stdin` for piped input.
+- `contextengine load-session <name>` — restore a session (was MCP-only before v1.16.0)
+- `contextengine list-sessions` — list all saved sessions with entry counts
+- `contextengine end-session` — checks uncommitted git changes + doc freshness across projects; exits code 1 on failures
+- `contextengine import-learnings <file>` — bulk-import learnings from Markdown or JSON
+
+### Non-Interactive Mode
+- Detected via `!process.stdin.isTTY || --yes || -y`
+- All `init` prompts auto-accept defaults when non-interactive
+- Enables agent automation without `yes |` pipe hacks
+
+### Auto-Session Inject (MCP)
+- On MCP startup, loads the most recent session (<72 hours old)
+- Injects session content into search chunks as searchable context
+- Provides continuity without requiring explicit `load_session`
+
+### Enforcement Nudge (MCP)
+- Tracks tool call count + whether `save_session` has been called
+- After every 15 tool calls without `save_session`, appends a reminder to `search_context` and `list_sources` responses
+- Nudge resets when agent calls `save_session`
