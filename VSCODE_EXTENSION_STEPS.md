@@ -12,7 +12,7 @@ Publishing a VS Code extension requires **3 accounts + 1 CLI tool**. Here's exac
 
 1. Go to https://dev.azure.com
 2. Sign in with your Microsoft account (or create one with `yannick@compr.ch`)
-3. Create a new organization (e.g., `FASTPROD`)
+3. Create a new organization: `CSS`
 4. That's it — you just need the org to exist
 
 ## Step 2: Generate a Personal Access Token (PAT) (3 min)
@@ -21,7 +21,7 @@ Publishing a VS Code extension requires **3 accounts + 1 CLI tool**. Here's exac
 2. Click **+ New Token**
 3. Settings:
    - **Name**: `vsce-contextengine`
-   - **Organization**: `FASTPROD` (or your org name)
+   - **Organization**: `CSS`
    - **Expiration**: 1 year (max)
    - **Scopes**: Click **Custom defined**, then:
      - Find **Marketplace** → check **Manage**
@@ -34,8 +34,8 @@ Publishing a VS Code extension requires **3 accounts + 1 CLI tool**. Here's exac
 2. Sign in with the same Microsoft account
 3. Click **Create Publisher**
 4. Settings:
-   - **Publisher ID**: `fastprod` (lowercase, this appears in extension IDs like `fastprod.contextengine`)
-   - **Display Name**: `FASTPROD`
+   - **Publisher ID**: `css-llc` (lowercase, this appears in extension IDs like `css-llc.contextengine`)
+   - **Display Name**: `CSS LLC`
    - **Email**: `yannick@compr.ch`
 5. Click **Create**
 
@@ -44,7 +44,7 @@ Publishing a VS Code extension requires **3 accounts + 1 CLI tool**. Here's exac
 I'll handle installing `vsce` globally. You just need to run:
 
 ```bash
-npx @vscode/vsce login fastprod
+npx @vscode/vsce login css-llc
 ```
 
 Paste your PAT when prompted. Done.
@@ -62,12 +62,14 @@ Once you've done Steps 1-4, I can:
 ## What the Extension Will Look Like
 
 ```
-Extension ID: fastprod.contextengine
-Display Name: ContextEngine — AI Knowledge Base
-Description: Queryable knowledge base for AI coding agents. 
-             Hybrid search, local embeddings, zero API keys.
+Extension ID: css-llc.contextengine
+Display Name: ContextEngine — AI Agent Compliance
+Description: Durable memory and enforcement for AI coding agents.
+             Agents forget context, skip commits, and lose work.
+             ContextEngine monitors, reminds, and enforces protocol
+             — so your AI sessions end clean, not chaotic.
 Category: AI
-Tags: mcp, context, knowledge-base, ai, embeddings, search
+Tags: mcp, ai, agent, enforcement, compliance, memory, session, copilot, cursor, claude
 ```
 
 ## Alternative: Publish to Open VSX (Eclipse Foundation)
@@ -76,7 +78,7 @@ If you also want to reach non-Microsoft VS Code forks (VSCodium, Gitpod, etc.):
 
 1. Go to https://open-vsx.org
 2. Sign in with GitHub (`FASTPROD`)
-3. Create namespace `fastprod`
+3. Create namespace `css-llc`
 4. Generate access token
 5. I publish with `npx ovsx publish`
 
