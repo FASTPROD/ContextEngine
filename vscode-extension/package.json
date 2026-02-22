@@ -1,0 +1,128 @@
+{
+  "name": "contextengine",
+  "displayName": "ContextEngine — AI Agent Compliance",
+  "description": "Persistent memory, enforcement nudges, and session management for AI coding agents. Ensures agents commit code, save context, and follow protocol.",
+  "version": "0.1.0",
+  "publisher": "fastprod",
+  "license": "BSL-1.1",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FASTPROD/ContextEngine"
+  },
+  "engines": {
+    "vscode": "^1.93.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "mcp",
+    "copilot",
+    "claude",
+    "cursor",
+    "ai",
+    "agent",
+    "enforcement",
+    "context",
+    "session",
+    "knowledge-base"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "contextengine.commitAll",
+        "title": "ContextEngine: Commit All Changes",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "contextengine.showStatus",
+        "title": "ContextEngine: Show Session Status"
+      },
+      {
+        "command": "contextengine.endSession",
+        "title": "ContextEngine: End Session Checklist"
+      },
+      {
+        "command": "contextengine.search",
+        "title": "ContextEngine: Search Knowledge Base"
+      }
+    ],
+    "chatParticipants": [
+      {
+        "id": "contextengine.agent",
+        "fullName": "ContextEngine",
+        "name": "contextengine",
+        "description": "AI agent compliance — session status, uncommitted changes, enforcement reminders, knowledge search",
+        "isSticky": false,
+        "commands": [
+          {
+            "name": "status",
+            "description": "Show session health: uncommitted changes, session state, enforcement score"
+          },
+          {
+            "name": "commit",
+            "description": "Stage and commit all changes across workspace projects"
+          },
+          {
+            "name": "search",
+            "description": "Search the ContextEngine knowledge base"
+          },
+          {
+            "name": "remind",
+            "description": "Show the full enforcement checklist and what's missing"
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "ContextEngine",
+      "properties": {
+        "contextengine.gitCheckInterval": {
+          "type": "number",
+          "default": 120,
+          "description": "How often (in seconds) to check for uncommitted git changes"
+        },
+        "contextengine.enableNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notification warnings for uncommitted changes"
+        },
+        "contextengine.enableStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show session health in the status bar"
+        },
+        "contextengine.autoCommitReminder": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remind to commit after file saves accumulate without a git commit"
+        },
+        "contextengine.maxDirtyFilesBeforeWarning": {
+          "type": "number",
+          "default": 5,
+          "description": "Number of uncommitted files before showing a warning"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src/",
+    "package": "npx @vscode/vsce package",
+    "publish": "npx @vscode/vsce publish"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.93.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "@vscode/vsce": "^3.0.0"
+  }
+}
