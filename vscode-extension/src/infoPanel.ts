@@ -75,7 +75,7 @@ export function showInfoPanel(
     "contextengine.info",
     "ContextEngine — What We Check",
     vscode.ViewColumn.One,
-    { enableScripts: false }
+    { enableScripts: true }
   );
 
   currentPanel.webview.html = getInfoHtml(snapshot);
@@ -157,12 +157,34 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
       font-weight: 600;
     }
     .badge-free { background: #2ea04370; color: #4caf50; }
-    .badge-pro { background: #e6a81770; color: #ffc107; }
+    .badge-pro { background: #e6a81770; color: #ffc107; cursor: pointer; text-decoration: none; }
+    .badge-pro:hover { background: #e6a817a0; }
     .hero { text-align: center; padding: 16px 0; }
     .hero-stat { font-size: 2.5em; font-weight: 700; }
     .hero-clean { color: var(--vscode-testing-iconPassed, #4caf50); }
     .hero-dirty { color: var(--vscode-errorForeground, #f44336); }
     a { color: var(--vscode-textLink-foreground); }
+    .cta-box {
+      text-align: center;
+      padding: 20px;
+      margin: 16px 0;
+      background: linear-gradient(135deg, rgba(255,193,7,0.08), rgba(255,193,7,0.02));
+      border: 1px solid #ffc10740;
+      border-radius: 8px;
+    }
+    .cta-button {
+      display: inline-block;
+      padding: 10px 28px;
+      background: #ffc107;
+      color: #000;
+      font-weight: 700;
+      font-size: 1em;
+      border-radius: 6px;
+      text-decoration: none;
+      margin-top: 8px;
+    }
+    .cta-button:hover { background: #ffca28; }
+    .cta-subtitle { color: var(--vscode-descriptionForeground); font-size: 0.9em; margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -257,7 +279,7 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
     <div class="check-item">
       <span class="check-icon">📊</span>
       <div>
-        <div class="check-label">Project Health Score <span class="badge badge-pro">PRO</span></div>
+        <div class="check-label">Project Health Score <a href="https://compr.ch/contextengine/pricing" class="badge badge-pro">PRO</a></div>
         <div class="check-desc">
           Scores your project on AI-readiness (0-100%): documentation quality,
           infrastructure setup, code quality, and security posture. Letter grade A+ to F.
@@ -268,7 +290,7 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
     <div class="check-item">
       <span class="check-icon">🔍</span>
       <div>
-        <div class="check-label">Compliance Audit <span class="badge badge-pro">PRO</span></div>
+        <div class="check-label">Compliance Audit <a href="https://compr.ch/contextengine/pricing" class="badge badge-pro">PRO</a></div>
         <div class="check-desc">
           Checks port conflicts, git hooks, .env files, Docker config, PM2 setup,
           EOL runtimes, outdated deps — everything an agent might misconfigure.
@@ -343,6 +365,17 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
     <p><strong>Together</strong> — the MCP server provides the knowledge base and persistence,
     the extension provides the visibility and enforcement. Agents can't ignore what's
     always visible in the status bar.</p>
+  </div>
+
+  <!-- Upgrade CTA -->
+  <div class="cta-box">
+    <div style="font-size: 1.3em; font-weight: 700;">⭐ Unlock PRO Features</div>
+    <p class="cta-subtitle">Project scoring, compliance audit, port conflict detection, multi-project discovery.</p>
+    <div style="margin: 12px 0;">
+      <strong>Pro</strong> $2/mo · <strong>Team</strong> $12/mo · <strong>Enterprise</strong> $36/mo
+    </div>
+    <a class="cta-button" href="https://compr.ch/contextengine/pricing">Get ContextEngine PRO →</a>
+    <p class="cta-subtitle">Already have a key? Run <code>npx @compr/contextengine-mcp activate</code></p>
   </div>
 
   <p style="text-align: center; margin-top: 24px; color: var(--vscode-descriptionForeground);">

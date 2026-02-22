@@ -1,6 +1,6 @@
 {
   "name": "@compr/contextengine-mcp",
-  "version": "1.16.0",
+  "version": "1.17.0",
   "description": "MCP server that turns your project documentation into a queryable knowledge base for AI coding agents",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
     "developer-tools"
   ],
   "author": "FASTPROD (PROD LLC)",
-  "license": "AGPL-3.0",
+  "license": "BSL-1.1",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/FASTPROD/ContextEngine.git"
@@ -46,11 +46,13 @@
   },
   "files": [
     "dist/",
+    "!dist/test*",
     "defaults/",
     "skills/",
     "examples/",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",

@@ -4,7 +4,8 @@
 
 [![npm](https://img.shields.io/npm/v/@compr/contextengine-mcp)](https://www.npmjs.com/package/@compr/contextengine-mcp)
 [![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-blue?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTgiPvCfp6A8L3RleHQ+PC9zdmc+)](https://github.com/FASTPROD/ContextEngine/tree/main/skills/contextengine)
-[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-green.svg)](LICENSE)
+[![License: BSL-1.1](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](LICENSE)
+[![VS Code](https://img.shields.io/badge/VS%20Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine)
 
 ContextEngine indexes your `copilot-instructions.md`, `SKILLS.md`, `CLAUDE.md`, runbooks, and source code — then exposes it via the [Model Context Protocol](https://modelcontextprotocol.io) so AI coding assistants (GitHub Copilot, Claude, Cursor, Windsurf, OpenClaw) can search your accumulated knowledge in real time.
 
@@ -124,6 +125,53 @@ export CONTEXTENGINE_CONFIG="$HOME/path/to/contextengine.json"
 Without this, ContextEngine falls back to auto-discovery (finds `copilot-instructions.md` etc.) but won't load your explicit sources, code dirs, or custom patterns.
 
 That's it. ContextEngine auto-discovers your docs in `~/Projects`.
+
+## 📦 VS Code Extension
+
+ContextEngine has a **free VS Code extension** that provides proactive enforcement — no MCP setup required:
+
+[![Install Extension](https://img.shields.io/badge/Install-VS%20Code%20Marketplace-007ACC?logo=visualstudiocode&style=for-the-badge)](https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine)
+
+- **CE:N status bar** — live count of uncommitted files across all workspace repos (green→yellow→red)
+- **ℹ️ info panel** — what ContextEngine monitors, end-of-session checklist
+- **@contextengine chat** — `/status`, `/commit`, `/search`, `/remind` in Copilot Chat
+- **Escalating notifications** — warns when files accumulate without commits
+- **One-click commit** — commit all changes across all repos
+
+The extension works standalone for git monitoring. For search, learnings, sessions, and scoring — it uses the MCP server (`npx @compr/contextengine-mcp`).
+
+## ⭐ PRO Features
+
+ContextEngine is **free and open-core**. The free tier covers search, learnings, sessions, and the VS Code extension. PRO unlocks advanced project intelligence:
+
+| Feature | Free | PRO |
+|---------|------|-----|
+| Hybrid search (keyword + semantic) | ✅ | ✅ |
+| Persistent learnings | ✅ | ✅ |
+| Session save/load | ✅ | ✅ |
+| End-of-session enforcement | ✅ | ✅ |
+| VS Code extension (git monitor, chat) | ✅ | ✅ |
+| Plugin adapters | ✅ | ✅ |
+| **Project health score (A+ to F)** | — | ✅ |
+| **Compliance audit** | — | ✅ |
+| **Port conflict detection** | — | ✅ |
+| **Multi-project discovery** | — | ✅ |
+| **HTML score reports** | — | ✅ |
+
+### Pricing
+
+| Plan | Price | Machines |
+|------|-------|----------|
+| **Pro** | $2/mo | 2 |
+| **Team** | $12/mo | 5 |
+| **Enterprise** | $36/mo | 10 |
+
+→ **[Get PRO](https://compr.ch/contextengine/pricing)** · Annual plans save 17%
+
+```bash
+# Activate after purchase
+npx @compr/contextengine-mcp activate
+```
 
 ## CLI Usage (no MCP required)
 
@@ -355,6 +403,10 @@ If you're using ContextEngine, we'd love to hear about it — feedback helps us 
 
 ## License
 
-AGPL-3.0 — see [LICENSE](LICENSE).
+BSL-1.1 (Business Source License) — see [LICENSE](LICENSE).
+
+You may use ContextEngine for any purpose, including production, **except** offering it as a hosted/managed service competing with ContextEngine PRO/Team/Enterprise.
+
+Converts to AGPL-3.0 on February 22, 2030.
 
 For commercial licensing: yannick@compr.ch
