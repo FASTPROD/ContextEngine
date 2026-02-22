@@ -54,6 +54,9 @@
 - **License dedup**: If same email+plan already has active license, extends expiry instead of creating duplicate
 - **stripe_mapping table**: Tracks `subscription_id → license_id` for cancellation handling
 - **⚠ Stripe SDK API version**: Must match `LatestApiVersion` in `node_modules/stripe/types/lib.d.ts` — stripe@14.25 expects `2023-10-16`
+- **Pricing page JS**: `server/public/pricing.html` has billing toggle (monthly/annual) + `checkout()` function that POSTs to `/contextengine/create-checkout-session` with `{planKey, successUrl, cancelUrl}` and redirects to Stripe checkout URL
+- **Success page**: `server/public/success.html` served at `/contextengine/success` — post-checkout landing with activation instructions
+- **Status (Feb 22)**: `stripeEnabled: true` (test key set), but no Stripe prices created yet — checkout returns "Invalid plan" until `STRIPE_PRICE_*` env vars have real price IDs. Products/prices/webhook deferred to STRIPE-BACKEND project.
 
 ## Infrastructure
 - **Production URL**: `https://api.compr.ch/contextengine/` (live, SSL)
@@ -63,7 +66,8 @@
 - **Dist path**: `/var/www/contextengine-dist/` (main ContextEngine compiled output, for gen-delta)
 - **Delta modules**: `/var/www/contextengine-server/delta-modules/` — agents.mjs (66.9KB), collectors.mjs (22.3KB), search-adv.mjs (3.6KB)
 - **License DB**: `/var/www/contextengine-server/data/licenses.db` (seeded: `CE-F03F-0457-F812-B486`, enterprise, 10 machines, expires 2027-02-20)
-- **Process**: PM2 `contextengine-api` on port 8010
+- **Process**: PM2 `contextengine-api` on port 8010, managed via `ecosystem.config.cjs`
+- **PM2 config**: `/var/www/contextengine-server/ecosystem.config.cjs` — env vars (STRIPE_SECRET_KEY, SMTP_*, PORT). Must use `.cjs` extension (package.json has `"type": "module"`, PM2 require() fails with `.js`). Restart with `npx pm2 restart ecosystem.config.cjs` to pick up env changes, then `npx pm2 save`.
 - **Port**: 8010 (localhost only, proxied via nginx)
 - **Nginx**: `/etc/nginx/sites-enabled/api.compr.ch` — `proxy_pass http://127.0.0.1:8010` for `/contextengine/`
 - **SSL**: Let's Encrypt via certbot, cert at `/etc/letsencrypt/live/api.compr.ch/`, expires 2026-05-22
@@ -72,6 +76,7 @@
 - **Same VPS as**: admin.CROWLR (Docker PHP 8.2), VOILA.tips (PHP 7.4)
 - **CI**: GitHub Actions `.github/workflows/ci.yml` — Node 18/20/22, lint + build + test + smoke
 - **Deploy**: `./deploy.sh [npm|server|all]` — dual-mode: npm publish + VPS rsync (sshpass password auth)
+- **File transfer workaround**: rsync/scp frequently hang on this VPS. Use `cat local/file | sshpass ... ssh admin@host 'cat > remote/file'` instead. SSH command execution works fine.
 
 ### VPS Deployment (2026-02-21)
 - rsync'd server/ -> `/var/www/contextengine-server/`, dist/ -> `/var/www/contextengine-dist/`
@@ -79,7 +84,9 @@
 - `npx tsc` on VPS (cosmetic type errors from missing @types/* — JS emits fine)
 - gen-delta: `CONTEXTENGINE_DIST=/var/www/contextengine-dist node dist/gen-delta.js 1.15.0`
 - License seeded: `node dist/seed.js yannick@compr.ch enterprise 12`
-- Health: `curl https://api.compr.ch/contextengine/health` -> `{"status":"healthy","deltaModules":3,"activeLicenses":1}`
+- Health: `curl https://api.compr.ch/contextengine/health` -> `{"status":"healthy","deltaModules":3,"activeLicenses":1,"stripeEnabled":true}`
+- Pricing: `https://api.compr.ch/contextengine/pricing` (live, JS-powered checkout buttons)
+- Success: `https://api.compr.ch/contextengine/success` (post-checkout landing page)
 
 ## Source Files
 | File | Purpose |
@@ -101,6 +108,8 @@
 | `server/src/seed.ts` | License key generator — `CE-XXXX-XXXX-XXXX-XXXX` format |
 | `server/src/gen-delta.ts` | Delta module extractor — reads `CONTEXTENGINE_DIST` env var, falls back to `../../dist` |
 | `server/deploy.sh` | Production deploy script — rsync + PM2 + nginx config |
+| `server/public/pricing.html` | Pricing page — billing toggle + Stripe checkout JS |
+| `server/public/success.html` | Post-checkout success page with activation instructions |
 | `skills/contextengine/SKILL.md` | Bundled skill file — teaches agents how to use CE |
 | `defaults/` | 30 starter learnings shipped with npm |
 
@@ -130,7 +139,7 @@
 - 17 MCP tools (13 free + 4 gated)
 - 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 232 learnings across 17 categories in store
+- 241 learnings across 17 categories in store
 - 30 bundled starter learnings ship with npm
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
@@ -186,7 +195,7 @@
 - Projects deploying via managed platforms (Vercel, Netlify, Render, Fly) get full infrastructure points without needing Docker
 - Prevents agents from creating dummy files to game the score
 
-## VS Code Extension (v0.2.0)
+## VS Code Extension (v0.3.0)
 - **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **Publisher**: `css-llc` (Azure DevOps org `css-llc`, personal MS account `ymolinier@hotmail.com`)
 - **PAT**: stored in Azure DevOps — Marketplace → Manage scope, 1-year expiry

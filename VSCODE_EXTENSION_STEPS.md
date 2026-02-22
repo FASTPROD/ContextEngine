@@ -1,6 +1,6 @@
 # VS Code Extension — Publishing Steps
 
-> ✅ ALL STEPS COMPLETE — Extension published as `css-llc.contextengine` v0.2.0
+> ✅ ALL STEPS COMPLETE — Extension published as `css-llc.contextengine` v0.3.0
 
 ## Overview
 
@@ -37,6 +37,7 @@ echo '<PAT>' | npx @vscode/vsce login css-llc
 
 - **v0.1.0** — Initial release (6 source files, git monitor, status bar, chat participant)
 - **v0.2.0** — Added info panel WebView (7 source files, ℹ️ status bar icon, monitoring checklist)
+- **v0.3.0** — BSL-1.1 license sync, PRO upgrade CTA in info panel, clickable PRO badges → pricing page
 - **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **Marketplace propagation**: Takes 5-15 minutes after publish before web page is live
 

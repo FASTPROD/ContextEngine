@@ -571,6 +571,18 @@ app.get("/contextengine/pricing", (_req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /contextengine/success — post-checkout success page
+// ---------------------------------------------------------------------------
+app.get("/contextengine/success", (_req, res) => {
+  const successPath = join(publicDir, "success.html");
+  if (existsSync(successPath)) {
+    res.sendFile(successPath);
+  } else {
+    res.redirect("https://api.compr.ch/contextengine/pricing");
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Start server
 // ---------------------------------------------------------------------------
 const server = app.listen(PORT, () => {

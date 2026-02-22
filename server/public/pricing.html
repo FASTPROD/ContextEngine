@@ -325,6 +325,70 @@
 
     footer a { color: var(--blue); text-decoration: none; }
     footer a:hover { text-decoration: underline; }
+
+    /* Billing Toggle */
+    .billing-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .billing-toggle span {
+      font-size: 0.95em;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .billing-toggle span.active { color: var(--text); font-weight: 600; }
+
+    .toggle-switch {
+      position: relative;
+      width: 48px;
+      height: 26px;
+      background: var(--border);
+      border-radius: 13px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-switch.active { background: var(--accent); }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 20px;
+      height: 20px;
+      background: var(--text);
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle-switch.active::after { transform: translateX(22px); }
+
+    .save-badge {
+      background: var(--green);
+      color: #000;
+      font-size: 0.75em;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 4px;
+    }
+
+    /* Loading state */
+    .plan-cta.loading {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .plan-cta.loading::after {
+      content: '...';
+    }
   </style>
 </head>
 <body>
@@ -351,15 +415,23 @@
 
   <!-- Pricing Cards -->
   <section class="container">
+
+    <!-- Billing Toggle -->
+    <div class="billing-toggle">
+      <span class="toggle-label active" data-period="monthly">Monthly</span>
+      <div class="toggle-switch" id="billingToggle"></div>
+      <span class="toggle-label" data-period="annual">Annual <span class="save-badge">SAVE 17%</span></span>
+    </div>
+
     <div class="pricing-grid">
 
       <!-- Pro -->
-      <div class="plan">
+      <div class="plan" data-plan="pro">
         <div class="plan-name">Pro</div>
         <div class="plan-desc">Solo developer</div>
-        <div class="plan-price">$2<span>/mo</span></div>
-        <div class="plan-annual">or $20/year (save 17%)</div>
-        <a href="#activate" class="plan-cta cta-outline">Get Pro</a>
+        <div class="plan-price" data-monthly="$2" data-annual="$20">$2<span class="price-period">/mo</span></div>
+        <div class="plan-annual" data-monthly="or $20/year (save 17%)" data-annual="$1.67/mo — billed annually">or $20/year (save 17%)</div>
+        <button class="plan-cta cta-outline" data-plan-key-monthly="pro_monthly" data-plan-key-annual="pro_annual" onclick="checkout(this)">Get Pro</button>
         <ul class="plan-features">
           <li>Everything in Free</li>
           <li>Project health score (A+ to F)</li>
@@ -372,12 +444,12 @@
       </div>
 
       <!-- Team -->
-      <div class="plan featured">
+      <div class="plan featured" data-plan="team">
         <div class="plan-name">Team</div>
         <div class="plan-desc">Small teams</div>
-        <div class="plan-price">$12<span>/mo</span></div>
-        <div class="plan-annual">or $120/year (save 17%)</div>
-        <a href="#activate" class="plan-cta cta-primary">Get Team</a>
+        <div class="plan-price" data-monthly="$12" data-annual="$120">$12<span class="price-period">/mo</span></div>
+        <div class="plan-annual" data-monthly="or $120/year (save 17%)" data-annual="$10/mo — billed annually">or $120/year (save 17%)</div>
+        <button class="plan-cta cta-primary" data-plan-key-monthly="team_monthly" data-plan-key-annual="team_annual" onclick="checkout(this)">Get Team</button>
         <ul class="plan-features">
           <li>Everything in Pro</li>
           <li>5 machines</li>
@@ -386,12 +458,12 @@
       </div>
 
       <!-- Enterprise -->
-      <div class="plan">
+      <div class="plan" data-plan="enterprise">
         <div class="plan-name">Enterprise</div>
         <div class="plan-desc">Larger teams</div>
-        <div class="plan-price">$36<span>/mo</span></div>
-        <div class="plan-annual">or $360/year (save 17%)</div>
-        <a href="#activate" class="plan-cta cta-outline">Get Enterprise</a>
+        <div class="plan-price" data-monthly="$36" data-annual="$360">$36<span class="price-period">/mo</span></div>
+        <div class="plan-annual" data-monthly="or $360/year (save 17%)" data-annual="$30/mo — billed annually">or $360/year (save 17%)</div>
+        <button class="plan-cta cta-outline" data-plan-key-monthly="enterprise_monthly" data-plan-key-annual="enterprise_annual" onclick="checkout(this)">Get Enterprise</button>
         <ul class="plan-features">
           <li>Everything in Pro</li>
           <li>10 machines</li>
@@ -481,6 +553,86 @@
       </p>
     </div>
   </footer>
+
+  <script>
+    // ---------------------------------------------------------------------------
+    // Billing toggle (monthly / annual)
+    // ---------------------------------------------------------------------------
+    const API_BASE = 'https://api.compr.ch';
+    let billingPeriod = 'monthly';
+
+    const toggle = document.getElementById('billingToggle');
+    const labels = document.querySelectorAll('.toggle-label');
+
+    toggle.addEventListener('click', () => {
+      billingPeriod = billingPeriod === 'monthly' ? 'annual' : 'monthly';
+      toggle.classList.toggle('active', billingPeriod === 'annual');
+      labels.forEach(l => l.classList.toggle('active', l.dataset.period === billingPeriod));
+      updatePrices();
+    });
+
+    function updatePrices() {
+      document.querySelectorAll('.plan').forEach(plan => {
+        const priceEl = plan.querySelector('.plan-price');
+        const annualEl = plan.querySelector('.plan-annual');
+        const periodEl = plan.querySelector('.price-period');
+
+        const price = priceEl.dataset[billingPeriod];
+        const subtext = annualEl.dataset[billingPeriod];
+
+        priceEl.childNodes[0].textContent = price;
+        if (periodEl) periodEl.textContent = billingPeriod === 'monthly' ? '/mo' : '/yr';
+        annualEl.textContent = subtext;
+      });
+    }
+
+    // ---------------------------------------------------------------------------
+    // Stripe Checkout
+    // ---------------------------------------------------------------------------
+    async function checkout(btn) {
+      const planKeyAttr = billingPeriod === 'monthly' ? 'planKeyMonthly' : 'planKeyAnnual';
+      const planKey = btn.dataset[planKeyAttr];
+
+      if (!planKey) {
+        alert('Invalid plan selection');
+        return;
+      }
+
+      // Loading state
+      const originalText = btn.textContent;
+      btn.textContent = 'Redirecting';
+      btn.classList.add('loading');
+
+      try {
+        const resp = await fetch(`${API_BASE}/contextengine/create-checkout-session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            planKey,
+            successUrl: `${API_BASE}/contextengine/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancelUrl: `${API_BASE}/contextengine/pricing`,
+          }),
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          throw new Error(data.error || 'Checkout failed');
+        }
+
+        if (data.url) {
+          window.location.href = data.url;
+        } else {
+          throw new Error('No checkout URL returned');
+        }
+      } catch (err) {
+        console.error('Checkout error:', err);
+        alert(err.message || 'Something went wrong. Please try again.');
+        btn.textContent = originalText;
+        btn.classList.remove('loading');
+      }
+    }
+  </script>
 
 </body>
 </html>

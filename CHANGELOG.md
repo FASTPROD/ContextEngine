@@ -12,6 +12,10 @@ All notable changes to ContextEngine (MCP server + CLI) are documented here.
 - Pricing page (`server/public/pricing.html`) — dark-themed, responsive, 3-tier cards (Pro $2/Team $12/Enterprise $36).
 - `/contextengine/pricing` route on activation server.
 - Info panel upgrade flow — PRO badges are clickable → pricing page, golden CTA box with plan prices.
+- Pricing page billing toggle (monthly/annual) + JavaScript checkout flow via `/contextengine/create-checkout-session`.
+- Success page (`server/public/success.html`) — post-checkout landing with activation instructions.
+- `/contextengine/success` route on activation server.
+- PM2 ecosystem.config.cjs on VPS with Stripe test key (`stripeEnabled: true`).
 
 ### Fixed
 - Excluded `test.js` and `test-sessions.js` from npm package (dev artifacts were shipping to users).
