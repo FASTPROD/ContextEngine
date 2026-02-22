@@ -257,6 +257,7 @@ import {
 import {
   listLearnings,
   learningsToChunks,
+  learningsStats,
   formatLearnings,
   saveLearning,
   deleteLearning,
@@ -297,10 +298,10 @@ async function initEngine(): Promise<EngineState> {
   const chunks = ingestSources(sources);
 
   const config = loadConfig();
+  const projectDirs = loadProjectDirs();
 
   // Collect operational data
   if (config.collectOps !== false) {
-    const projectDirs = loadProjectDirs();
     for (const dir of projectDirs) {
       const ops = collectProjectOps(dir.path, dir.name);
       chunks.push(...ops);
@@ -313,7 +314,6 @@ async function initEngine(): Promise<EngineState> {
 
   // Scan code files
   if (config.codeDirs && config.codeDirs.length > 0) {
-    const projectDirs = loadProjectDirs();
     for (const dir of projectDirs) {
       for (const codeDir of config.codeDirs) {
         const codePath = join(dir.path, codeDir);
@@ -325,8 +325,9 @@ async function initEngine(): Promise<EngineState> {
     }
   }
 
-  // Inject learnings
-  const learningChunks = learningsToChunks();
+  // Inject learnings (project-scoped to prevent cross-project IP leakage)
+  const projectNames = projectDirs.map((d) => d.name);
+  const learningChunks = learningsToChunks(projectNames);
   chunks.push(...learningChunks);
 
   return { sources, chunks };
@@ -384,7 +385,10 @@ async function cliListProjects(): Promise<void> {
 }
 
 async function cliListLearnings(category?: string): Promise<void> {
-  const learnings = listLearnings(category);
+  // Project-scoped: only show learnings for workspace projects + universal
+  const projectDirs = loadProjectDirs();
+  const projectNames = projectDirs.map((d) => d.name);
+  const learnings = listLearnings(category, projectNames);
   const text = formatLearnings(learnings);
   console.log(`\n${text}`);
 }
@@ -587,10 +591,12 @@ async function cliEndSession(): Promise<void> {
   let passCount = 0;
   let failCount = 0;
 
-  checks.push("# End-of-Session Protocol\n");
+  checks.push("═══════════════════════════════════════");
+  checks.push("  ContextEngine — End-of-Session Checklist");
+  checks.push("═══════════════════════════════════════\n");
 
   // --- Check 1: Uncommitted changes across all repos ---
-  checks.push("## 1. Uncommitted Changes\n");
+  checks.push("## 1. Git Status\n");
   const reposChecked = new Set<string>();
 
   for (const dir of projectDirs) {
@@ -607,9 +613,17 @@ async function cliEndSession(): Promise<void> {
       }).trim();
 
       const repoName = basename(gitRoot);
+      // Get current branch
+      let branch = "unknown";
+      try {
+        branch = execSync("git branch --show-current", {
+          cwd: gitRoot, encoding: "utf-8", timeout: 5000,
+        }).trim();
+      } catch { /* ignore */ }
+
       if (status) {
         const fileCount = status.split("\n").length;
-        checks.push(`- ❌ FAIL — ${repoName} has ${fileCount} uncommitted file(s)`);
+        checks.push(`- ❌ FAIL — ${repoName} (${branch}) has ${fileCount} uncommitted file(s)`);
         const files = status.split("\n").slice(0, 5);
         for (const f of files) {
           checks.push(`  - ${f.trim()}`);
@@ -617,7 +631,7 @@ async function cliEndSession(): Promise<void> {
         if (fileCount > 5) checks.push(`  - ... and ${fileCount - 5} more`);
         failCount++;
       } else {
-        checks.push(`- ✅ PASS — ${repoName} is clean`);
+        checks.push(`- ✅ PASS — ${repoName} (${branch}) — clean`);
         passCount++;
       }
     } catch {
@@ -669,9 +683,34 @@ async function cliEndSession(): Promise<void> {
         passCount++;
       } else {
         const hours = Math.round(ageMs / 3600000);
-        checks.push(`- ⚠️  CHECK — ${dir.name}/copilot-instructions.md last modified ${hours}h ago`);
+        checks.push(`- ⚠️  STALE — ${dir.name}/copilot-instructions.md last modified ${hours}h ago`);
         failCount++;
       }
+    } else {
+      checks.push(`- ❌ MISSING — ${dir.name}/.github/copilot-instructions.md`);
+      failCount++;
+    }
+
+    // Check SKILLS.md
+    const skillsPath = join(dir.path, "SKILLS.md");
+    if (existsSync(skillsPath)) {
+      const stat = statSync(skillsPath);
+      const ageMs = now - stat.mtimeMs;
+      const hours = Math.round(ageMs / 3600000);
+      if (ageMs < SESSION_THRESHOLD_MS) {
+        checks.push(`- ✅ PASS — ${dir.name}/SKILLS.md updated ${Math.round(ageMs / 60000)}m ago`);
+        passCount++;
+      } else {
+        checks.push(`- ⚠️  STALE — ${dir.name}/SKILLS.md last modified ${hours}h ago`);
+        failCount++;
+      }
+    }
+
+    // Check SCORE.md
+    const scorePath = join(dir.path, "SCORE.md");
+    if (existsSync(scorePath)) {
+      checks.push(`- ✅ EXISTS — ${dir.name}/SCORE.md`);
+      passCount++;
     }
   }
 
@@ -686,14 +725,54 @@ async function cliEndSession(): Promise<void> {
       passCount++;
     } else {
       const hours = Math.round(ageMs / 3600000);
-      checks.push(`- ⚠️  CHECK — SESSION.md last modified ${hours}h ago — append session summary`);
+      checks.push(`- ⚠️  STALE — SESSION.md last modified ${hours}h ago — append session summary`);
       failCount++;
     }
   }
 
   checks.push("");
 
+  // --- Check 3: Learnings Store ---
+  checks.push("## 3. Learnings Store\n");
+  const stats = learningsStats();
+  checks.push(`- 📊 **${stats.total} learnings** across **${Object.keys(stats.categories).length} categories**`);
+  // Show category breakdown
+  const sortedCategories = Object.entries(stats.categories).sort((a, b) => b[1] - a[1]);
+  for (const [cat, count] of sortedCategories) {
+    checks.push(`  - ${cat}: ${count}`);
+  }
+
+  // Show project-scoped count for current workspace
+  const projectNames = projectDirs.map((d) => d.name);
+  const scopedLearnings = listLearnings(undefined, projectNames);
+  const otherCount = stats.total - scopedLearnings.length;
+  checks.push(`- 🔒 **${scopedLearnings.length}** visible to current workspace (${otherCount} scoped to other projects)`);
+  passCount++;
+
+  checks.push("");
+
+  // --- Check 4: Sessions ---
+  checks.push("## 4. Sessions\n");
+  const sessions = listSessions();
+  if (sessions.length > 0) {
+    checks.push(`- 📁 **${sessions.length} saved sessions**`);
+    // Show 3 most recent
+    const recent = sessions.slice(0, 3);
+    for (const s of recent) {
+      const age = Math.round((now - new Date(s.updated).getTime()) / 3600000);
+      checks.push(`  - ${s.name} (${s.entries} entries, ${age}h ago)`);
+    }
+    if (sessions.length > 3) checks.push(`  - ... and ${sessions.length - 3} more`);
+    passCount++;
+  } else {
+    checks.push(`- ⚠️  No sessions saved — run \`save_session\` before ending`);
+    failCount++;
+  }
+
+  checks.push("");
+
   // --- Summary ---
+  checks.push("═══════════════════════════════════════");
   checks.push("## Summary\n");
   const total = passCount + failCount;
   if (failCount === 0) {
@@ -704,8 +783,9 @@ async function cliEndSession(): Promise<void> {
     checks.push("Before ending this session:");
     checks.push("1. Commit and push all uncommitted changes");
     checks.push("2. Update copilot-instructions.md with new facts");
-    checks.push("3. Append a session summary to SESSION.md");
-    checks.push("4. Run `contextengine end-session` again to verify");
+    checks.push("3. Save session with `save_session`");
+    checks.push("4. Save learnings with `save_learning` for each reusable pattern");
+    checks.push("5. Run `contextengine end-session` again to verify");
   }
 
   console.log(checks.join("\n"));

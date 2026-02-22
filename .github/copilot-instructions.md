@@ -58,6 +58,13 @@
 - **Success page**: `server/public/success.html` served at `/contextengine/success` — post-checkout landing with activation instructions
 - **Status (Feb 22)**: `stripeEnabled: true` (test key set), but no Stripe prices created yet — checkout returns "Invalid plan" until `STRIPE_PRICE_*` env vars have real price IDs. Products/prices/webhook deferred to STRIPE-BACKEND project.
 
+### Project-Scoped Learnings (v1.18.0 Security Fix)
+- **Problem**: `list_learnings` MCP tool, CLI `list-learnings`, and `learningsToChunks()` (search index injection) exposed ALL learnings from ALL projects to any agent — cross-project IP leakage risk
+- **Fix**: `listLearnings()` and `learningsToChunks()` now accept `projects?: string[]` param. When provided, only returns learnings matching active workspace project names + universal (no project set) learnings
+- **MCP**: `activeProjectNames` state populated from `loadProjectDirs()` during reindex, passed to all learnings calls
+- **CLI**: `cliListLearnings()` and `initEngine()` scope by project via `loadProjectDirs()`
+- **Result**: 245 total learnings → ~234 visible per workspace (project-specific learnings from other projects hidden)
+
 ## Infrastructure
 - **Production URL**: `https://api.compr.ch/contextengine/` (live, SSL)
 - **Production server**: Gandi VPS `92.243.24.157` (Debian 10 Buster, admin user)
@@ -95,7 +102,7 @@
 | `src/cli.ts` | CLI entry — 15 subcommands (search, score, sessions, audit, activate, etc.) |
 | `src/search.ts` | BM25 keyword + semantic search, temporal decay, chunk ranking |
 | `src/sources.ts` | Auto-discovery of project docs, git context, dependency info |
-| `src/learnings.ts` | Append-only learning store, category validation, dedup |
+| `src/learnings.ts` | Append-only learning store, category validation, dedup, project-scoped filtering |
 | `src/scoring.ts` | Project health scoring — 12 checks, weighted rubric |
 | `src/audit.ts` | Beyond-A+ audit — security, performance, DX, architecture |
 | `src/ports.ts` | Port conflict detector across projects |
@@ -139,7 +146,7 @@
 - 17 MCP tools (13 free + 4 gated)
 - 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 241 learnings across 17 categories in store
+- 245 learnings across 17 categories in store
 - 30 bundled starter learnings ship with npm
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
@@ -169,7 +176,7 @@
 - `contextengine save-session <name> <key> <value>` — persist session data to `~/.contextengine/sessions/`. Supports `--stdin` for piped input.
 - `contextengine load-session <name>` — restore a session (was MCP-only before v1.16.0)
 - `contextengine list-sessions` — list all saved sessions with entry counts
-- `contextengine end-session` — checks uncommitted git changes + doc freshness across projects; exits code 1 on failures
+- `contextengine end-session` — comprehensive pre-flight: (1) git status with branch names, (2) doc freshness (copilot-instructions, SKILLS.md, SCORE.md), (3) learnings stats (total, categories, scoped vs hidden), (4) sessions (count, 3 most recent with age); exits code 1 on failures
 - `contextengine import-learnings <file>` — bulk-import learnings from Markdown or JSON
 
 ### Non-Interactive Mode
