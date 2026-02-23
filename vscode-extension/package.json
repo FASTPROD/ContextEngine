@@ -2,7 +2,7 @@
   "name": "contextengine",
   "displayName": "ContextEngine — AI Agent Compliance",
   "description": "Durable memory and enforcement for AI coding agents. Monitors uncommitted changes, enforces session protocol, reminds agents to commit and save context — so your AI sessions end clean, not chaotic.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "css-llc",
   "license": "BSL-1.1",
   "icon": "media/icon.png",

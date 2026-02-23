@@ -154,7 +154,7 @@
 - Semantic search: ~200ms from cache, ~15s first run
 - CI: GitHub Actions — Node 18/20/22, lint + build + test + smoke
 - Score: 89% A (30/30 doc, 22/30 infra, 17/20 quality, 20/20 security)
-- VS Code Extension: v0.4.0 published on marketplace (css-llc.contextengine)
+- VS Code Extension: v0.4.1 published on marketplace (css-llc.contextengine)
 - Pricing page: https://api.compr.ch/contextengine/pricing (live, static HTML)
 - E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 21, 2026)
 
@@ -202,7 +202,7 @@
 - Projects deploying via managed platforms (Vercel, Netlify, Render, Fly) get full infrastructure points without needing Docker
 - Prevents agents from creating dummy files to game the score
 
-## VS Code Extension (v0.4.0)
+## VS Code Extension (v0.4.1)
 - **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **Publisher**: `css-llc` (Azure DevOps org `css-llc`, personal MS account `ymolinier@hotmail.com`)
 - **PAT**: stored in Azure DevOps — Marketplace → Manage scope, 1-year expiry

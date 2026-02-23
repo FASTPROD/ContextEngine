@@ -20,6 +20,7 @@ Talk to ContextEngine directly from Copilot Chat:
 | `@contextengine /commit fix: resolve login bug` | Stage + commit all changes with your message |
 | `@contextengine /search deployment process` | Search the knowledge base |
 | `@contextengine /remind` | Full enforcement checklist — what's missing before you end |
+| `@contextengine /sync` | Check CE doc freshness per project — shows stale/missing docs |
 
 ### 📊 Status Bar
 Persistent indicator showing:
@@ -29,11 +30,32 @@ Persistent indicator showing:
 
 Click for detailed breakdown with action buttons.
 
+### ℹ️ Info Panel
+Click the ℹ️ status bar icon for a WebView panel showing:
+- What ContextEngine monitors (7-item checklist with FREE/PRO badges)
+- End-of-session protocol steps
+- CE Doc Sync status
+- Architecture overview
+
 ### 🔔 Smart Notifications
 - Warning when uncommitted files exceed threshold (configurable)
 - Escalating urgency — gentle at 5 files, urgent at 10+
-- Action buttons: "Commit All", "Show Status"
+- **Doc staleness alerts** — fires when code is committed but CE docs (copilot-instructions, SKILLS.md, SCORE.md) haven't been updated (15-min cooldown)
+- Action buttons: "Commit All", "Show Status", "Run Sync"
 - 5-minute cooldown between notifications (no spam)
+
+### 🖥️ Terminal Watcher *(v0.4.0)*
+Monitors all terminal command completions via VS Code Shell Integration API:
+- Classifies commands: git, npm, build, deploy, test, ssh
+- Fires notifications on success/failure
+- Auto-triggers git rescan after git commands
+- 30-second cooldown per category (no notification flood)
+
+### 🪝 Pre-Commit Hook *(v0.4.0)*
+Bundled at `hooks/pre-commit` — warns (never blocks) when code is staged but CE docs are stale (>4h) or missing. Install:
+```bash
+cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+```
 
 ### ⌨️ Commands
 | Command | Description |
@@ -42,6 +64,7 @@ Click for detailed breakdown with action buttons.
 | `ContextEngine: Show Session Status` | Detailed status in Output panel |
 | `ContextEngine: End Session Checklist` | Run end-of-session protocol |
 | `ContextEngine: Search Knowledge Base` | Search ContextEngine knowledge |
+| `ContextEngine: CE Doc Sync` | Check doc freshness across all projects |
 
 ## Configuration
 
