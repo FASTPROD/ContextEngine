@@ -55,6 +55,9 @@
 - Package: `npx @vscode/vsce package` → `.vsix`
 - Publish: `echo '<PAT>' | npx @vscode/vsce publish`
 - Extension delegates to CLI — benefits from CLI fixes automatically
+- Chat commands: `/status`, `/commit`, `/search`, `/remind`, `/sync`
+- Doc freshness: `checkCEDocFreshness()` in contextEngineClient.ts — checks copilot-instructions, SKILLS.md, SCORE.md staleness
+- Pre-commit hook: `hooks/pre-commit` — warns about stale CE docs (never blocks)
 
 ### Critical Constraints
 - **NEVER commit `.contextengine/`** — user data directory
@@ -103,4 +106,4 @@ cat dist/file.js | sshpass -p '#Crowlr@2023' ssh -o PubkeyAuthentication=no \
 ```
 
 ---
-*Last updated: 2026-02-23 — v1.18.0*
+*Last updated: 2026-02-23 — v1.18.0 + extension v0.4.0*

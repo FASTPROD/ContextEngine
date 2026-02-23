@@ -12,6 +12,14 @@ All notable changes to ContextEngine (MCP server + CLI) are documented here.
 ### Improved
 - **`end-session` CLI** — comprehensive pre-flight with 4 sections: (1) git status with branch names, (2) doc freshness (copilot-instructions, SKILLS.md, SCORE.md), (3) learnings stats (total, categories, scoped vs hidden), (4) sessions (count, 3 most recent with age).
 
+### VS Code Extension v0.4.0
+- **`/sync` chat command** — checks CE doc freshness per project, shows stale/missing docs with actionable steps.
+- **`contextengine.sync` command** — Output channel report with "Open Chat" action.
+- **Doc staleness notifications** — fires warning when code committed but CE docs not updated (15-min cooldown).
+- **Pre-commit hook** — `hooks/pre-commit` warns about stale CE docs when code files are staged (never blocks).
+- **CE doc freshness in GitSnapshot** — `checkCEDocFreshness()` tracks copilot-instructions, SKILLS.md, SCORE.md age per project.
+- Philosophy: **event-driven compliance** (hooks + scan-cycle triggers), not memory-driven.
+
 ## [1.17.0] — 2026-02-22
 
 ### Changed

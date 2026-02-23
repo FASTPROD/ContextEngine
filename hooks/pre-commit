@@ -1,0 +1,96 @@
+#!/bin/zsh
+# ContextEngine — Pre-commit CE Compliance Check
+#
+# Warns (does NOT block) when code files changed but CE docs are stale.
+# Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+# ---------------------------------------------------------------------------
+# 1. Check if code files are in the staged diff
+# ---------------------------------------------------------------------------
+CODE_EXTS="ts|tsx|js|jsx|py|rs|go|java|rb|php|vue|svelte|css|scss|html"
+STAGED_CODE=$(git diff --cached --name-only | grep -E "\.($CODE_EXTS)$" | head -1)
+
+# If no code files staged, skip all checks (docs-only commit is fine)
+if [[ -z "$STAGED_CODE" ]]; then
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# 2. Check CE doc freshness
+# ---------------------------------------------------------------------------
+WARNINGS=0
+NOW=$(date +%s)
+STALE_HOURS=4  # warn if CE doc is older than 4 hours
+
+warn() {
+  echo "⚠️  CE: $1"
+  ((WARNINGS++))
+}
+
+check_freshness() {
+  local file="$1"
+  local label="$2"
+
+  # Find file in common locations
+  local found=""
+  for path in "$file" ".github/$file" ".github/instructions/$file"; do
+    if [[ -f "$path" ]]; then
+      found="$path"
+      break
+    fi
+  done
+
+  if [[ -z "$found" ]]; then
+    warn "$label — NOT FOUND (create it!)"
+    return
+  fi
+
+  # Check if file is in the staged diff (being updated in this commit)
+  if git diff --cached --name-only | grep -q "$found"; then
+    return  # Being updated in this commit — good!
+  fi
+
+  # Check staleness
+  local mtime=$(stat -f %m "$found" 2>/dev/null || stat -c %Y "$found" 2>/dev/null)
+  if [[ -n "$mtime" ]]; then
+    local age_hours=$(( (NOW - mtime) / 3600 ))
+    if [[ $age_hours -gt $STALE_HOURS ]]; then
+      warn "$label — last updated ${age_hours}h ago (not in this commit)"
+    fi
+  fi
+}
+
+check_freshness "copilot-instructions.md" "copilot-instructions.md"
+check_freshness "SKILLS.md" "SKILLS.md"
+check_freshness "SCORE.md" "SCORE.md"
+
+# ---------------------------------------------------------------------------
+# 3. Check if learnings were saved recently (optional — check file mtime)
+# ---------------------------------------------------------------------------
+LEARNINGS_FILE="$HOME/.contextengine/learnings.json"
+if [[ -f "$LEARNINGS_FILE" ]]; then
+  LEARN_MTIME=$(stat -f %m "$LEARNINGS_FILE" 2>/dev/null || stat -c %Y "$LEARNINGS_FILE" 2>/dev/null)
+  if [[ -n "$LEARN_MTIME" ]]; then
+    LEARN_AGE=$(( (NOW - LEARN_MTIME) / 3600 ))
+    if [[ $LEARN_AGE -gt 8 ]]; then
+      warn "No learnings saved in ${LEARN_AGE}h — did you forget save_learning?"
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Summary
+# ---------------------------------------------------------------------------
+if [[ $WARNINGS -gt 0 ]]; then
+  echo ""
+  echo "╔═══════════════════════════════════════════════════╗"
+  echo "║  ContextEngine: $WARNINGS CE compliance warning(s)       ║"
+  echo "║  Code changed but CE docs may be stale.          ║"
+  echo "║  Consider: copilot-instructions, SKILLS, SCORE   ║"
+  echo "║  Commit proceeds — this is a reminder, not block ║"
+  echo "╚═══════════════════════════════════════════════════╝"
+  echo ""
+fi
+
+# Always allow the commit (exit 0 = don't block)
+exit 0

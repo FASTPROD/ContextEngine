@@ -18,6 +18,7 @@
 import * as vscode from "vscode";
 import { GitMonitor, type GitSnapshot } from "./gitMonitor";
 import * as client from "./contextEngineClient";
+import type { CEDocStatus } from "./contextEngineClient";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -54,6 +55,8 @@ export function registerChatParticipant(
         return await handleSearch(stream, request, token);
       case "remind":
         return await handleRemind(stream, gitMonitor, token);
+      case "sync":
+        return await handleSync(stream, gitMonitor, token);
       default:
         // No command — treat as a free-form search query
         if (request.prompt.trim()) {
@@ -389,6 +392,99 @@ async function handleRemind(
 }
 
 // ---------------------------------------------------------------------------
+// /sync — CE Doc Compliance Sync
+// ---------------------------------------------------------------------------
+
+async function handleSync(
+  stream: vscode.ChatResponseStream,
+  gitMonitor: GitMonitor,
+  token: vscode.CancellationToken
+): Promise<vscode.ChatResult> {
+  stream.progress("Checking CE documentation freshness…");
+
+  const snapshot = await gitMonitor.forceScan();
+  if (token.isCancellationRequested) return {};
+
+  stream.markdown("## $(sync) ContextEngine — Documentation Sync\n\n");
+
+  const ceStatuses = snapshot.ceDocStatus;
+  if (ceStatuses.length === 0) {
+    stream.markdown("No workspace projects found.\n");
+    return {};
+  }
+
+  let totalIssues = 0;
+
+  for (const status of ceStatuses) {
+    const issues: string[] = [];
+
+    if (!status.copilotInstructions.exists) {
+      issues.push("❌ **copilot-instructions.md** — MISSING");
+    } else if (status.copilotInstructions.stale) {
+      issues.push(`⚠️ **copilot-instructions.md** — last updated ${status.copilotInstructions.ageHours}h ago`);
+    } else {
+      issues.push(`✅ **copilot-instructions.md** — updated ${status.copilotInstructions.ageHours}h ago`);
+    }
+
+    if (!status.skillsMd.exists) {
+      issues.push("❌ **SKILLS.md** — MISSING (create with: ## When to use, ## Key rules, ## Examples)");
+    } else if (status.skillsMd.stale) {
+      issues.push(`⚠️ **SKILLS.md** — last updated ${status.skillsMd.ageHours}h ago`);
+    } else {
+      issues.push(`✅ **SKILLS.md** — updated ${status.skillsMd.ageHours}h ago`);
+    }
+
+    if (!status.scoreMd.exists) {
+      issues.push("❌ **SCORE.md** — MISSING (run `score_project` to generate)");
+    } else if (status.scoreMd.stale) {
+      issues.push(`⚠️ **SCORE.md** — last updated ${status.scoreMd.ageHours}h ago`);
+    } else {
+      issues.push(`✅ **SCORE.md** — updated ${status.scoreMd.ageHours}h ago`);
+    }
+
+    if (status.codeAheadOfDocs) {
+      issues.push("🔴 **Code committed AFTER last CE doc update** — docs are stale!");
+    }
+
+    const hasProblems = issues.some(i => i.startsWith("❌") || i.startsWith("⚠️") || i.startsWith("🔴"));
+    if (hasProblems) totalIssues++;
+
+    const icon = hasProblems ? "⚠️" : "✅";
+    stream.markdown(`### ${icon} ${status.project}\n\n`);
+    for (const issue of issues) {
+      stream.markdown(`- ${issue}\n`);
+    }
+    stream.markdown("\n");
+  }
+
+  // Action items
+  if (totalIssues > 0) {
+    stream.markdown("---\n\n");
+    stream.markdown("### 🔧 Required Actions\n\n");
+    stream.markdown("The following CE compliance items need attention:\n\n");
+    stream.markdown("1. **Update `copilot-instructions.md`** with any new facts from this session\n");
+    stream.markdown("2. **Create/update `SKILLS.md`** with current development patterns\n");
+    stream.markdown("3. **Update `SCORE.md`** by running `score_project`\n");
+    stream.markdown("4. **Save learnings** via `save_learning` for every reusable pattern\n");
+    stream.markdown("5. **Save session** via `save_session` for continuity\n");
+    stream.markdown("\n");
+
+    stream.button({
+      command: "contextengine.endSession",
+      title: "$(checklist) Run Full End-Session Check",
+    });
+  } else {
+    stream.markdown("---\n\n");
+    stream.markdown("### ✅ All CE documentation is up to date!\n\n");
+    stream.markdown("Don't forget to also:\n");
+    stream.markdown("- Save learnings (`save_learning`) for reusable patterns\n");
+    stream.markdown("- Save session (`save_session`) for continuity\n");
+  }
+
+  return {};
+}
+
+// ---------------------------------------------------------------------------
 // Help — no command specified
 // ---------------------------------------------------------------------------
 
@@ -413,11 +509,15 @@ function showHelp(stream: vscode.ChatResponseStream): vscode.ChatResult {
   stream.markdown(
     "| `/remind` | Full enforcement checklist — what's missing |\n"
   );
+  stream.markdown(
+    "| `/sync` | Check CE doc freshness — find stale docs |\n"
+  );
   stream.markdown("\n### Examples\n\n");
   stream.markdown("```\n@contextengine /status\n");
   stream.markdown("@contextengine /commit feat: add user authentication\n");
   stream.markdown("@contextengine /search deployment process\n");
   stream.markdown("@contextengine /remind\n");
+  stream.markdown("@contextengine /sync\n");
   stream.markdown("@contextengine how does the scoring system work?\n");
   stream.markdown("```\n");
 

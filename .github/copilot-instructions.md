@@ -146,7 +146,7 @@
 - 17 MCP tools (13 free + 4 gated)
 - 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 249 learnings across 17 categories in store
+- 252 learnings across 17 categories in store
 - 30 bundled starter learnings ship with npm
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
@@ -202,11 +202,11 @@
 - Projects deploying via managed platforms (Vercel, Netlify, Render, Fly) get full infrastructure points without needing Docker
 - Prevents agents from creating dummy files to game the score
 
-## VS Code Extension (v0.3.0)
+## VS Code Extension (v0.4.0)
 - **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **Publisher**: `css-llc` (Azure DevOps org `css-llc`, personal MS account `ymolinier@hotmail.com`)
 - **PAT**: stored in Azure DevOps — Marketplace → Manage scope, 1-year expiry
-- **Source**: `vscode-extension/` (7 TypeScript source files, ~900 lines)
+- **Source**: `vscode-extension/` (7 TypeScript source files, ~1,100 lines)
 - **Icon**: Red compr.app logo (256x256 PNG, from `COMPR-app/pwa_assets/compr/logo512.png` hue-shifted)
 
 ### Extension Architecture
@@ -217,15 +217,24 @@
 | `vscode-extension/src/statusBar.ts` | `StatusBarController` — persistent CE:N indicator with escalating colors |
 | `vscode-extension/src/infoPanel.ts` | `InfoStatusBarController` — ℹ️ icon, WebView panel with monitoring checklist |
 | `vscode-extension/src/notifications.ts` | Escalating warning notifications with cooldown |
-| `vscode-extension/src/chatParticipant.ts` | `@contextengine` chat participant — `/status`, `/commit`, `/search`, `/remind` |
-| `vscode-extension/src/contextEngineClient.ts` | CLI delegation for search/sessions + direct git operations |
+| `vscode-extension/src/chatParticipant.ts` | `@contextengine` chat participant — `/status`, `/commit`, `/search`, `/remind`, `/sync` |
+| `vscode-extension/src/contextEngineClient.ts` | CLI delegation for search/sessions + direct git operations + CE doc freshness |
 
 ### Extension Features
 - **CE:N status bar** — live count of uncommitted files across all workspace repos (green→yellow→red)
 - **ℹ️ info panel** — WebView showing what ContextEngine monitors (7-item checklist with FREE/PRO badges), end-of-session protocol, architecture overview
-- **`@contextengine` chat** — Chat Participant with 4 slash commands for agent interaction
+- **`@contextengine` chat** — Chat Participant with 5 slash commands for agent interaction
+- **`/sync` command** — (v0.4.0) Checks CE doc freshness per project, shows which docs are stale or missing
+- **Doc staleness notifications** — (v0.4.0) Fires warning when code committed but CE docs not updated (15-min cooldown)
+- **`contextengine.sync` command** — (v0.4.0) Output channel report of CE doc freshness with "Open Chat" action
 - **Notifications** — Escalating warnings when files are uncommitted (5-min cooldown)
 - **Commit All** — One-click commit across all workspace repos
+
+### Pre-Commit Hook (v0.4.0)
+- **File**: `hooks/pre-commit` — checks CE doc freshness when code files are staged
+- **Behavior**: WARNS (does not block) when copilot-instructions.md, SKILLS.md, or SCORE.md are stale (>4h) or missing
+- **Install**: `cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`
+- **Philosophy**: Event-driven compliance (hooks + extension triggers), not memory-driven (hoping agent remembers)
 
 ### Publishing Workflow
 ```bash
