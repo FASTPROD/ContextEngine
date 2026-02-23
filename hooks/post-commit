@@ -1,8 +1,0 @@
-#!/bin/zsh
-echo "🚀 Auto-pushing to remotes..."
-
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-git push origin "$BRANCH" && echo "✅ origin (GitHub)"
-git push gdrive "$BRANCH" 2>/dev/null && echo "✅ gdrive (Drive backup)" || echo "⚠️  gdrive (best-effort, GitHub is primary)"
-
-echo "📦 Done!"
