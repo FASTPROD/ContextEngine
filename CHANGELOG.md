@@ -2,6 +2,16 @@
 
 All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
+## [1.18.0] — 2026-02-23
+
+### Security
+- **Project-scoped learnings** — `listLearnings()` and `learningsToChunks()` now accept `projects[]` param. Only returns learnings matching active workspace project names + universal (no project set). Prevents cross-project IP leakage.
+- MCP: `activeProjectNames` state populated from `loadProjectDirs()` during reindex, passed to all learnings calls.
+- CLI: `cliListLearnings()` and `initEngine()` scope by project via `loadProjectDirs()`.
+
+### Improved
+- **`end-session` CLI** — comprehensive pre-flight with 4 sections: (1) git status with branch names, (2) doc freshness (copilot-instructions, SKILLS.md, SCORE.md), (3) learnings stats (total, categories, scoped vs hidden), (4) sessions (count, 3 most recent with age).
+
 ## [1.17.0] — 2026-02-22
 
 ### Changed
