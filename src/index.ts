@@ -64,6 +64,7 @@ import {
   heartbeat,
   loadLicense,
 } from "./activation.js";
+import { ProtocolFirewall } from "./firewall.js";
 
 // ---------------------------------------------------------------------------
 // State
@@ -72,6 +73,7 @@ let sources: KnowledgeSource[] = [];
 let chunks: Chunk[] = [];
 let embeddedChunks: EmbeddedChunk[] = [];
 let activeProjectNames: string[] = [];
+const firewall = new ProtocolFirewall();
 
 /**
  * (Re-)ingest all sources. Called at startup and on file changes.
@@ -84,6 +86,7 @@ async function reindex(): Promise<void> {
   const config = loadConfig();
   const projectDirs = loadProjectDirs();
   activeProjectNames = projectDirs.map((d) => d.name);
+  firewall.setProjectDirs(projectDirs);
   if (config.collectOps !== false) {
     let opsChunks = 0;
     for (const dir of projectDirs) {
@@ -301,92 +304,18 @@ const server = new McpServer({
 });
 
 // ---------------------------------------------------------------------------
-// Enforcement: proactive agent compliance — nudge, git checks, escalation
+// Enforcement: Protocol Firewall — progressive response degradation
 // ---------------------------------------------------------------------------
-let toolCallCount = 0;
-let sessionSaved = false;
-let lastCommitCheck = 0; // timestamp of last git status check
-const NUDGE_INTERVAL = 15;       // First nudge at 15 calls
-const ESCALATE_INTERVAL = 30;    // Escalate at 30 calls
-const GIT_CHECK_INTERVAL = 120_000; // Check git status every 2 minutes of tool activity
+// The firewall instance is created above (in State section).
+// It wraps EVERY tool response and escalates: silent → footer → header → degraded.
+// At "degraded" level, tool output is truncated until the agent complies.
+// See src/firewall.ts for the full design.
 
-/**
- * Check git status across workspace projects.
- * Returns a warning string if uncommitted changes are found.
- * Cached to avoid hammering git on every tool call.
- */
-function checkGitStatus(): string {
-  const now = Date.now();
-  if (now - lastCommitCheck < GIT_CHECK_INTERVAL) return "";
-  lastCommitCheck = now;
-
-  const dirty: string[] = [];
-  try {
-    // Check each discovered project directory for uncommitted changes
-    const workDirs = chunks
-      .map(c => c.source)
-      .filter((s, i, arr) => arr.indexOf(s) === i)
-      .map(s => {
-        // Extract directory from source path
-        const parts = s.split("/");
-        // Find the project root (directory containing .git)
-        for (let i = parts.length - 1; i >= 0; i--) {
-          const candidate = parts.slice(0, i + 1).join("/");
-          try {
-            if (existsSync(join(candidate, ".git"))) return candidate;
-          } catch { /* ignore */ }
-        }
-        return null;
-      })
-      .filter((d): d is string => d !== null)
-      .filter((d, i, arr) => arr.indexOf(d) === i);
-
-    for (const dir of workDirs.slice(0, 10)) { // Cap at 10 projects
-      try {
-        const status = execSync("git status --porcelain 2>/dev/null | head -5", {
-          cwd: dir, encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"]
-        }).trim();
-        if (status) {
-          const count = status.split("\n").length;
-          const name = basename(dir);
-          dirty.push(`${name} (${count} file${count > 1 ? "s" : ""})`);
-        }
-      } catch { /* ignore */ }
-    }
-  } catch { /* ignore */ }
-
-  if (dirty.length === 0) return "";
-  return `\n⚠️ **Uncommitted changes** in: ${dirty.join(", ")}. ` +
-    `Run \`git add -A && git commit\` before ending the session!`;
-}
-
-function maybeNudge(): string {
-  toolCallCount++;
-  if (sessionSaved && toolCallCount < ESCALATE_INTERVAL) return "";
-
-  const parts: string[] = [];
-
-  // Escalating session nudge
-  if (!sessionSaved) {
-    if (toolCallCount >= ESCALATE_INTERVAL) {
-      parts.push(
-        `🚨 **URGENT** — ${toolCallCount} tool calls without \`save_session\`. ` +
-        `If this chat ends, ALL context is lost. Save NOW.`
-      );
-    } else if (toolCallCount > 0 && toolCallCount % NUDGE_INTERVAL === 0) {
-      parts.push(
-        `⏰ **ContextEngine reminder** — You've made ${toolCallCount} tool calls without saving context. ` +
-        `Use \`save_session\` to persist decisions/progress, and \`end_session\` before wrapping up.`
-      );
-    }
-  }
-
-  // Git status check (runs on a time interval, not every call)
-  const gitWarning = checkGitStatus();
-  if (gitWarning) parts.push(gitWarning);
-
-  if (parts.length === 0) return "";
-  return "\n\n---\n" + parts.join("\n");
+/** Helper: wrap a single-text tool response through the firewall */
+function respond(toolName: string, text: string) {
+  return {
+    content: [{ type: "text" as const, text: firewall.wrap(toolName, text) }],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -484,11 +413,7 @@ server.tool(
       ),
     ].join("\n\n");
 
-    const nudge = maybeNudge();
-
-    return {
-      content: [{ type: "text" as const, text: text + nudge }],
-    };
+    return respond("search_context", text);
   }
 );
 
@@ -516,21 +441,14 @@ server.tool(
       ? `✅ ${embeddedChunks.length} vectors`
       : "⏳ loading...";
 
-    const nudge = maybeNudge();
+    const text = [
+      `ContextEngine v1.18.1`,
+      `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
+      "",
+      ...lines,
+    ].join("\n");
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: [
-            `ContextEngine v1.16.0`,
-            `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
-            "",
-            ...lines,
-          ].join("\n") + nudge,
-        },
-      ],
-    };
+    return respond("list_sources", text);
   }
 );
 
@@ -574,14 +492,7 @@ server.tool(
     }
 
     const content = readFileSync(source.path, "utf-8");
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `# ${source.name}\n\n${content}`,
-        },
-      ],
-    };
+    return respond("read_source", `# ${source.name}\n\n${content}`);
   }
 );
 
@@ -594,14 +505,7 @@ server.tool(
   {},
   async () => {
     await reindex();
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `Re-indexed: ${chunks.length} chunks from ${sources.length} sources. Embeddings: ${embeddedChunks.length} vectors.`,
-        },
-      ],
-    };
+    return respond("reindex", `Re-indexed: ${chunks.length} chunks from ${sources.length} sources. Embeddings: ${embeddedChunks.length} vectors.`);
   }
 );
 
@@ -618,9 +522,7 @@ server.tool(
     const projectDirs = loadProjectDirs();
     const projects = listProjects(projectDirs);
     const text = formatProjectList(projects);
-    return {
-      content: [{ type: "text" as const, text }],
-    };
+    return respond("list_projects", text);
   }
 );
 
@@ -637,9 +539,7 @@ server.tool(
     const projectDirs = loadProjectDirs();
     const { ports, conflicts } = checkPorts(projectDirs);
     const text = formatPortMap(ports, conflicts);
-    return {
-      content: [{ type: "text" as const, text }],
-    };
+    return respond("check_ports", text);
   }
 );
 
@@ -661,9 +561,7 @@ server.tool(
     const projectDirs = loadProjectDirs();
     const plan = runComplianceAudit(projectDirs);
     const text = formatPlan(plan);
-    return {
-      content: [{ type: "text" as const, text }],
-    };
+    return respond("run_audit", text);
   }
 );
 
@@ -705,9 +603,7 @@ server.tool(
     }
 
     const text = formatScoreReport(scores);
-    return {
-      content: [{ type: "text" as const, text }],
-    };
+    return respond("score_project", text);
   }
 );
 
@@ -730,15 +626,7 @@ server.tool(
   },
   async ({ session, key, value }) => {
     const result = saveSession(session, key, value);
-    sessionSaved = true;
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: `✅ Saved key "${key}" to session "${session}" (${result.entries.length} entries total)`,
-        },
-      ],
-    };
+    return respond("save_session", `✅ Saved key "${key}" to session "${session}" (${result.entries.length} entries total)`);
   }
 );
 
@@ -766,9 +654,7 @@ server.tool(
       };
     }
     const text = formatSession(result);
-    return {
-      content: [{ type: "text" as const, text }],
-    };
+    return respond("load_session", text);
   }
 );
 
@@ -782,9 +668,7 @@ server.tool(
   async () => {
     const sessions = listSessions();
     const text = formatSessionList(sessions);
-    return {
-      content: [{ type: "text" as const, text }],
-    };
+    return respond("list_sessions", text);
   }
 );
 
@@ -977,9 +861,7 @@ server.tool(
       checks.push("5. Run `end_session` again to verify all clear");
     }
 
-    return {
-      content: [{ type: "text" as const, text: checks.join("\n") }],
-    };
+    return respond("end_session", checks.join("\n"));
   }
 );
 
@@ -1015,11 +897,7 @@ server.tool(
     chunks.length = 0;
     chunks.push(...nonLearningChunks, ...newChunks);
 
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: [
+    return respond("save_learning", [
             `✅ Learning saved: **${rule}**`,
             ``,
             `- **ID:** \`${learning.id}\``,
@@ -1032,10 +910,7 @@ server.tool(
             `This learning will now auto-surface in \`search_context\` results when relevant.`,
           ]
             .filter(Boolean)
-            .join("\n"),
-        },
-      ],
-    };
+            .join("\n"));
   }
 );
 
@@ -1055,9 +930,7 @@ server.tool(
     // Project-scoped: only show learnings for active workspace projects + universal (no project)
     const learnings = listLearnings(category, activeProjectNames);
     const text = formatLearnings(learnings);
-    return {
-      content: [{ type: "text" as const, text }],
-    };
+    return respond("list_learnings", text);
   }
 );
 
@@ -1116,9 +989,7 @@ server.tool(
 
     lines.push(`\nAll imported learnings now auto-surface in \`search_context\` results.`);
 
-    return {
-      content: [{ type: "text" as const, text: lines.join("\n") }],
-    };
+    return respond("import_learnings", lines.join("\n"));
   }
 );
 
@@ -1134,9 +1005,7 @@ server.tool(
   },
   async ({ license_key, email }) => {
     const result = await activate(license_key, email);
-    return {
-      content: [{ type: "text" as const, text: result.message }],
-    };
+    return respond("activate", result.message);
   }
 );
 
@@ -1170,9 +1039,7 @@ server.tool(
       lines.push(`Get a license: https://compr.ch/contextengine/pricing`);
       lines.push(`Activate: \`npx contextengine activate <key> <email>\``);
     }
-    return {
-      content: [{ type: "text" as const, text: lines.join("\n") }],
-    };
+    return respond("activation_status", lines.join("\n"));
   }
 );
 
@@ -1228,6 +1095,7 @@ async function main() {
   const config = loadConfig();
   if (config.collectOps !== false) {
     const projectDirs = loadProjectDirs();
+    firewall.setProjectDirs(projectDirs);
     let opsChunks = 0;
     for (const dir of projectDirs) {
       const ops = collectProjectOps(dir.path, dir.name);
