@@ -89,6 +89,7 @@ export function activate(context: vscode.ExtensionContext): void {
   disposables.push(
     gitMonitor.onSnapshot((snapshot) => {
       void notifications.onSnapshot(snapshot);
+      void notifications.onDocStaleness(snapshot);
     })
   );
 
@@ -369,6 +370,97 @@ function registerCommands(
     vscode.commands.registerCommand("contextengine.showInfo", async () => {
       const snapshot = await gitMonitor.forceScan();
       showInfoPanel(context, snapshot);
+    })
+  );
+
+  // -----------------------------------------------------------------------
+  // contextengine.sync — Check CE doc freshness and show actionable report
+  // -----------------------------------------------------------------------
+  context.subscriptions.push(
+    vscode.commands.registerCommand("contextengine.sync", async () => {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: "ContextEngine: Checking CE doc freshness…",
+          cancellable: false,
+        },
+        async () => {
+          try {
+            const docStatuses = await client.checkCEDocFreshness();
+
+            outputChannel.clear();
+            outputChannel.appendLine("═══════════════════════════════════════");
+            outputChannel.appendLine("  ContextEngine — CE Doc Sync Report");
+            outputChannel.appendLine("═══════════════════════════════════════");
+            outputChannel.appendLine("");
+
+            let totalIssues = 0;
+
+            for (const status of docStatuses) {
+              const problems: string[] = [];
+
+              if (!status.copilotInstructions.exists) {
+                problems.push("  ❌ copilot-instructions.md — MISSING");
+              } else if (status.copilotInstructions.stale) {
+                problems.push(`  ⚠️  copilot-instructions.md — ${status.copilotInstructions.ageHours}h old`);
+              }
+
+              if (!status.skillsMd.exists) {
+                problems.push("  ❌ SKILLS.md — MISSING");
+              } else if (status.skillsMd.stale) {
+                problems.push(`  ⚠️  SKILLS.md — ${status.skillsMd.ageHours}h old`);
+              }
+
+              if (!status.scoreMd.exists) {
+                problems.push("  ❌ SCORE.md — MISSING");
+              } else if (status.scoreMd.stale) {
+                problems.push(`  ⚠️  SCORE.md — ${status.scoreMd.ageHours}h old`);
+              }
+
+              if (status.codeAheadOfDocs) {
+                problems.push("  🔴 Code committed AFTER last CE doc update");
+              }
+
+              if (problems.length > 0) {
+                totalIssues += problems.length;
+                outputChannel.appendLine(`⚠️  ${status.project}:`);
+                for (const p of problems) {
+                  outputChannel.appendLine(p);
+                }
+              } else {
+                outputChannel.appendLine(`✅ ${status.project} — all CE docs fresh`);
+              }
+              outputChannel.appendLine("");
+            }
+
+            outputChannel.appendLine("═══════════════════════════════════════");
+            outputChannel.show();
+
+            if (totalIssues > 0) {
+              vscode.window.showWarningMessage(
+                `ContextEngine: ${totalIssues} CE doc issue(s) found. See Output.`,
+                "Open Chat"
+              ).then((action) => {
+                if (action === "Open Chat") {
+                  vscode.commands.executeCommand(
+                    "workbench.action.chat.open",
+                    { query: "@contextengine /sync" }
+                  );
+                }
+              });
+            } else {
+              vscode.window.showInformationMessage(
+                "✅ ContextEngine: All CE docs are up to date!"
+              );
+            }
+          } catch (error: unknown) {
+            const err = error as { message?: string };
+            vscode.window.showErrorMessage(
+              `ContextEngine: Sync failed — ${err.message || "unknown error"}`
+            );
+          }
+        }
+      );
     })
   );
 

@@ -12,7 +12,7 @@
  */
 
 import * as vscode from "vscode";
-import { scanGitStatus, type GitProject } from "./contextEngineClient";
+import { scanGitStatus, checkCEDocFreshness, type GitProject, type CEDocStatus } from "./contextEngineClient";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +23,10 @@ export interface GitSnapshot {
   totalDirty: number;
   dirtyProjects: GitProject[];
   timestamp: number;
+  /** CE documentation freshness status per project */
+  ceDocStatus: CEDocStatus[];
+  /** Whether any project has code ahead of CE docs */
+  hasStaleDocProjects: boolean;
 }
 
 type GitSnapshotListener = (snapshot: GitSnapshot) => void;
@@ -100,11 +104,27 @@ export class GitMonitor implements vscode.Disposable {
       const totalDirty = projects.reduce((sum, p) => sum + p.dirty, 0);
       const dirtyProjects = projects.filter((p) => p.dirty > 0);
 
+      // Check CE doc freshness
+      let ceDocStatus: CEDocStatus[] = [];
+      let hasStaleDocProjects = false;
+      try {
+        ceDocStatus = await checkCEDocFreshness();
+        hasStaleDocProjects = ceDocStatus.some(
+          (s) => s.codeAheadOfDocs ||
+            !s.copilotInstructions.exists ||
+            !s.skillsMd.exists
+        );
+      } catch {
+        // CE doc check is best-effort
+      }
+
       const snapshot: GitSnapshot = {
         projects,
         totalDirty,
         dirtyProjects,
         timestamp: Date.now(),
+        ceDocStatus,
+        hasStaleDocProjects,
       };
 
       this._lastSnapshot = snapshot;
@@ -117,6 +137,8 @@ export class GitMonitor implements vscode.Disposable {
         totalDirty: 0,
         dirtyProjects: [],
         timestamp: Date.now(),
+        ceDocStatus: [],
+        hasStaleDocProjects: false,
       };
       this._lastSnapshot = empty;
       return empty;

@@ -10,6 +10,8 @@
 
 import { execFile } from "child_process";
 import { promisify } from "util";
+import * as path from "path";
+import * as fs from "fs";
 import * as vscode from "vscode";
 
 const execFileAsync = promisify(execFile);
@@ -345,6 +347,133 @@ export async function gitPush(
   }
 
   return results;
+}
+
+// ---------------------------------------------------------------------------
+// CE Doc Freshness — event-driven compliance checking
+// ---------------------------------------------------------------------------
+
+export interface CEDocStatus {
+  /** Project folder name */
+  project: string;
+  /** Full path to the project */
+  projectPath: string;
+  /** copilot-instructions.md status */
+  copilotInstructions: DocFileStatus;
+  /** SKILLS.md status */
+  skillsMd: DocFileStatus;
+  /** SCORE.md status */
+  scoreMd: DocFileStatus;
+  /** Whether code was committed more recently than CE docs */
+  codeAheadOfDocs: boolean;
+  /** Hours since last CE doc update (oldest of the 3) */
+  oldestDocAgeHours: number;
+}
+
+export interface DocFileStatus {
+  exists: boolean;
+  path: string | null;
+  ageHours: number | null;
+  /** Whether this file was modified after the last code commit */
+  stale: boolean;
+}
+
+/**
+ * Check CE documentation freshness for all workspace projects.
+ * Compares last modification time of CE docs vs last code file commit.
+ */
+export async function checkCEDocFreshness(): Promise<CEDocStatus[]> {
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (!workspaceFolders) return [];
+
+  const results: CEDocStatus[] = [];
+  const now = Date.now();
+
+  for (const folder of workspaceFolders) {
+    const projectPath = folder.uri.fsPath;
+
+    // Find CE doc files in common locations
+    const copilot = findDocFile(projectPath, [
+      ".github/copilot-instructions.md",
+      ".github/instructions/copilot-instructions.md",
+      "copilot-instructions.md",
+    ]);
+    const skills = findDocFile(projectPath, [
+      "SKILLS.md",
+      ".github/SKILLS.md",
+    ]);
+    const score = findDocFile(projectPath, [
+      "SCORE.md",
+    ]);
+
+    // Get last code commit time
+    let lastCodeCommitTime = 0;
+    try {
+      const { stdout } = await execFileAsync("git", [
+        "log", "-1", "--format=%ct", "--",
+        "*.ts", "*.tsx", "*.js", "*.jsx", "*.py", "*.rs", "*.go",
+        "*.java", "*.rb", "*.php", "*.vue", "*.svelte",
+      ], { cwd: projectPath, timeout: 5000 });
+      lastCodeCommitTime = parseInt(stdout.trim()) * 1000 || 0;
+    } catch {
+      // Not a git repo or no code commits
+    }
+
+    const docStatuses = [copilot, skills, score];
+    const ages = docStatuses
+      .filter(d => d.ageHours !== null)
+      .map(d => d.ageHours as number);
+    const oldestAge = ages.length > 0 ? Math.max(...ages) : 0;
+
+    // Check if code is ahead of docs
+    const newestDocTime = Math.max(
+      ...docStatuses
+        .filter(d => d.exists && d.path)
+        .map(d => {
+          try {
+            return fs.statSync(d.path!).mtimeMs;
+          } catch { return 0; }
+        }),
+      0
+    );
+
+    const codeAhead = lastCodeCommitTime > 0 &&
+      newestDocTime > 0 &&
+      lastCodeCommitTime > newestDocTime;
+
+    results.push({
+      project: folder.name,
+      projectPath,
+      copilotInstructions: copilot,
+      skillsMd: skills,
+      scoreMd: score,
+      codeAheadOfDocs: codeAhead,
+      oldestDocAgeHours: oldestAge,
+    });
+  }
+
+  return results;
+}
+
+function findDocFile(projectPath: string, candidates: string[]): DocFileStatus {
+  const now = Date.now();
+  for (const candidate of candidates) {
+    const fullPath = path.join(projectPath, candidate);
+    try {
+      const stat = fs.statSync(fullPath);
+      const ageMs = now - stat.mtimeMs;
+      const ageHours = Math.round(ageMs / (1000 * 60 * 60));
+      return {
+        exists: true,
+        path: fullPath,
+        ageHours,
+        stale: ageHours > 4,  // stale if older than 4 hours
+      };
+    } catch {
+      // File doesn't exist, try next candidate
+    }
+  }
+  return { exists: false, path: null, ageHours: null, stale: true };
 }
 
 // ---------------------------------------------------------------------------

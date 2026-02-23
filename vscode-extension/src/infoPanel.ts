@@ -351,6 +351,19 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
     </div>
   </div>
 
+  <!-- NEW: Doc Sync -->
+  <div class="check-item" style="margin-top: 12px;">
+    <span class="check-icon">📝</span>
+    <div>
+      <div class="check-label">CE Doc Sync <span class="badge badge-free">NEW</span></div>
+      <div class="check-desc">
+        Automatically detects when code was committed but CE docs (copilot-instructions.md,
+        SKILLS.md, SCORE.md) weren't updated. Fires a warning notification and offers
+        <code>@contextengine /sync</code> to check freshness. <strong>Event-driven, not memory-driven.</strong>
+      </div>
+    </div>
+  </div>
+
   <!-- How It Works -->
   <h2>⚙️ How It Works</h2>
   <div class="card">
@@ -379,7 +392,7 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
   </div>
 
   <p style="text-align: center; margin-top: 24px; color: var(--vscode-descriptionForeground);">
-    ContextEngine v0.2.0 · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
+    ContextEngine v0.4.0 · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
     · <a href="https://github.com/FASTPROD/ContextEngine">GitHub</a>
     · <a href="https://www.npmjs.com/package/@compr/contextengine-mcp">npm</a>
   </p>

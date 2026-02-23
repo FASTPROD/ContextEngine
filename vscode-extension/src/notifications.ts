@@ -22,10 +22,14 @@ export class NotificationManager implements vscode.Disposable {
   /** Track escalation so we don't spam the same warning repeatedly. */
   private _lastNotifiedDirtyCount = 0;
   private _lastNotificationTime = 0;
+  private _lastDocStaleNotificationTime = 0;
   private _disposed = false;
 
   /** Minimum time between notifications (5 minutes). */
   private static readonly MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+  /** Minimum time between doc staleness notifications (15 minutes). */
+  private static readonly DOC_STALE_INTERVAL_MS = 15 * 60 * 1000;
 
   /**
    * Process a git snapshot and fire notifications if warranted.
@@ -80,6 +84,60 @@ export class NotificationManager implements vscode.Disposable {
 
     this._lastNotifiedDirtyCount = totalDirty;
     this._lastNotificationTime = now;
+  }
+
+  /**
+   * Check for stale CE docs and fire a notification if warranted.
+   */
+  async onDocStaleness(snapshot: GitSnapshot): Promise<void> {
+    if (this._disposed) return;
+
+    const config = vscode.workspace.getConfiguration("contextengine");
+    if (!config.get<boolean>("enableNotifications", true)) return;
+
+    if (!snapshot.hasStaleDocProjects) return;
+
+    const now = Date.now();
+    if (now - this._lastDocStaleNotificationTime < NotificationManager.DOC_STALE_INTERVAL_MS) {
+      return;
+    }
+
+    // Build the warning message
+    const staleProjects = snapshot.ceDocStatus.filter(
+      (s) => s.codeAheadOfDocs || !s.copilotInstructions.exists || !s.skillsMd.exists
+    );
+
+    if (staleProjects.length === 0) return;
+
+    const issues: string[] = [];
+    for (const s of staleProjects) {
+      if (!s.copilotInstructions.exists) {
+        issues.push(`${s.project}: missing copilot-instructions.md`);
+      } else if (!s.skillsMd.exists) {
+        issues.push(`${s.project}: missing SKILLS.md`);
+      } else if (s.codeAheadOfDocs) {
+        issues.push(`${s.project}: code committed after CE docs`);
+      }
+    }
+
+    const summary = issues.length <= 2
+      ? issues.join(", ")
+      : `${issues.length} projects have stale CE docs`;
+
+    const action = await vscode.window.showWarningMessage(
+      `📝 ContextEngine: ${summary}`,
+      "Run Sync",
+      "Show Details",
+      "Dismiss"
+    );
+
+    if (action === "Run Sync") {
+      await vscode.commands.executeCommand("contextengine.sync");
+    } else if (action === "Show Details") {
+      await vscode.commands.executeCommand("contextengine.showStatus");
+    }
+
+    this._lastDocStaleNotificationTime = now;
   }
 
   /**
