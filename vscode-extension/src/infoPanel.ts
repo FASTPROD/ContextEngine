@@ -279,7 +279,7 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
     <div class="check-item">
       <span class="check-icon">📊</span>
       <div>
-        <div class="check-label">Project Health Score <a href="https://compr.ch/contextengine/pricing" class="badge badge-pro">PRO</a></div>
+        <div class="check-label">Project Health Score <a href="https://api.compr.ch/contextengine/pricing" class="badge badge-pro">PRO</a></div>
         <div class="check-desc">
           Scores your project on AI-readiness (0-100%): documentation quality,
           infrastructure setup, code quality, and security posture. Letter grade A+ to F.
@@ -290,7 +290,7 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
     <div class="check-item">
       <span class="check-icon">🔍</span>
       <div>
-        <div class="check-label">Compliance Audit <a href="https://compr.ch/contextengine/pricing" class="badge badge-pro">PRO</a></div>
+        <div class="check-label">Compliance Audit <a href="https://api.compr.ch/contextengine/pricing" class="badge badge-pro">PRO</a></div>
         <div class="check-desc">
           Checks port conflicts, git hooks, .env files, Docker config, PM2 setup,
           EOL runtimes, outdated deps — everything an agent might misconfigure.
