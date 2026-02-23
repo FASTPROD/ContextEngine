@@ -15,6 +15,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { minify } from "terser";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,7 +31,7 @@ const PREMIUM_MODULES = [
   { src: "search.js", dest: "search-adv.mjs", description: "Advanced BM25 search with tuned parameters" },
 ];
 
-function main(): void {
+async function main(): Promise<void> {
   const version = process.argv[2] || "1.0.0";
 
   console.log(`\n📦 ContextEngine Delta Generator v${version}\n`);
@@ -58,21 +59,47 @@ function main(): void {
 
     // Read the compiled JS
     let content = readFileSync(srcPath, "utf-8");
+    const originalSize = Buffer.byteLength(content);
 
-    // Add a delta header comment for traceability
-    const header = `// ContextEngine Delta Module: ${mod.dest}\n` +
-      `// Version: ${version}\n` +
-      `// Generated: ${new Date().toISOString()}\n` +
-      `// ${mod.description}\n` +
-      `// This module is proprietary — distributed only via activation.\n\n`;
+    // Obfuscate: mangle variable names, compress, remove comments
+    // This makes the decrypted delta files unreadable even on disk
+    try {
+      const result = await minify(content, {
+        mangle: {
+          toplevel: true,           // mangle top-level names
+          properties: false,        // keep property names (needed for exports)
+        },
+        compress: {
+          passes: 2,               // double-pass compression
+          drop_console: false,     // keep console.error for debugging
+          dead_code: true,
+          collapse_vars: true,
+          reduce_vars: true,
+        },
+        format: {
+          comments: false,         // strip all comments
+          beautify: false,
+        },
+        module: true,              // treat as ES module
+        sourceMap: false,          // no source map
+      });
+      if (result.code) {
+        content = result.code;
+      }
+    } catch (err) {
+      console.warn(`  ⚠ Obfuscation failed for ${mod.src}, using original: ${(err as Error).message}`);
+    }
 
+    // Add a minimal delta header (no readable function names)
+    const header = `// CE-DELTA:${mod.dest}:${version}:${new Date().toISOString()}\n`;
     content = header + content;
 
     writeFileSync(destPath, content);
     modules.push(mod.dest);
 
-    const sizeKB = (Buffer.byteLength(content) / 1024).toFixed(1);
-    console.log(`  ✅ ${mod.dest} (${sizeKB} KB) — ${mod.description}`);
+    const finalSize = Buffer.byteLength(content);
+    const reduction = Math.round((1 - finalSize / originalSize) * 100);
+    console.log(`  ✅ ${mod.dest} (${(finalSize / 1024).toFixed(1)} KB, ${reduction}% smaller) — ${mod.description}`);
   }
 
   // Write manifest
@@ -81,10 +108,11 @@ function main(): void {
     generatedAt: new Date().toISOString(),
     modules: modules.map((m) => m.replace(".mjs", "")),
     moduleFiles: modules,
+    obfuscated: true,
   };
 
   writeFileSync(join(DELTA_DIR, "manifest.json"), JSON.stringify(manifest, null, 2));
-  console.log(`\n  📋 Manifest written (v${version}, ${modules.length} modules)`);
+  console.log(`\n  📋 Manifest written (v${version}, ${modules.length} modules, obfuscated)`);
   console.log(`  📂 Delta dir: ${DELTA_DIR}\n`);
 }
 
