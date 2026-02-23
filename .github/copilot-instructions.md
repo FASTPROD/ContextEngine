@@ -241,9 +241,8 @@
 
 ### Post-Commit Hook
 - **File**: `hooks/post-commit` — auto-pushes to `origin` and `gdrive` remotes after every commit
-- **Impact**: Push takes 3-10 seconds → VS Code terminal tool times out and reports "cancelled"
-- **Reality**: The commit AND push both succeed every time despite the "cancelled" status
-- **⚠ MANDATORY PATTERN**: After ANY git commit that reports "cancelled", IMMEDIATELY run `git log --oneline -1` to verify — do NOT re-attempt the commit, do NOT ask the user
+- **Design**: Push runs in background subshell (`( ... ) &`) — commit returns instantly, no terminal tool timeouts
+- **History**: Pre-v1.18.1 the hook was synchronous (3-10s blocking), causing VS Code terminal tool "cancelled" reports. Fixed by backgrounding.
 - **STRIPE-BACKEND project**: Stripe products/prices/webhook management lives in a separate `~/Projects/STRIPE backend/` project, not in this repo
 
 ### Publishing Workflow
