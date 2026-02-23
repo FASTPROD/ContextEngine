@@ -177,7 +177,18 @@ function logAudit(
 // Express app
 // ---------------------------------------------------------------------------
 const app = express();
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],  // inline styles in pricing.html
+      connectSrc: ["'self'", "https://api.compr.ch", "https://checkout.stripe.com"],
+      frameSrc: ["'self'", "https://checkout.stripe.com"],
+      imgSrc: ["'self'", "data:"],
+    },
+  },
+}));
 app.use(cors({
   origin: [
     "https://compr.ch",
@@ -561,6 +572,10 @@ app.get("/contextengine/health", (_req, res) => {
 // GET /contextengine/pricing — static pricing page
 // ---------------------------------------------------------------------------
 const publicDir = join(__dirname, "..", "public");
+
+// Serve static assets (JS, CSS) from /contextengine/static/
+app.use("/contextengine/static", express.static(publicDir));
+
 app.get("/contextengine/pricing", (_req, res) => {
   const pricingPath = join(publicDir, "pricing.html");
   if (existsSync(pricingPath)) {

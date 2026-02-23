@@ -431,7 +431,7 @@
         <div class="plan-desc">Solo developer</div>
         <div class="plan-price" data-monthly="$2" data-annual="$20">$2<span class="price-period">/mo</span></div>
         <div class="plan-annual" data-monthly="or $20/year (save 17%)" data-annual="$1.67/mo — billed annually">or $20/year (save 17%)</div>
-        <button class="plan-cta cta-outline" data-plan-key-monthly="pro_monthly" data-plan-key-annual="pro_annual" onclick="checkout(this)">Get Pro</button>
+        <button class="plan-cta cta-outline" data-plan-key-monthly="pro_monthly" data-plan-key-annual="pro_annual">Get Pro</button>
         <ul class="plan-features">
           <li>Everything in Free</li>
           <li>Project health score (A+ to F)</li>
@@ -449,7 +449,7 @@
         <div class="plan-desc">Small teams</div>
         <div class="plan-price" data-monthly="$12" data-annual="$120">$12<span class="price-period">/mo</span></div>
         <div class="plan-annual" data-monthly="or $120/year (save 17%)" data-annual="$10/mo — billed annually">or $120/year (save 17%)</div>
-        <button class="plan-cta cta-primary" data-plan-key-monthly="team_monthly" data-plan-key-annual="team_annual" onclick="checkout(this)">Get Team</button>
+        <button class="plan-cta cta-primary" data-plan-key-monthly="team_monthly" data-plan-key-annual="team_annual">Get Team</button>
         <ul class="plan-features">
           <li>Everything in Pro</li>
           <li>5 machines</li>
@@ -463,7 +463,7 @@
         <div class="plan-desc">Larger teams</div>
         <div class="plan-price" data-monthly="$36" data-annual="$360">$36<span class="price-period">/mo</span></div>
         <div class="plan-annual" data-monthly="or $360/year (save 17%)" data-annual="$30/mo — billed annually">or $360/year (save 17%)</div>
-        <button class="plan-cta cta-outline" data-plan-key-monthly="enterprise_monthly" data-plan-key-annual="enterprise_annual" onclick="checkout(this)">Get Enterprise</button>
+        <button class="plan-cta cta-outline" data-plan-key-monthly="enterprise_monthly" data-plan-key-annual="enterprise_annual">Get Enterprise</button>
         <ul class="plan-features">
           <li>Everything in Pro</li>
           <li>10 machines</li>
@@ -494,6 +494,7 @@
           <tr><td>VS Code extension (git monitor, chat)</td><td class="check">✓</td><td class="check">✓</td></tr>
           <tr><td>Plugin adapters (Notion, RSS, custom)</td><td class="check">✓</td><td class="check">✓</td></tr>
           <tr><td>CLI (15 subcommands)</td><td class="check">✓</td><td class="check">✓</td></tr>
+          <tr><td><strong>Protocol Firewall</strong> (response degradation)</td><td class="check">✓</td><td class="check">✓</td></tr>
           <tr><td><strong>Project health score</strong> (A+ to F)</td><td class="dash">—</td><td class="check">✓</td></tr>
           <tr><td><strong>Compliance audit</strong></td><td class="dash">—</td><td class="check">✓</td></tr>
           <tr><td><strong>Port conflict detection</strong></td><td class="dash">—</td><td class="check">✓</td></tr>
@@ -554,85 +555,7 @@
     </div>
   </footer>
 
-  <script>
-    // ---------------------------------------------------------------------------
-    // Billing toggle (monthly / annual)
-    // ---------------------------------------------------------------------------
-    const API_BASE = 'https://api.compr.ch';
-    let billingPeriod = 'monthly';
-
-    const toggle = document.getElementById('billingToggle');
-    const labels = document.querySelectorAll('.toggle-label');
-
-    toggle.addEventListener('click', () => {
-      billingPeriod = billingPeriod === 'monthly' ? 'annual' : 'monthly';
-      toggle.classList.toggle('active', billingPeriod === 'annual');
-      labels.forEach(l => l.classList.toggle('active', l.dataset.period === billingPeriod));
-      updatePrices();
-    });
-
-    function updatePrices() {
-      document.querySelectorAll('.plan').forEach(plan => {
-        const priceEl = plan.querySelector('.plan-price');
-        const annualEl = plan.querySelector('.plan-annual');
-        const periodEl = plan.querySelector('.price-period');
-
-        const price = priceEl.dataset[billingPeriod];
-        const subtext = annualEl.dataset[billingPeriod];
-
-        priceEl.childNodes[0].textContent = price;
-        if (periodEl) periodEl.textContent = billingPeriod === 'monthly' ? '/mo' : '/yr';
-        annualEl.textContent = subtext;
-      });
-    }
-
-    // ---------------------------------------------------------------------------
-    // Stripe Checkout
-    // ---------------------------------------------------------------------------
-    async function checkout(btn) {
-      const planKeyAttr = billingPeriod === 'monthly' ? 'planKeyMonthly' : 'planKeyAnnual';
-      const planKey = btn.dataset[planKeyAttr];
-
-      if (!planKey) {
-        alert('Invalid plan selection');
-        return;
-      }
-
-      // Loading state
-      const originalText = btn.textContent;
-      btn.textContent = 'Redirecting';
-      btn.classList.add('loading');
-
-      try {
-        const resp = await fetch(`${API_BASE}/contextengine/create-checkout-session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            planKey,
-            successUrl: `${API_BASE}/contextengine/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancelUrl: `${API_BASE}/contextengine/pricing`,
-          }),
-        });
-
-        const data = await resp.json();
-
-        if (!resp.ok) {
-          throw new Error(data.error || 'Checkout failed');
-        }
-
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          throw new Error('No checkout URL returned');
-        }
-      } catch (err) {
-        console.error('Checkout error:', err);
-        alert(err.message || 'Something went wrong. Please try again.');
-        btn.textContent = originalText;
-        btn.classList.remove('loading');
-      }
-    }
-  </script>
+  <script src="/contextengine/static/pricing.js"></script>
 
 </body>
 </html>
