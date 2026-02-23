@@ -146,8 +146,8 @@
 - 17 MCP tools (13 free + 4 gated)
 - 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 258 learnings across 17 categories in store
-- 30 bundled starter learnings ship with npm
+- 164 learnings across 17 categories in store (curated from 262 — removed duplicates, tech inventory, bulk-import headers)
+- 14 bundled starter learnings ship with npm (trimmed from 30 to prevent dedup re-merge)
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
 - Keyword search: instant (BM25 with IDF)
