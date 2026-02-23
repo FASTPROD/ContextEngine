@@ -4,6 +4,9 @@
 # Warns (does NOT block) when code files changed but CE docs are stale.
 # Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 
+# Ensure standard tools are on PATH (git hooks run with minimal PATH)
+export PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$PATH"
+
 # ---------------------------------------------------------------------------
 # 1. Check if code files are in the staged diff
 # ---------------------------------------------------------------------------
