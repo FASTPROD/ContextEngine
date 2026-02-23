@@ -18,6 +18,7 @@ All notable changes to ContextEngine (MCP server + CLI) are documented here.
 - **Doc staleness notifications** — fires warning when code committed but CE docs not updated (15-min cooldown).
 - **Pre-commit hook** — `hooks/pre-commit` warns about stale CE docs when code files are staged (never blocks).
 - **CE doc freshness in GitSnapshot** — `checkCEDocFreshness()` tracks copilot-instructions, SKILLS.md, SCORE.md age per project.
+- **Terminal watcher** — monitors command completions via Shell Integration API (`onDidEndTerminalShellExecution`). Classifies commands (git/npm/build/deploy/test/ssh), fires notifications on success/failure, auto-rescans git status after git commands. 30s cooldown per category.
 - Philosophy: **event-driven compliance** (hooks + scan-cycle triggers), not memory-driven.
 
 ## [1.17.0] — 2026-02-22
