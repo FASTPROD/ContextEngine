@@ -442,7 +442,7 @@ server.tool(
       : "⏳ loading...";
 
     const text = [
-      `ContextEngine v1.18.1`,
+      `ContextEngine v1.19.0`,
       `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
       "",
       ...lines,

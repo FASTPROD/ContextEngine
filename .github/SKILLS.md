@@ -1,7 +1,7 @@
 # ContextEngine — Skills & Capabilities
 
 ## Core Technologies
-- **TypeScript** (ES2022, strict mode) — entire codebase, ~9,400 lines
+- **TypeScript** (ES2022, strict mode) — entire codebase, ~9,700 lines
 - **MCP Protocol** (Model Context Protocol) — stdio transport, JSON-RPC 2.0, 17 tools
 - **Node.js 18+** — ESM modules, native crypto, child_process for git
 
@@ -54,12 +54,12 @@
 - **No MCP required** — CLI works standalone, useful as fallback when MCP not connected
 - **Learning fallback** — `node dist/cli.js save-learning "rule" -c category -p project --context "..."` when MCP tools unavailable
 
-## Agent Enforcement (v1.16.0)
-- **Session nudge** — after 15 MCP tool calls without `save_session`, appends a reminder to `search_context` and `list_sources` responses
-- **Escalating urgency** — at 30 calls the nudge becomes 🚨 URGENT, making it harder for agents to ignore
-- **Git status checks** — every 2 minutes of tool activity, checks all workspace projects for uncommitted changes and warns the agent
-- **Auto-session inject** — on MCP startup, loads the most recent session (<72 hours old) and injects it into search chunks, providing continuity without requiring explicit `load_session`
-- **Protocol compliance** — nudge resets when agent calls `save_session`, rewarding good behavior
+## Protocol Firewall (v1.19.0)
+- **Replaces** old session nudge system (only on 2/17 tools, no real consequences)
+- **Response wrapping** — every tool response passes through `ProtocolFirewall.wrap()` via a central `respond()` helper
+- **4 obligations tracked** — learnings saved, session saved, git status, doc freshness
+- **Escalating enforcement** — silent → footer reminder → header warning → degraded (output truncation)
+- **Exempt tools** — compliance actions pass through unmodified (saving learnings shouldn't be penalized)
 - **Context-aware scoring** — Docker points only awarded for real deployment use, not placeholder files; managed platforms (Vercel/Netlify/Render) get full credit
 
 ## Development Patterns
@@ -79,18 +79,22 @@
 - Stripe apiVersion must match SDK's `LatestApiVersion` type — check `node_modules/stripe/types/lib.d.ts`
 - Stripe webhook needs `express.raw()` registered BEFORE `express.json()` middleware
 
-## VS Code Extension (v0.2.0)
+## VS Code Extension (v0.4.1)
 - **Marketplace publishing** — `css-llc.contextengine` via Azure DevOps PAT + vsce CLI
 - **VS Code API** — StatusBarItem, WebviewPanel, ChatParticipant, EventEmitter, ExtensionContext
 - **Git monitoring** — child_process `git status --porcelain` across all workspace repos, periodic timer
 - **Status bar** — persistent CE:N indicator with threshold-based coloring (green→yellow→orange→red)
 - **Info panel** — WebView HTML/CSS panel with VS Code theme CSS variables, live data injection
-- **Chat Participant** — `@contextengine` with 4 slash commands, Copilot Chat integration
+- **Chat Participant** — `@contextengine` with 5 slash commands (`/status`, `/commit`, `/search`, `/remind`, `/sync`)
 - **Notifications** — escalating warnings with cooldown tracking
 - **CLI delegation** — executes ContextEngine CLI for search, sessions, git operations
+- **Terminal watcher** — monitors all terminal commands via Shell Integration API, fires notifications on completion
+- **Doc freshness** — `/sync` command and notifications when code committed but CE docs not updated
+- **Pre-commit hook** — `hooks/pre-commit` warns about stale CE docs (never blocks)
+- **Post-commit hook** — `hooks/post-commit` auto-pushes in background subshell (`( ... ) &`)
 - **Publishing workflow** — `vsce package` → `.vsix` → `echo PAT | vsce publish` → marketplace
-- **Azure DevOps** — personal MS account (NOT enterprise), org `css-llc`, PAT with Marketplace scope
-- **Icon** — ImageMagick grayscale→red-tint from source PNG (256x256)
 - Session protocol rules in copilot-instructions are necessary but insufficient — agents skip housekeeping under task focus
 - Non-interactive CLI detection: `!process.stdin.isTTY || --yes || -y` covers pipes, cron, and CI
 - Enforcement nudges in tool responses are more effective than rules in docs — agents actually read tool output
+- Protocol Firewall (response degradation) is the only mechanism that makes agents comply — extensions and rules can be ignored
+- Helmet default CSP blocks inline scripts — extract JS to external files and configure CSP directives explicitly
