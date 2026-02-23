@@ -50,7 +50,7 @@
 - After deploy: `npx pm2 restart ecosystem.config.cjs && npx pm2 save`
 
 ### VS Code Extension
-- Source: `vscode-extension/` — 7 TypeScript files
+- Source: `vscode-extension/` — 8 TypeScript files
 - Publisher: `css-llc` (Azure DevOps PAT, `ymolinier@hotmail.com`)
 - Package: `npx @vscode/vsce package` → `.vsix`
 - Publish: `echo '<PAT>' | npx @vscode/vsce publish`
