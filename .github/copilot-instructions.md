@@ -63,7 +63,7 @@
 - **Fix**: `listLearnings()` and `learningsToChunks()` now accept `projects?: string[]` param. When provided, only returns learnings matching active workspace project names + universal (no project set) learnings
 - **MCP**: `activeProjectNames` state populated from `loadProjectDirs()` during reindex, passed to all learnings calls
 - **CLI**: `cliListLearnings()` and `initEngine()` scope by project via `loadProjectDirs()`
-- **Result**: 245 total learnings → ~234 visible per workspace (project-specific learnings from other projects hidden)
+- **Result**: 249 total learnings → ~238 visible per workspace (project-specific learnings from other projects hidden)
 
 ## Infrastructure
 - **Production URL**: `https://api.compr.ch/contextengine/` (live, SSL)
@@ -141,12 +141,12 @@
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.17.0)
+## Stats (as of v1.18.0)
 - ~9,400 lines of source code (~7,400 src/ + ~1,050 server/ + ~900 vscode-extension/)
 - 17 MCP tools (13 free + 4 gated)
 - 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 245 learnings across 17 categories in store
+- 249 learnings across 17 categories in store
 - 30 bundled starter learnings ship with npm
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
