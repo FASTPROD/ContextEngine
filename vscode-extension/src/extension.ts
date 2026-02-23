@@ -31,6 +31,7 @@ import { StatusBarController } from "./statusBar";
 import { NotificationManager } from "./notifications";
 import { registerChatParticipant } from "./chatParticipant";
 import { InfoStatusBarController, showInfoPanel, updateInfoPanel } from "./infoPanel";
+import { TerminalWatcher } from "./terminalWatcher";
 import * as client from "./contextEngineClient";
 
 // ---------------------------------------------------------------------------
@@ -41,6 +42,7 @@ let gitMonitor: GitMonitor;
 let statusBar: StatusBarController;
 let infoBar: InfoStatusBarController;
 let notifications: NotificationManager;
+let terminalWatcher: TerminalWatcher;
 const disposables: vscode.Disposable[] = [];
 
 // ---------------------------------------------------------------------------
@@ -98,6 +100,24 @@ export function activate(context: vscode.ExtensionContext): void {
   // -----------------------------------------------------------------------
   const chatDisposable = registerChatParticipant(gitMonitor);
   disposables.push(chatDisposable);
+
+  // -----------------------------------------------------------------------
+  // 4b. Terminal Watcher — monitor command completions
+  // -----------------------------------------------------------------------
+  terminalWatcher = new TerminalWatcher(outputChannel);
+  disposables.push(terminalWatcher);
+
+  // Trigger git rescan after git commands complete
+  disposables.push(
+    terminalWatcher.onCommandResult((result) => {
+      if (result.category === "git" && result.exitCode === 0) {
+        // Git command succeeded — rescan to update status bar
+        setTimeout(() => void gitMonitor.forceScan(), 1000);
+      }
+    })
+  );
+
+  terminalWatcher.start();
 
   // -----------------------------------------------------------------------
   // 5. Commands

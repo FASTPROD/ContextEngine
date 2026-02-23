@@ -58,6 +58,7 @@
 - Chat commands: `/status`, `/commit`, `/search`, `/remind`, `/sync`
 - Doc freshness: `checkCEDocFreshness()` in contextEngineClient.ts — checks copilot-instructions, SKILLS.md, SCORE.md staleness
 - Pre-commit hook: `hooks/pre-commit` — warns about stale CE docs (never blocks)
+- Terminal watcher: `terminalWatcher.ts` — monitors all terminal commands via Shell Integration API, fires notifications on completion
 
 ### Critical Constraints
 - **NEVER commit `.contextengine/`** — user data directory

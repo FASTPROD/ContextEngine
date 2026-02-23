@@ -146,7 +146,7 @@
 - 17 MCP tools (13 free + 4 gated)
 - 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 252 learnings across 17 categories in store
+- 254 learnings across 17 categories in store
 - 30 bundled starter learnings ship with npm
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
@@ -206,7 +206,7 @@
 - **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **Publisher**: `css-llc` (Azure DevOps org `css-llc`, personal MS account `ymolinier@hotmail.com`)
 - **PAT**: stored in Azure DevOps — Marketplace → Manage scope, 1-year expiry
-- **Source**: `vscode-extension/` (7 TypeScript source files, ~1,100 lines)
+- **Source**: `vscode-extension/` (8 TypeScript source files, ~1,300 lines)
 - **Icon**: Red compr.app logo (256x256 PNG, from `COMPR-app/pwa_assets/compr/logo512.png` hue-shifted)
 
 ### Extension Architecture
@@ -219,6 +219,7 @@
 | `vscode-extension/src/notifications.ts` | Escalating warning notifications with cooldown |
 | `vscode-extension/src/chatParticipant.ts` | `@contextengine` chat participant — `/status`, `/commit`, `/search`, `/remind`, `/sync` |
 | `vscode-extension/src/contextEngineClient.ts` | CLI delegation for search/sessions + direct git operations + CE doc freshness |
+| `vscode-extension/src/terminalWatcher.ts` | Terminal command completion monitor — classifies commands, fires notifications, triggers git rescan |
 
 ### Extension Features
 - **CE:N status bar** — live count of uncommitted files across all workspace repos (green→yellow→red)
@@ -227,6 +228,7 @@
 - **`/sync` command** — (v0.4.0) Checks CE doc freshness per project, shows which docs are stale or missing
 - **Doc staleness notifications** — (v0.4.0) Fires warning when code committed but CE docs not updated (15-min cooldown)
 - **`contextengine.sync` command** — (v0.4.0) Output channel report of CE doc freshness with "Open Chat" action
+- **Terminal watcher** — (v0.4.0) Monitors command completions via Shell Integration API, fires notifications for git/npm/deploy/build/test, auto-rescans git after commits
 - **Notifications** — Escalating warnings when files are uncommitted (5-min cooldown)
 - **Commit All** — One-click commit across all workspace repos
 
