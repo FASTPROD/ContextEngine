@@ -36,9 +36,9 @@ check_freshness() {
 
   # Find file in common locations
   local found=""
-  for path in "$file" ".github/$file" ".github/instructions/$file"; do
-    if [[ -f "$path" ]]; then
-      found="$path"
+  for candidate_path in "$file" ".github/$file" ".github/instructions/$file"; do
+    if [[ -f "$candidate_path" ]]; then
+      found="$candidate_path"
       break
     fi
   done
