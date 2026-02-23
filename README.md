@@ -407,6 +407,38 @@ Issues, feature requests, and PRs welcome at [github.com/FASTPROD/ContextEngine]
 
 If you're using ContextEngine, we'd love to hear about it — feedback helps us improve.
 
+## Privacy & Data Security
+
+**ContextEngine runs 100% on your machine. Your code, your data, your rules.**
+
+Everything happens locally — search, scoring, learnings, sessions, embeddings. No project data is ever sent to an external server.
+
+### What stays on your machine (always)
+
+| Data | Storage | Leaves your machine? |
+|---|---|---|
+| Project files & source code | Read locally, never stored externally | ❌ Never |
+| Learnings (operational rules) | `~/.contextengine/learnings.json` | ❌ Never |
+| Sessions (decisions, progress) | `~/.contextengine/sessions/` | ❌ Never |
+| Search index & embeddings | In-memory + `~/.contextengine/embedding-cache.json` | ❌ Never |
+| Git history & branches | Local `git` commands | ❌ Never |
+| Dependencies & package.json | Read locally | ❌ Never |
+| .env variable names | Read locally (values are never read) | ❌ Never |
+
+### What the activation server receives (PRO only)
+
+| Data | When | Purpose |
+|---|---|---|
+| License key (`CE-XXXX-...`) | Activation + daily heartbeat | Validate subscription |
+| Machine ID (SHA-256 hash) | Activation + daily heartbeat | Enforce machine limit |
+| Platform/arch (e.g., `darwin/arm64`) | Activation only | Compatibility check |
+
+**The server never receives:** project names, file contents, learnings, sessions, git history, dependencies, code, .env variables, or anything about your actual work.
+
+### Why this matters
+
+Most AI coding tools (Copilot, Cursor, Codeium) send your code to external servers for processing. ContextEngine takes the opposite approach — **embeddings run locally on CPU**, search runs locally, and all persistent state stays in `~/.contextengine/` on your disk. The only network call is a lightweight license check for PRO users.
+
 ## License
 
 BSL-1.1 (Business Source License) — see [LICENSE](LICENSE).
