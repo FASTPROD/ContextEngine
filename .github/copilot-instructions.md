@@ -237,6 +237,14 @@
 - **Behavior**: WARNS (does not block) when copilot-instructions.md, SKILLS.md, or SCORE.md are stale (>4h) or missing
 - **Install**: `cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`
 - **Philosophy**: Event-driven compliance (hooks + extension triggers), not memory-driven (hoping agent remembers)
+- **⚠ zsh `$path` gotcha**: NEVER use `path` as a variable name in zsh scripts — `$path` is a special tied variable to `$PATH` (lowercase array). Overwriting it destroys PATH for the rest of the script. Use `candidate_path` or `file_path` instead.
+
+### Post-Commit Hook
+- **File**: `hooks/post-commit` — auto-pushes to `origin` and `gdrive` remotes after every commit
+- **Impact**: Push takes 3-10 seconds → VS Code terminal tool times out and reports "cancelled"
+- **Reality**: The commit AND push both succeed every time despite the "cancelled" status
+- **⚠ MANDATORY PATTERN**: After ANY git commit that reports "cancelled", IMMEDIATELY run `git log --oneline -1` to verify — do NOT re-attempt the commit, do NOT ask the user
+- **STRIPE-BACKEND project**: Stripe products/prices/webhook management lives in a separate `~/Projects/STRIPE backend/` project, not in this repo
 
 ### Publishing Workflow
 ```bash

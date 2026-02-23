@@ -60,6 +60,13 @@
 - Pre-commit hook: `hooks/pre-commit` — warns about stale CE docs (never blocks)
 - Terminal watcher: `terminalWatcher.ts` — monitors all terminal commands via Shell Integration API, fires notifications on completion
 
+### Git Hooks & Terminal Patterns
+- **Post-commit hook** (`hooks/post-commit`): Auto-pushes to origin + gdrive after every commit
+- Push takes 3-10s → VS Code terminal tool reports "cancelled" — but commit AND push succeed
+- **MANDATORY**: After ANY "cancelled" git commit, run `git log --oneline -1` to verify — NEVER re-attempt
+- **Pre-commit hook** (`hooks/pre-commit`): zsh script — NEVER use `path` as a variable name (zsh ties `$path` to `$PATH`)
+- Use `candidate_path`, `file_path`, etc. instead — overwriting `$path` destroys PATH for the rest of the script
+
 ### Critical Constraints
 - **NEVER commit `.contextengine/`** — user data directory
 - **BSL-1.1 license** — no hosted/SaaS competitor allowed
