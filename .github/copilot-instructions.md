@@ -2,8 +2,8 @@
 
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
-- **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.19.0
+- **GitHub**: FASTPROD/ContextEngine (PRIVATE repo — 404 for unauthenticated visitors)
+- **Version**: v1.19.1
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
 - **VS Code Extension**: `css-llc.contextengine` — https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
@@ -24,7 +24,7 @@
   - `POST /contextengine/activate` — validate license, return encrypted delta bundle
   - `POST /contextengine/heartbeat` — periodic license re-validation
   - `GET /contextengine/health` — status endpoint
-- **Delta modules**: Premium code extracted by `gen-delta.ts` -> encrypted per-machine (key = SHA-256(licenseKey + machineId))
+- **Delta modules**: Premium code extracted by `gen-delta.ts`, **obfuscated with terser** (mangle toplevel, 2-pass compress, strip comments), then encrypted per-machine (key = SHA-256(licenseKey + machineId))
 - **Machine fingerprint**: `SHA-256(platform|arch|homedir|user)` — tied to physical machine
 - **License format**: `CE-XXXX-XXXX-XXXX-XXXX` (16 hex chars + prefix)
 - **Plans**: `pro` (2 machines), `team` (5), `enterprise` (10)
@@ -71,7 +71,7 @@
 - **SSH**: Password auth — `sshpass -p '#Crowlr@2023' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157` (SSH key passphrase lost)
 - **Server path**: `/var/www/contextengine-server/` (code + node_modules + dist/ + delta-modules/)
 - **Dist path**: `/var/www/contextengine-dist/` (main ContextEngine compiled output, for gen-delta)
-- **Delta modules**: `/var/www/contextengine-server/delta-modules/` — agents.mjs (66.9KB), collectors.mjs (22.3KB), search-adv.mjs (3.6KB)
+- **Delta modules**: `/var/www/contextengine-server/delta-modules/` — agents.mjs (35.8KB, obfuscated), collectors.mjs (7.8KB, obfuscated), search-adv.mjs (1.0KB, obfuscated)
 - **License DB**: `/var/www/contextengine-server/data/licenses.db` (seeded: `CE-F03F-0457-F812-B486`, enterprise, 10 machines, expires 2027-02-20)
 - **Process**: PM2 `contextengine-api` on port 8010, managed via `ecosystem.config.cjs`
 - **PM2 config**: `/var/www/contextengine-server/ecosystem.config.cjs` — env vars (STRIPE_SECRET_KEY, SMTP_*, PORT). Must use `.cjs` extension (package.json has `"type": "module"`, PM2 require() fails with `.js`). Restart with `npx pm2 restart ecosystem.config.cjs` to pick up env changes, then `npx pm2 save`.
@@ -114,7 +114,7 @@
 | `server/src/server.ts` | Activation server — Express + SQLite3 + Stripe webhook + rate-limit + CORS + graceful shutdown |
 | `server/src/stripe.ts` | Stripe payment — checkout sessions, webhook handler, license provisioning, SMTP email |
 | `server/src/seed.ts` | License key generator — `CE-XXXX-XXXX-XXXX-XXXX` format |
-| `server/src/gen-delta.ts` | Delta module extractor — reads `CONTEXTENGINE_DIST` env var, falls back to `../../dist` |
+| `server/src/gen-delta.ts` | Delta module extractor + terser obfuscation — reads `CONTEXTENGINE_DIST` env var, falls back to `../../dist` |
 | `server/deploy.sh` | Production deploy script — rsync + PM2 + nginx config |
 | `server/public/pricing.html` | Pricing page — billing toggle + Stripe checkout JS |
 | `server/public/success.html` | Post-checkout success page with activation instructions |
@@ -142,12 +142,12 @@
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.19.0)
+## Stats (as of v1.19.1)
 - ~9,700 lines of source code (~7,700 src/ + ~1,050 server/ + ~900 vscode-extension/)
 - 17 MCP tools (13 free + 4 gated)
 - 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 168 learnings across 17 categories in store (curated from 262 — removed duplicates, tech inventory, bulk-import headers)
+- 173 learnings across 17 categories in store
 - 14 bundled starter learnings ship with npm (trimmed from 30 to prevent dedup re-merge)
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
@@ -155,10 +155,13 @@
 - Semantic search: ~200ms from cache, ~15s first run
 - CI: GitHub Actions — Node 18/20/22, lint + build + test + smoke
 - Score: 89% A (30/30 doc, 22/30 infra, 17/20 quality, 20/20 security)
-- VS Code Extension: v0.4.1 published on marketplace (css-llc.contextengine)
+- VS Code Extension: v0.5.0 published on marketplace (css-llc.contextengine)
 - Pricing page: https://api.compr.ch/contextengine/pricing (live, static HTML)
 - E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 23, 2026)
 - Protocol Firewall: escalating compliance enforcement on all 17 tool responses
+- Delta obfuscation: terser mangle+compress, 46-72% size reduction
+- Auto-import: learnings extracted from doc sources during reindex + end-session
+- Privacy section: README documents local-first architecture, server never receives code/learnings
 
 ## Critical Rules
 1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)
@@ -189,6 +192,33 @@
 - Extracted `<script>` from pricing.html → `public/pricing.js` (external file)
 - Added `express.static` route: `/contextengine/static/` → `public/`
 - Configured Helmet CSP directives: `script-src 'self'`, `style-src 'unsafe-inline'`, `connect-src` for Stripe
+
+## v1.19.1 — Auto-Import & Delta Obfuscation (Feb 2026)
+### Auto-Import Learnings from Doc Sources
+- **Function**: `autoImportFromSources()` in `src/learnings.ts`
+- **Trigger**: Called automatically during `reindex()` (MCP startup + file changes) and `cliEndSession()` (CLI end-session)
+- **Behavior**: Scans all discovered markdown source files, extracts rules via `importLearningsFromFile()`, dedup built-in
+- **Returns**: `{ total, imported, updated }` counts
+- **Philosophy**: "needs to be automated - not relying on users or agents!" — user mandate
+
+### Delta Module Obfuscation (terser)
+- **File**: `server/src/gen-delta.ts` — added `import { minify } from "terser"`
+- **Pipeline**: Read compiled JS → terser minify (mangle toplevel, 2-pass compress, strip comments, module mode) → write .mjs
+- **Results**: agents.mjs 46% smaller, collectors.mjs 65% smaller, search-adv.mjs 72% smaller
+- **Properties not mangled** (`properties: false`) — required for exported function names to work
+- **Manifest**: `obfuscated: true` flag added
+- **Deployed**: VPS delta-modules regenerated with obfuscation, PM2 restarted
+
+### Privacy & Data Security (README)
+- Added comprehensive section to main README before License
+- Two tables: "What stays on your machine" (7 items) + "What the activation server receives" (3 items, PRO only)
+- Bold: "The server NEVER receives: project names, file contents, learnings, sessions, git history, dependencies, code, .env variables"
+- Extension README links to full details
+
+### GitHub Repository Visibility
+- Repo `FASTPROD/ContextEngine` is **PRIVATE** — returns 404 for unauthenticated visitors
+- npm README links to GitHub are dead links for public visitors
+- Decision pending: make public or update links
 
 ## v1.16.0 — Agent DX Improvements (Feb 2026)
 ### New CLI Commands (5)
@@ -221,7 +251,7 @@
 - Projects deploying via managed platforms (Vercel, Netlify, Render, Fly) get full infrastructure points without needing Docker
 - Prevents agents from creating dummy files to game the score
 
-## VS Code Extension (v0.4.1)
+## VS Code Extension (v0.5.0)
 - **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **Publisher**: `css-llc` (Azure DevOps org `css-llc`, personal MS account `ymolinier@hotmail.com`)
 - **PAT**: stored in Azure DevOps — Marketplace → Manage scope, 1-year expiry
@@ -242,7 +272,7 @@
 
 ### Extension Features
 - **CE:N status bar** — live count of uncommitted files across all workspace repos (green→yellow→red)
-- **ℹ️ info panel** — WebView showing what ContextEngine monitors (7-item checklist with FREE/PRO badges), end-of-session protocol, architecture overview
+- **ℹ️ info panel** — WebView with Protocol Firewall hero (plain-English "speed camera" analogy), escalation flow visualization, compact git status one-liner
 - **`@contextengine` chat** — Chat Participant with 5 slash commands for agent interaction
 - **`/sync` command** — (v0.4.0) Checks CE doc freshness per project, shows which docs are stale or missing
 - **Doc staleness notifications** — (v0.4.0) Fires warning when code committed but CE docs not updated (15-min cooldown)
