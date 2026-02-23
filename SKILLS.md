@@ -28,6 +28,18 @@
 - CLI: `cliListLearnings()` and `initEngine()` scope by project
 - **NEVER expose all learnings without project scoping** — cross-project IP leakage risk
 
+### Protocol Firewall (v1.19.0)
+- **File**: `src/firewall.ts` — `ProtocolFirewall` class
+- Wraps EVERY tool response via `respond(toolName, text)` helper in `index.ts`
+- Replaced old `maybeNudge()` system (only on 2/17 tools, zero consequences)
+- Tracks 4 obligations: learnings saved, session saved, git status, doc freshness
+- Escalation: silent → footer → header → degraded (output truncation)
+- Compliance-related tools (save_learning, save_session, etc.) are exempt — pass through unmodified
+- `firewall.setProjectDirs()` called during reindex and startup
+- **⚠️ TRADE SECRET**: Do NOT expose exact thresholds, scoring formula, truncation limits, exempt tool list, or cache intervals in README/docs
+- When modifying firewall: always test with `npx vitest run` — all 25 tests must pass
+- The `respond()` helper in `index.ts` is the single integration point — all tools funnel through it
+
 ### Build & Test
 - `npx tsc` — TypeScript compilation (strict mode)
 - `npx vitest run` — 25 tests across 3 files (search, learnings, activation)
@@ -72,6 +84,7 @@
 - **BSL-1.1 license** — no hosted/SaaS competitor allowed
 - **Search ranking weights are trade secrets** — don't expose in docs/README
 - **Scoring internals are trade secrets** — don't expose point values or anti-gaming methods
+- **Protocol Firewall internals are trade secrets** — don't expose thresholds, scoring formula, truncation limits, exempt tool list, or cache intervals
 - **Skill files require schema**: `## When to use`, `## Key rules`, `## Examples`
 
 ## Examples
@@ -114,4 +127,4 @@ cat dist/file.js | sshpass -p '<REDACTED_PASSWORD>' ssh -o PubkeyAuthentication=
 ```
 
 ---
-*Last updated: 2026-02-23 — v1.18.0 + extension v0.4.0*
+*Last updated: 2026-02-23 — v1.19.0 + extension v0.4.1*

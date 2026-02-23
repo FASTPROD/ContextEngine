@@ -33,7 +33,8 @@ ContextEngine fixes the biggest gap: **zero-config, fully local, privacy-first.*
 - ⚡ **Instant startup** — keyword search ready immediately, embeddings load in background
 - 💾 **Session Persistence** — AI agents can save/restore context across conversations
 - 💡 **Learning Store** — permanent operational rules that auto-surface in search results
-- 🔌 **Plugin Adapters** — extend with custom data sources (Notion, Jira, RSS, etc.)
+- �️ **Protocol Firewall** — progressive enforcement that ensures agents commit, document, and save learnings
+- �🔌 **Plugin Adapters** — extend with custom data sources (Notion, Jira, RSS, etc.)
 - 🧩 **MCP native** — works with any MCP-compatible client (VS Code, Claude, Cursor, OpenClaw)
 
 ## Quick Start
@@ -142,7 +143,7 @@ The extension works standalone for git monitoring. For search, learnings, sessio
 
 ## ⭐ PRO Features
 
-ContextEngine is **free and open-core**. The free tier covers search, learnings, sessions, and the VS Code extension. PRO unlocks advanced project intelligence:
+ContextEngine is **free and open-core**. The free tier covers everything agents need — search, memory, sessions, and compliance enforcement. PRO adds **team and ops intelligence** across multiple projects:
 
 | Feature | Free | PRO |
 |---------|------|-----|
@@ -150,6 +151,7 @@ ContextEngine is **free and open-core**. The free tier covers search, learnings,
 | Persistent learnings | ✅ | ✅ |
 | Session save/load | ✅ | ✅ |
 | End-of-session enforcement | ✅ | ✅ |
+| Protocol Firewall (agent compliance) | ✅ | ✅ |
 | VS Code extension (git monitor, chat) | ✅ | ✅ |
 | Plugin adapters | ✅ | ✅ |
 | **Project health score (A+ to F)** | — | ✅ |
@@ -166,7 +168,7 @@ ContextEngine is **free and open-core**. The free tier covers search, learnings,
 | **Team** | $12/mo | 5 |
 | **Enterprise** | $36/mo | 10 |
 
-→ **[Get PRO](https://compr.ch/contextengine/pricing)** · Annual plans save 17%
+→ **[Get PRO](https://api.compr.ch/contextengine/pricing)** · Annual plans save 17%
 
 ```bash
 # Activate after purchase
@@ -212,25 +214,29 @@ npx @compr/contextengine-mcp help
 
 CLI mode uses keyword search (BM25) which is instant — no model loading required.
 
-## Tools (15)
+## Tools (17)
 
-| Tool | Description |
-|------|-------------|
-| `search_context` | Hybrid keyword+semantic search with mode selector |
-| `list_sources` | Show all indexed sources with chunk counts |
-| `read_source` | Read full content of a knowledge source by name |
-| `reindex` | Force full re-index of all sources |
-| `list_projects` | Discover and analyze all projects (tech stack, git, docker, pm2) |
-| `check_ports` | Scan all projects for port conflicts |
-| `run_audit` | Compliance agent — git, hooks, .env, Docker, PM2, versions |
-| `score_project` | AI-readiness scoring 0-100% with letter grades (A+ to F) |
-| `save_session` | Save key-value entry to a named session |
-| `load_session` | Load all entries from a named session |
-| `list_sessions` | List all saved sessions |
-| `end_session` | Pre-flight checklist — checks uncommitted changes + doc freshness |
-| `save_learning` | Save a permanent operational rule — auto-surfaces in search results |
-| `list_learnings` | List all permanent learnings, optionally filtered by category |
-| `import_learnings` | Bulk-import learnings from Markdown or JSON files |
+| Tool | Description | Tier |
+|------|-------------|------|
+| `search_context` | Hybrid keyword+semantic search with mode selector | Free |
+| `list_sources` | Show all indexed sources with chunk counts | Free |
+| `read_source` | Read full content of a knowledge source by name | Free |
+| `reindex` | Force full re-index of all sources | Free |
+| `save_session` | Save key-value entry to a named session | Free |
+| `load_session` | Load all entries from a named session | Free |
+| `list_sessions` | List all saved sessions | Free |
+| `end_session` | Pre-flight checklist — uncommitted changes + doc freshness | Free |
+| `save_learning` | Save a permanent operational rule — auto-surfaces in search | Free |
+| `list_learnings` | List all permanent learnings, optionally by category | Free |
+| `delete_learning` | Remove a learning by ID | Free |
+| `import_learnings` | Bulk-import learnings from Markdown or JSON files | Free |
+| `activate` | Activate a PRO license on this machine | Free |
+| `list_projects` | Discover and analyze all projects (tech stack, git, docker) | PRO |
+| `check_ports` | Scan all projects for port conflicts | PRO |
+| `run_audit` | Compliance agent — git, hooks, .env, Docker, PM2, versions | PRO |
+| `score_project` | AI-readiness scoring 0-100% with letter grades (A+ to F) | PRO |
+
+All tools are wrapped by the **Protocol Firewall** — an escalating compliance system that ensures agents save learnings, persist sessions, and commit code. No action needed from users; it's automatic.
 
 ## Configuration
 

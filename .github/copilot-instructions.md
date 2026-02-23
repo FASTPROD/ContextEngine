@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine
-- **Version**: v1.18.0
+- **Version**: v1.19.0
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
 - **VS Code Extension**: `css-llc.contextengine` — https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
@@ -110,6 +110,7 @@
 | `src/chunker.ts` | Markdown/code-aware chunking with 4-line overlap |
 | `src/config.ts` | `contextengine.json` loader, project aliases |
 | `src/activation.ts` | License validation, delta decryption, machine fingerprint, heartbeat |
+| `src/firewall.ts` | Protocol Firewall — escalating compliance enforcement on all tool responses |
 | `server/src/server.ts` | Activation server — Express + SQLite3 + Stripe webhook + rate-limit + CORS + graceful shutdown |
 | `server/src/stripe.ts` | Stripe payment — checkout sessions, webhook handler, license provisioning, SMTP email |
 | `server/src/seed.ts` | License key generator — `CE-XXXX-XXXX-XXXX-XXXX` format |
@@ -141,12 +142,12 @@
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.18.0)
-- ~9,400 lines of source code (~7,400 src/ + ~1,050 server/ + ~900 vscode-extension/)
+## Stats (as of v1.19.0)
+- ~9,700 lines of source code (~7,700 src/ + ~1,050 server/ + ~900 vscode-extension/)
 - 17 MCP tools (13 free + 4 gated)
 - 15 CLI subcommands (10 original + 5 new in v1.16.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 164 learnings across 17 categories in store (curated from 262 — removed duplicates, tech inventory, bulk-import headers)
+- 168 learnings across 17 categories in store (curated from 262 — removed duplicates, tech inventory, bulk-import headers)
 - 14 bundled starter learnings ship with npm (trimmed from 30 to prevent dedup re-merge)
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
@@ -156,7 +157,8 @@
 - Score: 89% A (30/30 doc, 22/30 infra, 17/20 quality, 20/20 security)
 - VS Code Extension: v0.4.1 published on marketplace (css-llc.contextengine)
 - Pricing page: https://api.compr.ch/contextengine/pricing (live, static HTML)
-- E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 21, 2026)
+- E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 23, 2026)
+- Protocol Firewall: escalating compliance enforcement on all 17 tool responses
 
 ## Critical Rules
 1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)
@@ -167,9 +169,26 @@
 6. **Skill files follow strict schema** — `SKILL.md` must have `## When to use`, `## Key rules`, `## Examples` sections
 7. **server/ is NOT published to npm** — `files` field in package.json restricts to `dist/`, `defaults/`, `skills/`, `examples/`
 8. **Never expose scoring internals in README** — exact point values, category weights, anti-gaming methods are trade secrets
-9. **SSH to Gandi VPS** — Use `sshpass -p '<REDACTED_PASSWORD>' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`. SSH key passphrase is lost. For rsync: exclude `node_modules/`, `data/`, `delta-modules/`.
-10. **End-of-session protocol** — before ending ANY session, the agent MUST: (a) update `copilot-instructions.md` with new facts, (b) create/update `SKILLS.md`, (c) call `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit with descriptive message, (f) push to all remotes.
-11. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
+9. **Never expose Protocol Firewall internals in README** — exact escalation thresholds, scoring formula, truncation limits, exempt tool list, and cache intervals are trade secrets
+10. **SSH to Gandi VPS** — Use `sshpass -p '<REDACTED_PASSWORD>' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`. SSH key passphrase is lost. For rsync: exclude `node_modules/`, `data/`, `delta-modules/`.
+11. **End-of-session protocol** — before ending ANY session, the agent MUST: (a) update `copilot-instructions.md` with new facts, (b) create/update `SKILLS.md`, (c) call `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit with descriptive message, (f) push to all remotes.
+12. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
+
+## v1.19.0 — Protocol Firewall (Feb 2026)
+### Architecture
+- **File**: `src/firewall.ts` — `ProtocolFirewall` class
+- **Design**: Wraps EVERY tool response via `respond(toolName, text)` helper in `index.ts`
+- **Replaces**: Old `maybeNudge()` system (only on 2/17 tools, zero consequences)
+- **Exempt tools**: Compliance actions (save_learning, save_session, end_session, etc.) pass through unmodified
+- **Obligations tracked**: learnings saved, session saved, git status, doc freshness
+- **Escalation levels**: silent → footer → header → degraded (output truncation)
+- **⚠️ IP PROTECTION**: Do NOT expose thresholds, scoring formula, truncation limits, or exempt tool list in README/docs
+
+### CSP Fix (Pricing Page)
+- Helmet default CSP blocked inline scripts — checkout buttons were completely broken
+- Extracted `<script>` from pricing.html → `public/pricing.js` (external file)
+- Added `express.static` route: `/contextengine/static/` → `public/`
+- Configured Helmet CSP directives: `script-src 'self'`, `style-src 'unsafe-inline'`, `connect-src` for Stripe
 
 ## v1.16.0 — Agent DX Improvements (Feb 2026)
 ### New CLI Commands (5)
