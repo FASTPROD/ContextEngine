@@ -97,27 +97,13 @@ export function updateInfoPanel(snapshot: GitSnapshot): void {
 
 function getInfoHtml(snapshot?: GitSnapshot): string {
   const totalDirty = snapshot?.totalDirty ?? 0;
-  const projects = snapshot?.projects ?? [];
-
-  // Build live status rows
-  let statusRows = "";
-  for (const p of projects) {
-    const icon = p.dirty === 0 ? "✅" : "⚠️";
-    const cls = p.dirty === 0 ? "clean" : "dirty";
-    statusRows += `
-      <tr class="${cls}">
-        <td>${icon} ${escHtml(p.name)}</td>
-        <td><code>${escHtml(p.branch)}</code></td>
-        <td>${p.dirty}</td>
-      </tr>`;
-  }
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ContextEngine — What We Check</title>
+  <title>ContextEngine — Agent Memory &amp; Compliance</title>
   <style>
     body {
       font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, sans-serif);
@@ -138,11 +124,6 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
       padding: 16px 20px;
       margin: 12px 0;
     }
-    table { width: 100%; border-collapse: collapse; margin: 8px 0; }
-    th { text-align: left; padding: 6px 12px; border-bottom: 2px solid var(--vscode-widget-border); font-size: 0.85em; text-transform: uppercase; color: var(--vscode-descriptionForeground); }
-    td { padding: 6px 12px; border-bottom: 1px solid var(--vscode-widget-border); }
-    tr.dirty td { color: var(--vscode-errorForeground); }
-    tr.clean td { color: var(--vscode-testing-iconPassed, #4caf50); }
     code { background: var(--vscode-textCodeBlock-background); padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
     .check-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--vscode-widget-border); }
     .check-item:last-child { border-bottom: none; }
@@ -159,11 +140,55 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
     .badge-free { background: #2ea04370; color: #4caf50; }
     .badge-pro { background: #e6a81770; color: #ffc107; cursor: pointer; text-decoration: none; }
     .badge-pro:hover { background: #e6a817a0; }
-    .hero { text-align: center; padding: 16px 0; }
-    .hero-stat { font-size: 2.5em; font-weight: 700; }
-    .hero-clean { color: var(--vscode-testing-iconPassed, #4caf50); }
-    .hero-dirty { color: var(--vscode-errorForeground, #f44336); }
     a { color: var(--vscode-textLink-foreground); }
+    .firewall-hero {
+      text-align: center;
+      padding: 20px;
+      margin: 8px 0 20px;
+      background: linear-gradient(135deg, rgba(76,175,80,0.08), rgba(33,150,243,0.06));
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 8px;
+    }
+    .firewall-hero .shield { font-size: 3em; }
+    .firewall-title { font-size: 1.4em; font-weight: 700; margin: 8px 0 4px; }
+    .firewall-status { font-size: 0.95em; color: var(--vscode-testing-iconPassed, #4caf50); }
+    .analogy-box {
+      background: linear-gradient(135deg, rgba(33,150,243,0.06), rgba(33,150,243,0.02));
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin: 12px 0;
+    }
+    .analogy-box p { margin: 8px 0; }
+    .analogy-box strong { color: var(--vscode-textLink-foreground); }
+    .step-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+    .step-pill {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85em;
+      font-weight: 600;
+    }
+    .step-green { background: #2ea04340; color: #4caf50; }
+    .step-yellow { background: #ffc10740; color: #ffc107; }
+    .step-orange { background: #ff980040; color: #ff9800; }
+    .step-red { background: #f4433640; color: #f44336; }
+    .step-arrow { color: var(--vscode-descriptionForeground); font-size: 1.2em; }
+    .mini-status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.85em;
+      font-weight: 600;
+    }
+    .mini-clean { background: #2ea04330; color: #4caf50; }
+    .mini-dirty { background: #f4433630; color: #f44336; }
     .cta-box {
       text-align: center;
       padding: 20px;
@@ -191,41 +216,111 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
 
   <h1>🛡️ ContextEngine</h1>
   <p class="subtitle">
-    Below is the list of what we check and do to support the memory loss of your AI agents.
+    Persistent memory and compliance enforcement for AI coding agents.
+    <br>What VS Code doesn't do — we do.
   </p>
 
-  <!-- Live Status -->
-  <div class="hero">
-    <div class="hero-stat ${totalDirty === 0 ? "hero-clean" : "hero-dirty"}">
-      ${totalDirty === 0 ? "✅ All Clean" : `⚠️ ${totalDirty} Uncommitted`}
+  <!-- ======================================================== -->
+  <!-- HERO: Protocol Firewall                                   -->
+  <!-- ======================================================== -->
+  <div class="firewall-hero">
+    <div class="shield">🛡️</div>
+    <div class="firewall-title">Protocol Firewall</div>
+    <div class="firewall-status">Active on all 17 MCP tools</div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- PLAIN-ENGLISH EXPLANATION                                 -->
+  <!-- ======================================================== -->
+  <h2>🤔 What is the Protocol Firewall?</h2>
+
+  <div class="analogy-box">
+    <p>
+      Think of it like a <strong>speed camera for your AI agent</strong>.
+    </p>
+    <p>
+      When you hire a real developer, they naturally remember lessons, save their work,
+      and document what they did. AI agents don't — they <strong>forget everything</strong>
+      the moment the conversation ends.
+    </p>
+    <p>
+      The Protocol Firewall <strong>watches what the agent does</strong> during a session.
+      If the agent isn't saving learnings, isn't committing code, isn't updating documentation —
+      the firewall <strong>progressively reduces the quality of answers</strong> the agent gets back.
+    </p>
+    <p>
+      First a gentle reminder. Then a visible warning. Then it actually
+      <strong>cuts the data short</strong>, making it impossible for the agent to work
+      effectively without doing the housekeeping first.
+    </p>
+    <p>
+      <strong>Why this works:</strong> Rules in documents can be ignored. Extension notifications
+      can be dismissed. But an agent can't ignore getting truncated data from its own tools.
+      It's the only mechanism that truly makes AI agents comply.
+    </p>
+  </div>
+
+  <div style="text-align: center; margin: 16px 0;">
+    <div class="step-flow">
+      <span class="step-pill step-green">✅ Silent</span>
+      <span class="step-arrow">→</span>
+      <span class="step-pill step-yellow">📝 Footer reminder</span>
+      <span class="step-arrow">→</span>
+      <span class="step-pill step-orange">⚠️ Header warning</span>
+      <span class="step-arrow">→</span>
+      <span class="step-pill step-red">🚫 Data truncated</span>
+    </div>
+    <div style="color: var(--vscode-descriptionForeground); font-size: 0.85em; margin-top: 4px;">
+      Escalation resets when the agent does the right thing (saves learnings, commits, etc.)
     </div>
   </div>
 
-  ${
-    projects.length > 0
-      ? `
-  <div class="card">
-    <table>
-      <thead>
-        <tr><th>Project</th><th>Branch</th><th>Dirty Files</th></tr>
-      </thead>
-      <tbody>${statusRows}</tbody>
-    </table>
-  </div>`
-      : ""
-  }
-
-  <!-- What We Check -->
-  <h2>📋 What ContextEngine Monitors</h2>
+  <!-- ======================================================== -->
+  <!-- WHAT CE UNIQUELY PROVIDES (not in VS Code natively)       -->
+  <!-- ======================================================== -->
+  <h2>🧠 What ContextEngine Does (that VS Code Doesn't)</h2>
 
   <div class="card">
     <div class="check-item">
-      <span class="check-icon">📂</span>
+      <span class="check-icon">🛡️</span>
       <div>
-        <div class="check-label">Uncommitted Git Changes <span class="badge badge-free">FREE</span></div>
+        <div class="check-label">Protocol Firewall <span class="badge badge-free">FREE</span></div>
         <div class="check-desc">
-          Scans all workspace repos every 2 minutes. Warns when files accumulate without commits.
-          Escalates from yellow → red → popup notifications. Agents see this and act.
+          Wraps every tool response. Monitors 4 obligations: learnings saved, session saved,
+          git committed, docs updated. Escalates enforcement automatically.
+        </div>
+      </div>
+    </div>
+
+    <div class="check-item">
+      <span class="check-icon">🧠</span>
+      <div>
+        <div class="check-label">Persistent Memory (Learnings) <span class="badge badge-free">FREE</span></div>
+        <div class="check-desc">
+          Agents discover patterns, fixes, and rules — these are saved permanently and
+          auto-surface in future sessions. Your agent never makes the same mistake twice.
+        </div>
+      </div>
+    </div>
+
+    <div class="check-item">
+      <span class="check-icon">💾</span>
+      <div>
+        <div class="check-label">Session Continuity <span class="badge badge-free">FREE</span></div>
+        <div class="check-desc">
+          Decisions, progress, and blockers are saved between conversations.
+          The next agent picks up exactly where the last one left off.
+        </div>
+      </div>
+    </div>
+
+    <div class="check-item">
+      <span class="check-icon">🔍</span>
+      <div>
+        <div class="check-label">Knowledge Search <span class="badge badge-free">FREE</span></div>
+        <div class="check-desc">
+          Hybrid keyword + AI-powered search across all your project docs, learnings,
+          git history, and operational data. One query, all context.
         </div>
       </div>
     </div>
@@ -235,43 +330,9 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
       <div>
         <div class="check-label">Documentation Freshness <span class="badge badge-free">FREE</span></div>
         <div class="check-desc">
-          Checks if <code>copilot-instructions.md</code>, <code>SKILLS.md</code>, and
-          <code>CLAUDE.md</code> were updated in the current session. Stale docs = agents
-          lose context next session.
-        </div>
-      </div>
-    </div>
-
-    <div class="check-item">
-      <span class="check-icon">🧠</span>
-      <div>
-        <div class="check-label">Learnings Saved <span class="badge badge-free">FREE</span></div>
-        <div class="check-desc">
-          Tracks whether the agent called <code>save_learning</code> during the session.
-          Every reusable pattern, fix, or discovery should be saved as a permanent learning
-          so future agents don't repeat mistakes.
-        </div>
-      </div>
-    </div>
-
-    <div class="check-item">
-      <span class="check-icon">💾</span>
-      <div>
-        <div class="check-label">Session Context Saved <span class="badge badge-free">FREE</span></div>
-        <div class="check-desc">
-          Checks if the agent called <code>save_session</code> to persist decisions, progress,
-          and active tasks. Without this, the next session starts from scratch.
-        </div>
-      </div>
-    </div>
-
-    <div class="check-item">
-      <span class="check-icon">🚀</span>
-      <div>
-        <div class="check-label">Git Push to Remotes <span class="badge badge-free">FREE</span></div>
-        <div class="check-desc">
-          Verifies that commits are pushed to all configured remotes (origin, gdrive, etc.).
-          Committed but unpushed work is still at risk.
+          Detects when code was committed but <code>copilot-instructions.md</code>,
+          <code>SKILLS.md</code>, or <code>CLAUDE.md</code> weren't updated.
+          Stale docs = agents lose context next session.
         </div>
       </div>
     </div>
@@ -281,126 +342,95 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
       <div>
         <div class="check-label">Project Health Score <a href="https://api.compr.ch/contextengine/pricing" class="badge badge-pro">PRO</a></div>
         <div class="check-desc">
-          Scores your project on AI-readiness (0-100%): documentation quality,
-          infrastructure setup, code quality, and security posture. Letter grade A+ to F.
+          AI-readiness score (0-100%): documentation, infrastructure, code quality,
+          and security. Know exactly what to improve for better agent performance.
         </div>
       </div>
     </div>
 
     <div class="check-item">
-      <span class="check-icon">🔍</span>
+      <span class="check-icon">🔎</span>
       <div>
         <div class="check-label">Compliance Audit <a href="https://api.compr.ch/contextengine/pricing" class="badge badge-pro">PRO</a></div>
         <div class="check-desc">
           Checks port conflicts, git hooks, .env files, Docker config, PM2 setup,
-          EOL runtimes, outdated deps — everything an agent might misconfigure.
+          EOL runtimes, outdated deps — across all your projects at once.
         </div>
       </div>
     </div>
   </div>
 
-  <!-- End-of-Session Protocol -->
-  <h2>🏁 End-of-Session Protocol</h2>
-  <p>
-    Before ending ANY coding session, the agent <strong>MUST</strong> complete this checklist.
-    The extension enforces it with escalating reminders:
+  <!-- ======================================================== -->
+  <!-- GIT STATUS — compact, secondary                           -->
+  <!-- ======================================================== -->
+  <h2>📂 Git Status</h2>
+  <div class="card" style="text-align: center; padding: 12px 20px;">
+    <span class="mini-status ${totalDirty === 0 ? "mini-clean" : "mini-dirty"}">
+      ${totalDirty === 0 ? "✅ All clean" : `⚠️ ${totalDirty} uncommitted`}
+    </span>
+    <span style="color: var(--vscode-descriptionForeground); font-size: 0.85em; margin-left: 8px;">
+      See VS Code Source Control panel for details
+    </span>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- END-OF-SESSION PROTOCOL                                   -->
+  <!-- ======================================================== -->
+  <h2>🏁 What the Agent Must Do Before Ending</h2>
+  <p style="color: var(--vscode-descriptionForeground); font-size: 0.9em;">
+    The Protocol Firewall enforces this automatically — no need to remind the agent yourself.
   </p>
 
   <div class="card">
     <div class="check-item">
       <span class="check-icon">1️⃣</span>
       <div>
-        <div class="check-label">Update <code>copilot-instructions.md</code></div>
-        <div class="check-desc">Add new facts, architecture changes, decisions from this session</div>
+        <div class="check-label">Save learnings</div>
+        <div class="check-desc">Every reusable pattern or fix becomes permanent memory for future agents</div>
       </div>
     </div>
     <div class="check-item">
       <span class="check-icon">2️⃣</span>
       <div>
-        <div class="check-label">Update <code>SKILLS.md</code></div>
-        <div class="check-desc">Document new capabilities the agent demonstrated</div>
+        <div class="check-label">Update documentation</div>
+        <div class="check-desc"><code>copilot-instructions.md</code> and <code>SKILLS.md</code> — so the next agent has full context</div>
       </div>
     </div>
     <div class="check-item">
       <span class="check-icon">3️⃣</span>
       <div>
-        <div class="check-label">Save learnings</div>
-        <div class="check-desc">Call <code>save_learning</code> for every reusable pattern or fix</div>
+        <div class="check-label">Commit &amp; push</div>
+        <div class="check-desc">With a descriptive message — not "fix stuff" but real context that's searchable</div>
       </div>
     </div>
     <div class="check-item">
       <span class="check-icon">4️⃣</span>
       <div>
-        <div class="check-label">Commit with descriptive message</div>
-        <div class="check-desc">Not "fix stuff" — real commit messages that future agents can search</div>
-      </div>
-    </div>
-    <div class="check-item">
-      <span class="check-icon">5️⃣</span>
-      <div>
-        <div class="check-label">Push to all remotes</div>
-        <div class="check-desc">origin (GitHub) + backup remotes (gdrive, etc.)</div>
-      </div>
-    </div>
-    <div class="check-item">
-      <span class="check-icon">6️⃣</span>
-      <div>
         <div class="check-label">Save session</div>
-        <div class="check-desc">Persist decisions, progress, and blockers for the next agent</div>
+        <div class="check-desc">Persist decisions, progress, and blockers so the next session picks up seamlessly</div>
       </div>
     </div>
   </div>
 
-  <!-- NEW: Doc Sync -->
-  <div class="check-item" style="margin-top: 12px;">
-    <span class="check-icon">📝</span>
-    <div>
-      <div class="check-label">CE Doc Sync <span class="badge badge-free">NEW</span></div>
-      <div class="check-desc">
-        Automatically detects when code was committed but CE docs (copilot-instructions.md,
-        SKILLS.md, SCORE.md) weren't updated. Fires a warning notification and offers
-        <code>@contextengine /sync</code> to check freshness. <strong>Event-driven, not memory-driven.</strong>
-      </div>
-    </div>
-  </div>
-
-  <!-- How It Works -->
-  <h2>⚙️ How It Works</h2>
-  <div class="card">
-    <p><strong>MCP Server</strong> (reactive) — agents call tools like <code>search_context</code>,
-    <code>save_learning</code>, <code>save_session</code>. The server nudges when agents go
-    15+ tool calls without saving.</p>
-
-    <p><strong>VS Code Extension</strong> (proactive) — monitors git status on a timer,
-    shows the status bar indicator, fires notification popups, provides
-    <code>@contextengine</code> in Copilot Chat. This is what you're looking at.</p>
-
-    <p><strong>Together</strong> — the MCP server provides the knowledge base and persistence,
-    the extension provides the visibility and enforcement. Agents can't ignore what's
-    always visible in the status bar.</p>
-  </div>
-
-  <!-- Upgrade CTA -->
+  <!-- ======================================================== -->
+  <!-- UPGRADE CTA                                               -->
+  <!-- ======================================================== -->
   <div class="cta-box">
     <div style="font-size: 1.3em; font-weight: 700;">⭐ Unlock PRO Features</div>
     <p class="cta-subtitle">Project scoring, compliance audit, port conflict detection, multi-project discovery.</p>
     <div style="margin: 12px 0;">
       <strong>Pro</strong> $2/mo · <strong>Team</strong> $12/mo · <strong>Enterprise</strong> $36/mo
     </div>
-    <a class="cta-button" href="https://compr.ch/contextengine/pricing">Get ContextEngine PRO →</a>
+    <a class="cta-button" href="https://api.compr.ch/contextengine/pricing">Get ContextEngine PRO →</a>
     <p class="cta-subtitle">Already have a key? Run <code>npx @compr/contextengine-mcp activate</code></p>
   </div>
 
   <p style="text-align: center; margin-top: 24px; color: var(--vscode-descriptionForeground);">
-    ContextEngine v0.4.0 · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
+    ContextEngine v0.5.0 · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
     · <a href="https://github.com/FASTPROD/ContextEngine">GitHub</a>
     · <a href="https://www.npmjs.com/package/@compr/contextengine-mcp">npm</a>
   </p>
 
 </body>
 </html>`;
-}
-
-function escHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
