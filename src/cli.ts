@@ -262,6 +262,7 @@ import {
   saveLearning,
   deleteLearning,
   importLearningsFromFile,
+  autoImportFromSources,
   LEARNING_CATEGORIES,
 } from "./learnings.js";
 import {
@@ -731,6 +732,13 @@ async function cliEndSession(): Promise<void> {
   }
 
   checks.push("");
+
+  // --- Auto-import learnings from docs before checking stats ---
+  const docSources = loadSources().map((s) => ({ path: s.path, name: s.name }));
+  const autoImport = autoImportFromSources(docSources);
+  if (autoImport.imported > 0) {
+    checks.push(`📥 Auto-imported ${autoImport.imported} new learnings from ${autoImport.total} doc sources\n`);
+  }
 
   // --- Check 3: Learnings Store ---
   checks.push("## 3. Learnings Store\n");

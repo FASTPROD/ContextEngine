@@ -43,6 +43,7 @@ import {
   learningsStats,
   formatLearnings,
   importLearningsFromFile,
+  autoImportFromSources,
   LEARNING_CATEGORIES,
 } from "./learnings.js";
 import { readFileSync, existsSync, watch, statSync } from "fs";
@@ -131,6 +132,17 @@ async function reindex(): Promise<void> {
         `[ContextEngine] 💻 Parsed ${codeChunks} code chunks from source files`
       );
     }
+  }
+
+  // Auto-import learnings from discovered doc sources
+  // Dedup is built-in — safe to call on every reindex, no duplicates created
+  const autoImport = autoImportFromSources(
+    sources.map((s) => ({ path: s.path, name: s.name }))
+  );
+  if (autoImport.imported > 0) {
+    console.error(
+      `[ContextEngine] 📥 Auto-imported ${autoImport.imported} new learnings from ${autoImport.total} doc sources (${autoImport.updated} updated)`
+    );
   }
 
   // Inject learnings as searchable chunks (project-scoped to prevent IP leakage)
@@ -442,7 +454,7 @@ server.tool(
       : "⏳ loading...";
 
     const text = [
-      `ContextEngine v1.19.0`,
+      `ContextEngine v1.19.1`,
       `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
       "",
       ...lines,

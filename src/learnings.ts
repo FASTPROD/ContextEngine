@@ -637,10 +637,43 @@ export function learningsToChunks(projects?: string[]): Chunk[] {
 }
 
 /**
+ * Auto-import learnings from discovered knowledge source files.
+ *
+ * Called during reindex — scans all source markdown files and extracts
+ * rules into the permanent learning store. Deduplication is built-in,
+ * so calling repeatedly on the same files is safe (no duplicates).
+ *
+ * This ensures documentation rules become searchable learnings without
+ * requiring the user or agent to manually trigger `import_learnings`.
+ */
+export function autoImportFromSources(
+  sources: Array<{ path: string; name: string }>,
+): { total: number; imported: number; updated: number } {
+  let totalImported = 0;
+  let totalUpdated = 0;
+  let processed = 0;
+
+  for (const source of sources) {
+    // Only process markdown files
+    if (!source.path.endsWith(".md")) continue;
+    if (!existsSync(source.path)) continue;
+
+    // Extract project name from source name (e.g., "ContextEngine — copilot-instructions.md")
+    const project = source.name.split(" — ")[0]?.trim() || undefined;
+
+    const result = importLearningsFromFile(source.path, "other", project);
+    totalImported += result.imported;
+    totalUpdated += result.updated;
+    if (result.imported > 0 || result.updated > 0) processed++;
+  }
+
+  return { total: processed, imported: totalImported, updated: totalUpdated };
+}
+
+/**
  * Get the store stats.
  */
-export function learningsStats(): { total: number; categories: Record<string, number> } {
-  const store = loadStore();
+export function learningsStats(): { total: number; categories: Record<string, number> } {  const store = loadStore();
   const categories: Record<string, number> = {};
   for (const l of store.learnings) {
     categories[l.category] = (categories[l.category] || 0) + 1;
