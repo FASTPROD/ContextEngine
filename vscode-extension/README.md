@@ -85,6 +85,10 @@ This separation means:
 - **Always works** — git monitoring works even without ContextEngine CLI installed
 - **Full power when available** — search, sessions, end-session checks when CLI is installed
 
+## Privacy
+
+**ContextEngine runs 100% on your machine.** No project data — code, learnings, sessions, git history, dependencies — is ever sent to an external server. The only network calls are license validation for PRO users (license key + machine ID hash). See the [full privacy details](https://github.com/FASTPROD/ContextEngine#privacy--data-security).
+
 ## Requirements
 
 - VS Code 1.93+
