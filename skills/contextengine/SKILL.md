@@ -1,8 +1,8 @@
 ---
 name: contextengine
 description: "Queryable knowledge base for AI coding agents via MCP. Hybrid BM25 + semantic search across project docs, operational data (git, docker, pm2, nginx), and persistent learnings. Use when: (1) searching project documentation or context files, (2) collecting operational insights from workspaces, (3) storing and retrieving persistent learnings across sessions, (4) auditing project compliance or AI-readiness, (5) managing session data. Zero API keys — runs 100% locally with CPU embeddings."
-homepage: https://github.com/FASTPROD/ContextEngine
-metadata: { "openclaw": { "emoji": "🧠", "requires": { "bins": ["npx"] }, "homepage": "https://github.com/FASTPROD/ContextEngine" } }
+homepage: https://www.npmjs.com/package/@compr/contextengine-mcp
+metadata: { "openclaw": { "emoji": "🧠", "requires": { "bins": ["npx"] }, "homepage": "https://www.npmjs.com/package/@compr/contextengine-mcp" } }
 ---
 
 # ContextEngine — Knowledge Base for AI Agents

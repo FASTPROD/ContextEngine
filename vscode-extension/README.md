@@ -87,7 +87,7 @@ This separation means:
 
 ## Privacy
 
-**ContextEngine runs 100% on your machine.** No project data — code, learnings, sessions, git history, dependencies — is ever sent to an external server. The only network calls are license validation for PRO users (license key + machine ID hash). See the [full privacy details](https://github.com/FASTPROD/ContextEngine#privacy--data-security).
+**ContextEngine runs 100% on your machine.** No project data — code, learnings, sessions, git history, dependencies — is ever sent to an external server. The only network calls are license validation for PRO users (license key + machine ID hash). See the [full privacy details](https://www.npmjs.com/package/@compr/contextengine-mcp#privacy--data-security).
 
 ## Requirements
 
@@ -97,6 +97,6 @@ This separation means:
 
 ## License
 
-BSL-1.1 (Business Source License) — see [LICENSE](https://github.com/FASTPROD/ContextEngine/blob/main/LICENSE)
+BSL-1.1 (Business Source License) — see [LICENSE](https://www.npmjs.com/package/@compr/contextengine-mcp)
 
 © 2026 FASTPROD / compr.ch
