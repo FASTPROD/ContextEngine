@@ -1742,7 +1742,7 @@ export function generateScoreHTML(scores: ProjectScore[]): string {
 ${projectCards}
 
 <div class="footer">
-  <p>ContextEngine · <a href="https://www.npmjs.com/package/@compr/contextengine-mcp" style="color:var(--accent)">npm</a> · <a href="https://github.com/FASTPROD/ContextEngine" style="color:var(--accent)">GitHub</a></p>
+  <p>ContextEngine · <a href="https://www.npmjs.com/package/@compr/contextengine-mcp" style="color:var(--accent)">npm</a></p>
   <p style="margin-top:4px">Scoring: Documentation (30pts) · Infrastructure (30pts) · Code Quality (20pts) · Security (20pts)</p>
 </div>
 </body>
