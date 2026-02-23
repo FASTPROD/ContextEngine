@@ -883,7 +883,6 @@ Examples:
   npx @compr/contextengine-mcp init --yes
   echo "value" | npx @compr/contextengine-mcp save-session my-project notes --stdin
 
-Docs: https://github.com/FASTPROD/ContextEngine
 npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
 `);
 } else if (command === "search") {

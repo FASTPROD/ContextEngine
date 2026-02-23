@@ -427,7 +427,6 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
 
   <p style="text-align: center; margin-top: 24px; color: var(--vscode-descriptionForeground);">
     ContextEngine v0.5.0 · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
-    · <a href="https://github.com/FASTPROD/ContextEngine">GitHub</a>
     · <a href="https://www.npmjs.com/package/@compr/contextengine-mcp">npm</a>
   </p>
 

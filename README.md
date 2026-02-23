@@ -3,8 +3,8 @@
 **An MCP server that turns your project documentation into a queryable knowledge base for AI agents.**
 
 [![npm](https://img.shields.io/npm/v/@compr/contextengine-mcp)](https://www.npmjs.com/package/@compr/contextengine-mcp)
-[![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-blue?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTgiPvCfp6A8L3RleHQ+PC9zdmc+)](https://github.com/FASTPROD/ContextEngine/tree/main/skills/contextengine)
-[![License: BSL-1.1](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](LICENSE)
+[![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-blue?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTgiPvCfp6A8L3RleHQ+PC9zdmc+)](https://www.npmjs.com/package/@compr/contextengine-mcp)
+[![License: BSL-1.1](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](https://www.npmjs.com/package/@compr/contextengine-mcp)
 [![VS Code](https://img.shields.io/badge/VS%20Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine)
 
 ContextEngine indexes your `copilot-instructions.md`, `SKILLS.md`, `CLAUDE.md`, runbooks, and source code — then exposes it via the [Model Context Protocol](https://modelcontextprotocol.io) so AI coding assistants (GitHub Copilot, Claude, Cursor, Windsurf, OpenClaw) can search your accumulated knowledge in real time.
@@ -384,16 +384,13 @@ Each subdirectory is treated as a separate project. For best results:
 
 TypeScript monorepo — MCP server + CLI + search engine + operational collectors.
 
-See the source at [github.com/FASTPROD/ContextEngine](https://github.com/FASTPROD/ContextEngine) for development setup.
+See the [npm package](https://www.npmjs.com/package/@compr/contextengine-mcp) for installation and usage.
 
 ## Development
 
 ```bash
-git clone https://github.com/FASTPROD/ContextEngine.git
-cd ContextEngine
-npm install
-npm run build
-npm start
+npm install @compr/contextengine-mcp
+npx @compr/contextengine-mcp help
 ```
 
 ## Requirements
@@ -403,9 +400,9 @@ npm start
 
 ## Contributing
 
-Issues, feature requests, and PRs welcome at [github.com/FASTPROD/ContextEngine](https://github.com/FASTPROD/ContextEngine/issues).
+Feedback, feature requests, and bug reports welcome — email [yannick@compr.ch](mailto:yannick@compr.ch).
 
-If you're using ContextEngine, we'd love to hear about it — feedback helps us improve.
+If you're using ContextEngine, we'd love to hear about it.
 
 ## Privacy & Data Security
 

@@ -35,11 +35,11 @@
   "license": "BSL-1.1",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/FASTPROD/ContextEngine.git"
+    "url": "https://www.npmjs.com/package/@compr/contextengine-mcp"
   },
-  "homepage": "https://github.com/FASTPROD/ContextEngine#readme",
+  "homepage": "https://www.npmjs.com/package/@compr/contextengine-mcp",
   "bugs": {
-    "url": "https://github.com/FASTPROD/ContextEngine/issues"
+    "email": "yannick@compr.ch"
   },
   "engines": {
     "node": ">=18.0.0"

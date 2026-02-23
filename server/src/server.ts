@@ -581,7 +581,7 @@ app.get("/contextengine/pricing", (_req, res) => {
   if (existsSync(pricingPath)) {
     res.sendFile(pricingPath);
   } else {
-    res.redirect("https://github.com/FASTPROD/ContextEngine#-pro-features");
+    res.redirect("https://www.npmjs.com/package/@compr/contextengine-mcp");
   }
 });
 
