@@ -1,7 +1,6 @@
 # SCORE.md — AI-Readiness Score
 
 **Project**: ContextEngine
-**Version**: v1.19.0
 **Score**: 89/100 (A)
 **Date**: 2026-02-23
 
@@ -18,10 +17,10 @@
 
 | Check | Category | Score | Max | Status | Detail |
 |---|---|---|---|---|---|
-| copilot-instructions.md | Documentation | 10 | 10 | ✅ | 255 lines — comprehensive |
-| README.md | Documentation | 8 | 8 | ✅ | 419 lines |
+| copilot-instructions.md | Documentation | 10 | 10 | ✅ | 304 lines — comprehensive |
+| README.md | Documentation | 8 | 8 | ✅ | 448 lines |
 | Multi-agent patterns | Documentation | 6 | 6 | ✅ | Found: CLAUDE.md, .cursorrules |
-| SKILLS.md | Documentation | 3 | 3 | ✅ | 97 lines |
+| SKILLS.md | Documentation | 3 | 3 | ✅ | 101 lines |
 | .env.example | Documentation | 3 | 3 | ✅ | Present — agents know which env vars to set |
 | Git repository | Infrastructure | 5 | 5 | ✅ | Initialized |
 | .gitignore | Infrastructure | 3 | 3 | ✅ | Present |

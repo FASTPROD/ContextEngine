@@ -5,3 +5,6 @@ dist/
 .npmrc
 .DS_Store
 *.vsix
+
+# Credentials (local-only, never commit)
+.copilot-credentials.md

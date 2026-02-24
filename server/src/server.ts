@@ -519,7 +519,7 @@ if (isStripeEnabled()) {
     const stripe = getStripe()!;
     const { planKey, successUrl, cancelUrl } = req.body;
 
-    if (!planKey || !PRICE_IDS[planKey]) {
+    if (!planKey || !(planKey in PRICE_IDS)) {
       return res.status(400).json({
         error: `Invalid plan. Valid: ${Object.keys(PRICE_IDS).join(", ")}`,
       });
@@ -527,7 +527,7 @@ if (isStripeEnabled()) {
 
     const priceId = PRICE_IDS[planKey];
     if (!priceId) {
-      return res.status(500).json({ error: `Price ID not configured for plan: ${planKey}` });
+      return res.status(503).json({ error: `Plan "${planKey}" is not yet available for purchase. Pricing is coming soon.` });
     }
 
     try {
@@ -536,8 +536,8 @@ if (isStripeEnabled()) {
         payment_method_types: ["card"],
         line_items: [{ price: priceId, quantity: 1 }],
         metadata: { plan_key: planKey },
-        success_url: successUrl || "https://compr.ch/contextengine/success?session_id={CHECKOUT_SESSION_ID}",
-        cancel_url: cancelUrl || "https://compr.ch/contextengine/pricing",
+        success_url: successUrl || "https://api.compr.ch/contextengine/success?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url: cancelUrl || "https://api.compr.ch/contextengine/pricing",
         allow_promotion_codes: true,
       });
 

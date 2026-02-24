@@ -49,14 +49,15 @@
 - **Events handled**: `checkout.session.completed` (auto-seed license + email key), `customer.subscription.deleted` (deactivate), `invoice.payment_failed` (log)
 - **License email**: HTML template via Gandi SMTP (`mail.gandi.net:465`)
 - **Graceful degradation**: Server runs without `STRIPE_SECRET_KEY` — payment endpoints simply not mounted
-- **Plans**: Pro ($2/mo, 2 machines), Team ($12/mo, 5 machines), Enterprise ($36/mo, 10 machines)
-- **Price IDs**: 6 env vars (`STRIPE_PRICE_PRO_MONTHLY`, `..._ANNUAL`, etc.) — set from Stripe Dashboard
+- **Plans**: Pro ($2/mo, $20/yr), Team ($12/mo, $120/yr), Enterprise ($36/mo, $360/yr) — annual = 2 months free
+- **Price IDs**: 6 env vars (`STRIPE_PRICE_PRO_MONTHLY`, `..._ANNUAL`, etc.) — managed via Stripe Hub project (`~/Projects/STRIPE backend/`)
 - **License dedup**: If same email+plan already has active license, extends expiry instead of creating duplicate
 - **stripe_mapping table**: Tracks `subscription_id → license_id` for cancellation handling
 - **⚠ Stripe SDK API version**: Must match `LatestApiVersion` in `node_modules/stripe/types/lib.d.ts` — stripe@14.25 expects `2023-10-16`
 - **Pricing page JS**: `server/public/pricing.html` has billing toggle (monthly/annual) + `checkout()` function that POSTs to `/contextengine/create-checkout-session` with `{planKey, successUrl, cancelUrl}` and redirects to Stripe checkout URL
 - **Success page**: `server/public/success.html` served at `/contextengine/success` — post-checkout landing with activation instructions
-- **Status (Feb 22)**: `stripeEnabled: true` (test key set), but no Stripe prices created yet — checkout returns "Invalid plan" until `STRIPE_PRICE_*` env vars have real price IDs. Products/prices/webhook deferred to STRIPE-BACKEND project.
+- **Stripe Webhook**: Registered directly with Stripe, 3 events (IDs and secret in `.copilot-credentials.md`)
+- **Status (Feb 23)**: ✅ All 6 plans operational — checkout returns valid Stripe URLs for all plans. Products/prices managed via Stripe Hub (`~/Projects/STRIPE backend/`). Webhook configured. VPS `ecosystem.config.cjs` has all price IDs + webhook secret.
 
 ### Project-Scoped Learnings (v1.18.0 Security Fix)
 - **Problem**: `list_learnings` MCP tool, CLI `list-learnings`, and `learningsToChunks()` (search index injection) exposed ALL learnings from ALL projects to any agent — cross-project IP leakage risk
@@ -68,11 +69,11 @@
 ## Infrastructure
 - **Production URL**: `https://api.compr.ch/contextengine/` (live, SSL)
 - **Production server**: Gandi VPS `92.243.24.157` (Debian 10 Buster, admin user)
-- **SSH**: Password auth — `sshpass -p '#Crowlr@2023' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157` (SSH key passphrase lost)
+- **SSH**: Password auth (credentials in `.copilot-credentials.md`, SSH key passphrase lost)
 - **Server path**: `/var/www/contextengine-server/` (code + node_modules + dist/ + delta-modules/)
 - **Dist path**: `/var/www/contextengine-dist/` (main ContextEngine compiled output, for gen-delta)
 - **Delta modules**: `/var/www/contextengine-server/delta-modules/` — agents.mjs (35.8KB, obfuscated), collectors.mjs (7.8KB, obfuscated), search-adv.mjs (1.0KB, obfuscated)
-- **License DB**: `/var/www/contextengine-server/data/licenses.db` (seeded: `CE-F03F-0457-F812-B486`, enterprise, 10 machines, expires 2027-02-20)
+- **License DB**: `/var/www/contextengine-server/data/licenses.db` (seeded license key in `.copilot-credentials.md`, enterprise, 10 machines, expires 2027-02-20)
 - **Process**: PM2 `contextengine-api` on port 8010, managed via `ecosystem.config.cjs`
 - **PM2 config**: `/var/www/contextengine-server/ecosystem.config.cjs` — env vars (STRIPE_SECRET_KEY, SMTP_*, PORT). Must use `.cjs` extension (package.json has `"type": "module"`, PM2 require() fails with `.js`). Restart with `npx pm2 restart ecosystem.config.cjs` to pick up env changes, then `npx pm2 save`.
 - **Port**: 8010 (localhost only, proxied via nginx)
@@ -90,10 +91,17 @@
 - `npm install` on VPS (better-sqlite3@9.4.3 pinned for C++17 compatibility)
 - `npx tsc` on VPS (cosmetic type errors from missing @types/* — JS emits fine)
 - gen-delta: `CONTEXTENGINE_DIST=/var/www/contextengine-dist node dist/gen-delta.js 1.15.0`
-- License seeded: `node dist/seed.js yannick@compr.ch enterprise 12`
+- License seeded (see `.copilot-credentials.md` for seed command)
 - Health: `curl https://api.compr.ch/contextengine/health` -> `{"status":"healthy","deltaModules":3,"activeLicenses":1,"stripeEnabled":true}`
 - Pricing: `https://api.compr.ch/contextengine/pricing` (live, JS-powered checkout buttons)
 - Success: `https://api.compr.ch/contextengine/success` (post-checkout landing page)
+
+### VPS Config Update (2026-02-23)
+- `ecosystem.config.cjs` updated with 6 `STRIPE_PRICE_*` env vars + `STRIPE_WEBHOOK_SECRET`
+- Server code redeployed: checkout validation fix (distinguishes invalid plan vs unconfigured price)
+- Fallback URLs fixed: `success_url` and `cancel_url` now default to `api.compr.ch` (was `compr.ch`)
+- All 6 checkout plans verified operational via `curl` tests
+- **STRIPE-BACKEND project**: Stripe products/prices/webhook management lives in a separate `~/Projects/STRIPE backend/` project, not in this repo
 
 ## Source Files
 | File | Purpose |
@@ -173,7 +181,7 @@
 7. **server/ is NOT published to npm** — `files` field in package.json restricts to `dist/`, `defaults/`, `skills/`, `examples/`
 8. **Never expose scoring internals in README** — exact point values, category weights, anti-gaming methods are trade secrets
 9. **Never expose Protocol Firewall internals in README** — exact escalation thresholds, scoring formula, truncation limits, exempt tool list, and cache intervals are trade secrets
-10. **SSH to Gandi VPS** — Use `sshpass -p '#Crowlr@2023' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`. SSH key passphrase is lost. For rsync: exclude `node_modules/`, `data/`, `delta-modules/`.
+10. **SSH to Gandi VPS** — Credentials in `.copilot-credentials.md`. SSH key passphrase is lost. For rsync: exclude `node_modules/`, `data/`, `delta-modules/`.
 11. **End-of-session protocol** — before ending ANY session, the agent MUST: (a) update `copilot-instructions.md` with new facts, (b) create/update `SKILLS.md`, (c) call `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit with descriptive message, (f) push to all remotes.
 12. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
 
@@ -253,7 +261,7 @@
 
 ## VS Code Extension (v0.5.0)
 - **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
-- **Publisher**: `css-llc` (Azure DevOps org `css-llc`, personal MS account `ymolinier@hotmail.com`)
+- **Publisher**: `css-llc` (Azure DevOps org `css-llc`, account details in `.copilot-credentials.md`)
 - **PAT**: stored in Azure DevOps — Marketplace → Manage scope, 1-year expiry
 - **Source**: `vscode-extension/` (8 TypeScript source files, ~1,300 lines)
 - **Icon**: Red compr.app logo (256x256 PNG, from `COMPR-app/pwa_assets/compr/logo512.png` hue-shifted)
