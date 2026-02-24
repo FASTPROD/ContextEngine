@@ -2,7 +2,7 @@
   "name": "contextengine",
   "displayName": "ContextEngine — AI Agent Compliance",
   "description": "Protocol Firewall + durable memory for AI coding agents. The only mechanism that truly makes agents comply — progressive response degradation when agents skip learnings, commits, or documentation. Your AI sessions end clean, not chaotic.",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "css-llc",
   "license": "BSL-1.1",
   "icon": "media/icon.png",
