@@ -2,7 +2,7 @@
 
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
-- **GitHub**: FASTPROD/ContextEngine (PRIVATE repo — 404 for unauthenticated visitors)
+- **GitHub**: FASTPROD/ContextEngine (PUBLIC repo)
 - **Version**: v1.19.1
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
@@ -162,6 +162,10 @@
 - Delta obfuscation: terser mangle+compress, 46-72% size reduction
 - Auto-import: learnings extracted from doc sources during reindex + end-session
 - Privacy section: README documents local-first architecture, server never receives code/learnings
+- Learning quality gates: min 15 chars, auto-categorize "other", import filters (v1.19.1)
+- Learnings store: 942 quality rules (post-dedup + junk purge)
+- GitHub repo: PUBLIC, 9 topics, v1.19.1 release published
+- Credentials: extracted to `.copilot-credentials.md` (gitignored, never committed)
 
 ## Critical Rules
 1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)
@@ -193,7 +197,15 @@
 - Added `express.static` route: `/contextengine/static/` → `public/`
 - Configured Helmet CSP directives: `script-src 'self'`, `style-src 'unsafe-inline'`, `connect-src` for Stripe
 
-## v1.19.1 — Auto-Import & Delta Obfuscation (Feb 2026)
+## v1.19.1 — Auto-Import, Quality Gates & Delta Obfuscation (Feb 2026)
+### Learning Quality Gates
+- **Constant**: `MIN_RULE_LENGTH = 15` in `src/learnings.ts` — rejects rules shorter than 15 chars
+- **saveLearning()**: Throws `Error("Rule must be at least 15 characters")` for short rules; auto-corrects `"other"` category via `inferCategory()`
+- **inferCategory()**: New function with 30+ keyword→category mappings (e.g. nginx→infrastructure, React→frontend, SQL→database)
+- **MCP handler**: `save_learning` in `src/index.ts` wrapped in try-catch — surfaces rejection message to agent as `❌ Learning rejected: ...`
+- **Import filters**: `flushRule()`, `importFromJson()`, `importFromMarkdown()` all enforce MIN_RULE_LENGTH + try-catch to prevent import crashes
+- **Purge results**: 1,626 → 1,500 (dedup) → 942 (junk < 15 chars removed), 190 reclassified from "other" to proper categories
+
 ### Auto-Import Learnings from Doc Sources
 - **Function**: `autoImportFromSources()` in `src/learnings.ts`
 - **Trigger**: Called automatically during `reindex()` (MCP startup + file changes) and `cliEndSession()` (CLI end-session)
@@ -216,9 +228,9 @@
 - Extension README links to full details
 
 ### GitHub Repository Visibility
-- Repo `FASTPROD/ContextEngine` is **PRIVATE** — returns 404 for unauthenticated visitors
-- npm README links to GitHub are dead links for public visitors
-- Decision pending: make public or update links
+- Repo `FASTPROD/ContextEngine` is **PUBLIC** (changed Feb 24, 2026)
+- 9 topics: mcp, mcp-server, ai-agents, knowledge-base, vscode, claude-desktop, cursor, typescript, local-first
+- v1.19.1 GitHub Release published with release notes
 
 ## v1.16.0 — Agent DX Improvements (Feb 2026)
 ### New CLI Commands (5)

@@ -40,6 +40,14 @@
 - When modifying firewall: always test with `npx vitest run` — all 25 tests must pass
 - The `respond()` helper in `index.ts` is the single integration point — all tools funnel through it
 
+### Learning Quality Gates (v1.19.1)
+- **Minimum rule length**: `MIN_RULE_LENGTH = 15` in `src/learnings.ts` — `saveLearning()` throws if rule < 15 chars
+- **Auto-categorization**: `inferCategory()` maps 30+ keywords to proper categories when agent sends "other"
+- **Import filters**: `importFromMarkdown()` and `importFromJson()` skip rules < 15 chars silently
+- **MCP rejection**: `index.ts` `save_learning` handler has try-catch — surfaces rejection message to agents
+- All H3 headings, bold bullets, inline-category bullets, and table rows in markdown import check MIN_RULE_LENGTH
+- `flushRule()` has its own length check + try-catch to prevent import crashes
+
 ### Build & Test
 - `npx tsc` — TypeScript compilation (strict mode)
 - `npx vitest run` — 25 tests across 3 files (search, learnings, activation)
@@ -53,7 +61,7 @@
 - `server/` is NEVER published to npm
 
 ### VPS Deployment
-- SSH: `sshpass -p '#Crowlr@2023' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`
+- Credentials in `.copilot-credentials.md` (gitignored)
 - rsync/scp hang — use `cat local | ssh 'cat > remote'` instead
 - Server path: `/var/www/contextengine-server/`
 - Dist path: `/var/www/contextengine-dist/`
@@ -121,10 +129,11 @@ await saveLearning({
 
 ### Deploying a single file to VPS
 ```bash
-cat dist/file.js | sshpass -p '#Crowlr@2023' ssh -o PubkeyAuthentication=no \
+# See .copilot-credentials.md for SSH credentials
+cat dist/file.js | sshpass -p '<PASSWORD>' ssh -o PubkeyAuthentication=no \
   -o StrictHostKeyChecking=no admin@92.243.24.157 \
   'cat > /var/www/contextengine-dist/file.js'
 ```
 
 ---
-*Last updated: 2026-02-23 — v1.19.0 + extension v0.4.1*
+*Last updated: 2026-02-24 — v1.19.1 + quality gates + repo public*
