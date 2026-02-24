@@ -182,8 +182,12 @@ function extractTags(rule: string, context: string, category: string): string[] 
   return Array.from(tags);
 }
 
+/** Minimum rule length — anything shorter is noise, not knowledge */
+const MIN_RULE_LENGTH = 15;
+
 /**
  * Save a new learning. Returns the created learning with ID.
+ * Rejects rules shorter than MIN_RULE_LENGTH and auto-corrects "other" category.
  */
 export function saveLearning(
   category: string,
@@ -191,6 +195,25 @@ export function saveLearning(
   context: string,
   project?: string
 ): Learning {
+  const trimmedRule = rule.trim();
+
+  // Quality gate: reject junk rules
+  if (trimmedRule.length < MIN_RULE_LENGTH) {
+    throw new Error(
+      `Rule too short (${trimmedRule.length} chars, min ${MIN_RULE_LENGTH}). ` +
+      `Learnings must be actionable sentences, not single words. Example: ` +
+      `"Always restart Flask after model changes — stale to_dict() cache"`
+    );
+  }
+
+  // Quality gate: auto-correct "other" category by inferring from rule + context
+  if (category === "other") {
+    const inferred = inferCategory(trimmedRule, context);
+    if (inferred !== "other") {
+      category = inferred;
+    }
+  }
+
   const store = loadStore();
   const now = new Date().toISOString();
 
@@ -372,16 +395,24 @@ function importFromJson(content: string, defaultProject?: string): ImportResult 
         result.errors.push(`Skipped entry missing rule or category: ${JSON.stringify(item).substring(0, 80)}`);
         continue;
       }
+      if (item.rule.trim().length < MIN_RULE_LENGTH) {
+        result.skipped++;
+        continue;
+      }
       const cat = LEARNING_CATEGORIES.includes(item.category) ? item.category : "other";
       const store = loadStore();
       const existing = store.learnings.find(
         (l) => l.category === cat && l.rule.toLowerCase().trim() === item.rule.toLowerCase().trim()
       );
-      saveLearning(cat, item.rule, item.context || "", item.project || defaultProject);
-      if (existing) {
-        result.updated++;
-      } else {
-        result.imported++;
+      try {
+        saveLearning(cat, item.rule, item.context || "", item.project || defaultProject);
+        if (existing) {
+          result.updated++;
+        } else {
+          result.imported++;
+        }
+      } catch {
+        result.skipped++;
       }
     }
   } catch (e: any) {
@@ -405,17 +436,28 @@ function importFromMarkdown(
 
   function flushRule(): void {
     if (!currentRule) return;
+    // Quality gate: skip rules that are too short (catches junk from headings/bullets)
+    if (currentRule.trim().length < MIN_RULE_LENGTH) {
+      result.skipped++;
+      currentRule = "";
+      currentContext = [];
+      return;
+    }
     const cat = normalizeCategory(currentCategory);
     const ctx = currentContext.join(" ").trim() || `Imported from file`;
     const store = loadStore();
     const existing = store.learnings.find(
       (l) => l.category === cat && l.rule.toLowerCase().trim() === currentRule.toLowerCase().trim()
     );
-    saveLearning(cat, currentRule, ctx, defaultProject);
-    if (existing) {
-      result.updated++;
-    } else {
-      result.imported++;
+    try {
+      saveLearning(cat, currentRule, ctx, defaultProject);
+      if (existing) {
+        result.updated++;
+      } else {
+        result.imported++;
+      }
+    } catch {
+      result.skipped++;
     }
     currentRule = "";
     currentContext = [];
@@ -438,7 +480,11 @@ function importFromMarkdown(
     // H3 — rule (e.g., "### Never docker build | tee")
     if (trimmed.startsWith("### ")) {
       flushRule();
-      currentRule = trimmed.replace(/^###\s+/, "").trim();
+      const candidate = trimmed.replace(/^###\s+/, "").trim();
+      // Quality filter: skip short headings ("Fix", "UI", "DB")
+      if (candidate.length >= MIN_RULE_LENGTH) {
+        currentRule = candidate;
+      }
       continue;
     }
 
@@ -459,12 +505,18 @@ function importFromMarkdown(
       // Split on → or — for rule/context separation
       const sepMatch = rest.match(/^(.+?)(?:\s*[→—]\s*|\s+[-–]\s+)(.+)$/);
       if (sepMatch) {
-        currentRule = sepMatch[1].trim();
-        currentContext = [sepMatch[2].trim()];
-        flushRule();
+        const candidate = sepMatch[1].trim();
+        if (candidate.length >= MIN_RULE_LENGTH) {
+          currentRule = candidate;
+          currentContext = [sepMatch[2].trim()];
+          flushRule();
+        }
       } else {
-        currentRule = rest.trim();
-        flushRule();
+        const candidate = rest.trim();
+        if (candidate.length >= MIN_RULE_LENGTH) {
+          currentRule = candidate;
+          flushRule();
+        }
       }
       continue;
     }
@@ -473,9 +525,12 @@ function importFromMarkdown(
     const tableMatch = trimmed.match(/^\|\s*\*\*(.+?)\*\*\s*\|(.+)\|(.+)\|/);
     if (tableMatch) {
       flushRule();
-      currentRule = tableMatch[1].trim();
-      currentContext = [tableMatch[2].trim() + " — " + tableMatch[3].trim()];
-      flushRule();
+      const candidate = tableMatch[1].trim();
+      if (candidate.length >= MIN_RULE_LENGTH) {
+        currentRule = candidate;
+        currentContext = [tableMatch[2].trim() + " — " + tableMatch[3].trim()];
+        flushRule();
+      }
       continue;
     }
 
@@ -485,7 +540,12 @@ function importFromMarkdown(
       flushRule();
       const boldMatch = trimmed.match(/^[-*]\s+\*\*(.+?)\*\*\s*(.*)$/);
       if (boldMatch) {
-        currentRule = boldMatch[1].trim();
+        const candidate = boldMatch[1].trim();
+        // Quality filter: skip short/single-word headings
+        if (candidate.length < MIN_RULE_LENGTH) {
+          continue;
+        }
+        currentRule = candidate;
         if (boldMatch[2]) {
           // Strip leading separators
           currentContext = [boldMatch[2].replace(/^[\s—→:]+/, "").trim()];
@@ -509,6 +569,34 @@ function importFromMarkdown(
 
   flushRule(); // Flush last rule
   return result;
+}
+
+/** Infer a category from rule text + context when "other" is provided */
+function inferCategory(rule: string, context: string): LearningCategory {
+  const text = `${rule} ${context}`.toLowerCase();
+  const keywords: Record<string, LearningCategory> = {
+    "deploy": "deployment", "rsync": "deployment", "publish": "deployment", "release": "deployment",
+    "ci/cd": "devops", "ci cd": "devops", "pipeline": "devops", "github actions": "devops", "docker": "devops",
+    "nginx": "infrastructure", "ssl": "infrastructure", "server": "infrastructure", "pm2": "infrastructure", "vps": "infrastructure",
+    "api": "api", "endpoint": "api", "rest": "api", "graphql": "api", "webhook": "api",
+    "sql": "database", "sqlite": "database", "mysql": "database", "postgres": "database", "query": "database", "migration": "database",
+    "react": "frontend", "vue": "frontend", "css": "frontend", "html": "frontend", "dom": "frontend", "component": "frontend", "ui": "frontend",
+    "express": "backend", "node": "backend", "flask": "backend", "middleware": "backend",
+    "auth": "security", "cors": "security", "xss": "security", "csrf": "security", "helmet": "security", "encrypt": "security", "password": "security",
+    "test": "testing", "vitest": "testing", "jest": "testing", "spec": "testing", "assert": "testing",
+    "debug": "debugging", "error": "debugging", "stack trace": "debugging", "breakpoint": "debugging", "log": "debugging",
+    "npm": "dependencies", "package": "dependencies", "yarn": "dependencies", "pnpm": "dependencies", "version": "dependencies",
+    "git": "git", "commit": "git", "branch": "git", "merge": "git", "rebase": "git",
+    "perf": "performance", "latency": "performance", "cache": "performance", "optimize": "performance",
+    "eslint": "tooling", "lint": "tooling", "prettier": "tooling", "vscode": "tooling", "editor": "tooling",
+    "pattern": "architecture", "refactor": "architecture", "module": "architecture", "design": "architecture",
+    "ios": "mobile", "android": "mobile", "expo": "mobile", "react native": "mobile",
+  };
+
+  for (const [keyword, cat] of Object.entries(keywords)) {
+    if (text.includes(keyword)) return cat;
+  }
+  return "other";
 }
 
 /** Map free-form heading text to closest LEARNING_CATEGORIES value */

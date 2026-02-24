@@ -899,30 +899,34 @@ server.tool(
       .describe("Project this learning applies to (e.g., 'CROWLR.io'). Omit if it's a general rule."),
   },
   async ({ category, rule, context, project }) => {
-    const learning = saveLearning(category, rule, context, project);
-    const stats = learningsStats();
+    try {
+      const learning = saveLearning(category, rule, context, project);
+      const stats = learningsStats();
 
-    // Re-inject learnings into search index (project-scoped)
-    const newChunks = learningsToChunks(activeProjectNames);
-    // Remove old learning chunks and add new ones
-    const nonLearningChunks = chunks.filter((c) => c.source !== "💡 Learnings Store");
-    chunks.length = 0;
-    chunks.push(...nonLearningChunks, ...newChunks);
+      // Re-inject learnings into search index (project-scoped)
+      const newChunks = learningsToChunks(activeProjectNames);
+      // Remove old learning chunks and add new ones
+      const nonLearningChunks = chunks.filter((c) => c.source !== "💡 Learnings Store");
+      chunks.length = 0;
+      chunks.push(...nonLearningChunks, ...newChunks);
 
-    return respond("save_learning", [
-            `✅ Learning saved: **${rule}**`,
-            ``,
-            `- **ID:** \`${learning.id}\``,
-            `- **Category:** ${category}`,
-            project ? `- **Project:** ${project}` : "",
-            `- **Tags:** ${learning.tags.join(", ")}`,
-            ``,
-            `📊 Store: ${stats.total} learnings across ${Object.keys(stats.categories).length} categories`,
-            ``,
-            `This learning will now auto-surface in \`search_context\` results when relevant.`,
-          ]
-            .filter(Boolean)
-            .join("\n"));
+      return respond("save_learning", [
+              `✅ Learning saved: **${rule}**`,
+              ``,
+              `- **ID:** \`${learning.id}\``,
+              `- **Category:** ${category}`,
+              project ? `- **Project:** ${project}` : "",
+              `- **Tags:** ${learning.tags.join(", ")}`,
+              ``,
+              `📊 Store: ${stats.total} learnings across ${Object.keys(stats.categories).length} categories`,
+              ``,
+              `This learning will now auto-surface in \`search_context\` results when relevant.`,
+            ]
+              .filter(Boolean)
+              .join("\n"));
+    } catch (e: any) {
+      return respond("save_learning", `❌ Learning rejected: ${e.message}`);
+    }
   }
 );
 
