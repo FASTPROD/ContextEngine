@@ -90,6 +90,10 @@
           {
             "name": "sync",
             "description": "Check CE documentation freshness and find stale docs"
+          },
+          {
+            "name": "health",
+            "description": "Show MCP server status, indexed sources, monitoring stats, and model picker explanation"
           }
         ]
       }

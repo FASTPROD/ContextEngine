@@ -9,6 +9,7 @@
  *  - `/commit`  — stage and commit all changes with a descriptive message
  *  - `/search`  — search the ContextEngine knowledge base
  *  - `/remind`  — full enforcement checklist
+ *  - `/health`  — MCP server status, indexed sources, active monitoring
  *
  * Freeform queries without a command are treated as knowledge searches.
  *
@@ -57,6 +58,8 @@ export function registerChatParticipant(
         return await handleRemind(stream, gitMonitor, token);
       case "sync":
         return await handleSync(stream, gitMonitor, token);
+      case "health":
+        return await handleHealth(stream, gitMonitor, token);
       default:
         // No command — treat as a free-form search query
         if (request.prompt.trim()) {
@@ -485,6 +488,107 @@ async function handleSync(
 }
 
 // ---------------------------------------------------------------------------
+// /health — MCP Server & Indexing Health
+// ---------------------------------------------------------------------------
+
+async function handleHealth(
+  stream: vscode.ChatResponseStream,
+  gitMonitor: GitMonitor,
+  token: vscode.CancellationToken
+): Promise<vscode.ChatResult> {
+  stream.progress("Checking ContextEngine MCP status…");
+
+  stream.markdown("## $(pulse) ContextEngine — Health Check\n\n");
+
+  // 1. Extension git monitoring is always running
+  const snapshot = await gitMonitor.forceScan();
+  if (token.isCancellationRequested) return {};
+
+  stream.markdown("### Extension (always active)\n\n");
+  stream.markdown(
+    `- ✅ **Git monitor** — watching ${snapshot.projects.length} workspace project${snapshot.projects.length !== 1 ? "s" : ""}\n`
+  );
+  stream.markdown(
+    `- ✅ **Uncommitted files** — ${snapshot.totalDirty} pending across all projects\n`
+  );
+  stream.markdown("\n");
+
+  // 2. MCP / CLI availability
+  stream.markdown("### MCP Server (knowledge base)\n\n");
+
+  try {
+    stream.progress("Querying indexed sources…");
+    const sourcesRaw = await client.listSources();
+
+    if (token.isCancellationRequested) return {};
+
+    // Count non-empty lines that look like source entries
+    const sourceLines = sourcesRaw
+      .split("\n")
+      .filter((l) => l.trim().length > 0 && !l.startsWith("No sources"));
+    const sourceCount = sourceLines.filter(
+      (l) => l.includes("chunk") || l.includes("→") || l.match(/\d/)
+    ).length;
+
+    if (sourcesRaw.includes("No sources") || sourceLines.length === 0) {
+      stream.markdown(
+        "- ⚠️ **Indexed sources** — none found. Run `contextengine reindex` or open a project with docs.\n"
+      );
+    } else {
+      stream.markdown(
+        `- ✅ **MCP CLI reachable** — knowledge base is active\n`
+      );
+      stream.markdown(
+        `- ✅ **Indexed sources** — ${sourceCount > 0 ? sourceCount + " source files" : "sources found"}\n`
+      );
+    }
+
+    // Show a condensed source list
+    stream.markdown("\n**Indexed sources:**\n\n");
+    stream.markdown("```\n");
+    const preview = sourcesRaw.split("\n").slice(0, 20).join("\n");
+    stream.markdown(preview + (sourcesRaw.split("\n").length > 20 ? "\n…" : "") + "\n");
+    stream.markdown("```\n\n");
+  } catch {
+    stream.markdown(
+      "- ❌ **MCP CLI** — not reachable. Install with: `npm i -g @compr/contextengine-mcp`\n"
+    );
+    stream.markdown("\n");
+    stream.markdown(
+      "> **Note:** Git monitoring (status bar, notifications, `/status`) works without the CLI. " +
+      "Search, learnings, and session features require the CLI.\n\n"
+    );
+  }
+
+  if (token.isCancellationRequested) return {};
+
+  // 3. Explain the CLOUD / LLM model picker question
+  stream.markdown("---\n\n");
+  stream.markdown("### About model selection (CLOUD / LOCAL)\n\n");
+  stream.markdown(
+    "`@contextengine` is a **local VS Code extension** — it runs entirely on your machine " +
+    "and answers queries directly from the knowledge base. It does **not** forward your " +
+    "messages to an AI model, so the Copilot model picker (GPT-4o, Claude, etc.) does not " +
+    "apply to `@contextengine` commands.\n\n"
+  );
+  stream.markdown(
+    "| Chat mode | What happens |\n" +
+    "|-----------|-------------|\n" +
+    "| `@contextengine /search …` | Answered locally — no LLM, instant results from your docs |\n" +
+    "| `@contextengine /status` | Answered locally — reads git state directly |\n" +
+    "| Regular Copilot chat (no `@contextengine`) | Uses the selected cloud model (GPT-4o, Claude 3.x, etc.) |\n\n"
+  );
+  stream.markdown(
+    "**To pick a specific LLM** (e.g. GPT-4.1, Claude 3.7): switch to regular Copilot chat " +
+    "(no `@contextengine` prefix) and use the model picker in the chat input bar. " +
+    "ContextEngine's knowledge will still be injected into every Copilot response via the " +
+    "MCP server — you get both the model you want **and** your project context.\n"
+  );
+
+  return {};
+}
+
+// ---------------------------------------------------------------------------
 // Help — no command specified
 // ---------------------------------------------------------------------------
 
@@ -512,14 +616,22 @@ function showHelp(stream: vscode.ChatResponseStream): vscode.ChatResult {
   stream.markdown(
     "| `/sync` | Check CE doc freshness — find stale docs |\n"
   );
+  stream.markdown(
+    "| `/health` | MCP status, indexed sources, model picker FAQ |\n"
+  );
   stream.markdown("\n### Examples\n\n");
   stream.markdown("```\n@contextengine /status\n");
   stream.markdown("@contextengine /commit feat: add user authentication\n");
   stream.markdown("@contextengine /search deployment process\n");
   stream.markdown("@contextengine /remind\n");
   stream.markdown("@contextengine /sync\n");
+  stream.markdown("@contextengine /health\n");
   stream.markdown("@contextengine how does the scoring system work?\n");
   stream.markdown("```\n");
+  stream.markdown(
+    "\n> **Note:** `@contextengine` runs locally — no Copilot model is used. " +
+    "Run `/health` to see what's indexed and for an explanation of the CLOUD/LOCAL model picker.\n"
+  );
 
   return {};
 }

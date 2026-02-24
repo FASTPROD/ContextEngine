@@ -21,6 +21,9 @@ Talk to ContextEngine directly from Copilot Chat:
 | `@contextengine /search deployment process` | Search the knowledge base |
 | `@contextengine /remind` | Full enforcement checklist — what's missing before you end |
 | `@contextengine /sync` | Check CE doc freshness per project — shows stale/missing docs |
+| `@contextengine /health` | MCP server status, indexed sources, and model picker FAQ |
+
+> **Note:** `@contextengine` is a **local extension handler** — it does not route queries through GitHub Copilot's LLM. There is no model picker (CLOUD/LOCAL) for `@contextengine` commands. Run `/health` for the full explanation.
 
 ### 📊 Status Bar
 Persistent indicator showing:
@@ -75,6 +78,28 @@ cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 | `contextengine.enableStatusBar` | `true` | Show status bar indicator |
 | `contextengine.autoCommitReminder` | `true` | Remind to commit when files accumulate |
 | `contextengine.maxDirtyFilesBeforeWarning` | `5` | Uncommitted file threshold for warnings |
+
+## FAQ
+
+### Is ContextEngine actually doing anything?
+
+Run `@contextengine /health` in Copilot Chat to get a live report:
+- Which workspace projects are being git-monitored
+- Whether the MCP CLI is reachable
+- How many source files are indexed in the knowledge base
+- Current uncommitted file count
+
+### Why don't I see a model picker (CLOUD / LOCAL) for `@contextengine`?
+
+`@contextengine` is a **local VS Code extension** — it processes all commands itself by running the ContextEngine CLI on your machine. It never sends your query to an AI model, so the Copilot model picker does not apply.
+
+| What you type | Where it goes |
+|---------------|--------------|
+| `@contextengine /search …` | Local CLI — instant results from your indexed docs |
+| `@contextengine /status` | Local git — reads your repo directly |
+| Regular Copilot chat (no `@contextengine`) | GitHub Copilot LLM — model picker applies here |
+
+**To use a specific model** (e.g. GPT-4.1, Claude 3.7): drop the `@contextengine` prefix and use the model picker in the standard Copilot Chat input bar. ContextEngine's project knowledge is still injected into every response via the MCP server, so you get both the model you want and your indexed context.
 
 ## How It Works
 
