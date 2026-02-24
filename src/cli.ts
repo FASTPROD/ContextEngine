@@ -19,7 +19,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, basename } from "path";
 import { createInterface } from "readline";
-import { tmpdir } from "os";
+import { tmpdir, homedir } from "os";
 import { execSync } from "child_process";
 
 // ---------------------------------------------------------------------------
@@ -835,6 +835,40 @@ async function cliImportLearnings(args: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// CLI: stats — show live session stats from MCP server
+// ---------------------------------------------------------------------------
+
+function cliStats(): void {
+  const statsFile = join(homedir(), ".contextengine", "session-stats.json");
+  if (!existsSync(statsFile)) {
+    console.log("\n📊 No active session stats found.");
+    console.log("   Stats are written by the MCP server during active sessions.");
+    console.log("   Start a session with your AI agent to see stats here.\n");
+    return;
+  }
+
+  try {
+    const raw = readFileSync(statsFile, "utf-8");
+    const stats = JSON.parse(raw);
+
+    console.log("\n📊 ContextEngine Session Stats\n");
+    console.log(`  ⏱  Uptime:           ${stats.uptimeMinutes ?? 0} min`);
+    console.log(`  🔧 Tool calls:       ${stats.toolCalls ?? 0}`);
+    console.log(`  🧠 Learnings saved:  ${stats.learningsSaved ?? 0}`);
+    console.log(`  🔍 Search recalls:   ${stats.searchRecalls ?? 0} (learnings surfaced)`);
+    console.log(`  📋 Nudges issued:    ${stats.nudgesIssued ?? 0}`);
+    console.log(`  ⛔ Truncations:      ${stats.truncations ?? 0}`);
+    console.log(`  💾 Session saved:    ${stats.sessionSaved ? "✅" : "❌"}`);
+    console.log(`  ⏱  Time saved:       ~${stats.timeSavedMinutes ?? 0} min`);
+    console.log(`  🕐 Started:          ${stats.startedAt ?? "unknown"}`);
+    console.log(`  🔄 Last update:      ${stats.updatedAt ?? "unknown"}`);
+    console.log("");
+  } catch {
+    console.error("Error reading session stats.");
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main — route to init, CLI subcommand, or MCP server
 // ---------------------------------------------------------------------------
 const command = process.argv[2];
@@ -866,6 +900,7 @@ Usage:
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
   contextengine deactivate             Remove license and premium modules
+  contextengine stats                  Show live MCP session stats (value meter)
   contextengine status                 Show license status
   contextengine help                   Show this message
 
@@ -987,6 +1022,8 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
     console.error("Activation error:", err);
     process.exit(1);
   });
+} else if (command === "stats") {
+  cliStats();
 } else if (command === "deactivate") {
   deactivate();
   console.log("✅ License removed. Premium features disabled.");

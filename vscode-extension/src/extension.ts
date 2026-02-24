@@ -32,6 +32,7 @@ import { NotificationManager } from "./notifications";
 import { registerChatParticipant } from "./chatParticipant";
 import { InfoStatusBarController, showInfoPanel, updateInfoPanel } from "./infoPanel";
 import { TerminalWatcher } from "./terminalWatcher";
+import { StatsPoller } from "./statsPoller";
 import * as client from "./contextEngineClient";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,7 @@ let statusBar: StatusBarController;
 let infoBar: InfoStatusBarController;
 let notifications: NotificationManager;
 let terminalWatcher: TerminalWatcher;
+let statsPoller: StatsPoller;
 const disposables: vscode.Disposable[] = [];
 
 // ---------------------------------------------------------------------------
@@ -67,11 +69,11 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar = new StatusBarController();
   disposables.push(statusBar);
 
-  // Connect git monitor → status bar
+  // Connect git monitor → status bar + info panel
   disposables.push(
     gitMonitor.onSnapshot((snapshot) => {
       statusBar.update(snapshot);
-      updateInfoPanel(snapshot);
+      updateInfoPanel(snapshot, statsPoller?.stats, statsPoller?.isActive);
     })
   );
 
@@ -80,6 +82,24 @@ export function activate(context: vscode.ExtensionContext): void {
   // -----------------------------------------------------------------------
   infoBar = new InfoStatusBarController();
   disposables.push(infoBar);
+
+  // -----------------------------------------------------------------------
+  // 2c. Stats Poller — reads MCP session stats from disk
+  // -----------------------------------------------------------------------
+  statsPoller = new StatsPoller();
+  disposables.push(statsPoller);
+
+  // Connect stats poller → status bar + info panel
+  disposables.push(
+    statsPoller.onStats((stats) => {
+      statusBar.updateStats(stats, statsPoller.isActive);
+      // Also refresh the info panel if open
+      const lastSnapshot = gitMonitor.lastSnapshot;
+      if (lastSnapshot) {
+        updateInfoPanel(lastSnapshot, stats, statsPoller.isActive);
+      }
+    })
+  );
 
   // -----------------------------------------------------------------------
   // 3. Notifications
@@ -165,9 +185,10 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // -----------------------------------------------------------------------
-  // 8. Start the Monitor
+  // 8. Start the Monitor + Stats Poller
   // -----------------------------------------------------------------------
   gitMonitor.start();
+  statsPoller.start(15_000); // poll every 15s
 
   // Register all disposables with the context
   for (const d of disposables) {
@@ -389,7 +410,8 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.showInfo", async () => {
       const snapshot = await gitMonitor.forceScan();
-      showInfoPanel(context, snapshot);
+      statsPoller.poll(); // get latest stats
+      showInfoPanel(context, snapshot, statsPoller.stats, statsPoller.isActive);
     })
   );
 

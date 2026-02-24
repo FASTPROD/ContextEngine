@@ -13,6 +13,7 @@
 
 import * as vscode from "vscode";
 import { type GitSnapshot } from "./gitMonitor";
+import { type SessionStats } from "./statsPoller";
 
 // ---------------------------------------------------------------------------
 // Info Status Bar Item — the ℹ️ icon next to the main CE indicator
@@ -61,33 +62,35 @@ let currentPanel: vscode.WebviewPanel | undefined;
 
 export function showInfoPanel(
   context: vscode.ExtensionContext,
-  snapshot?: GitSnapshot
+  snapshot?: GitSnapshot,
+  stats?: SessionStats,
+  sessionActive?: boolean
 ): void {
   if (currentPanel) {
     currentPanel.reveal(vscode.ViewColumn.One);
     if (snapshot) {
-      currentPanel.webview.html = getInfoHtml(snapshot);
+      currentPanel.webview.html = getInfoHtml(snapshot, stats, sessionActive);
     }
     return;
   }
 
   currentPanel = vscode.window.createWebviewPanel(
     "contextengine.info",
-    "ContextEngine — What We Check",
+    "ContextEngine — Dashboard",
     vscode.ViewColumn.One,
     { enableScripts: true }
   );
 
-  currentPanel.webview.html = getInfoHtml(snapshot);
+  currentPanel.webview.html = getInfoHtml(snapshot, stats, sessionActive);
 
   currentPanel.onDidDispose(() => {
     currentPanel = undefined;
   });
 }
 
-export function updateInfoPanel(snapshot: GitSnapshot): void {
+export function updateInfoPanel(snapshot: GitSnapshot, stats?: SessionStats, sessionActive?: boolean): void {
   if (currentPanel) {
-    currentPanel.webview.html = getInfoHtml(snapshot);
+    currentPanel.webview.html = getInfoHtml(snapshot, stats, sessionActive);
   }
 }
 
@@ -95,7 +98,7 @@ export function updateInfoPanel(snapshot: GitSnapshot): void {
 // HTML Content
 // ---------------------------------------------------------------------------
 
-function getInfoHtml(snapshot?: GitSnapshot): string {
+function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive?: boolean): string {
   const totalDirty = snapshot?.totalDirty ?? 0;
 
   return `<!DOCTYPE html>
@@ -228,6 +231,46 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
     <div class="firewall-title">Protocol Firewall</div>
     <div class="firewall-status">Active on all 17 MCP tools</div>
   </div>
+
+  <!-- ======================================================== -->
+  <!-- LIVE SESSION VALUE METER                                  -->
+  <!-- ======================================================== -->
+  ${stats && sessionActive ? `
+  <h2>📊 Live Session — Value Meter</h2>
+  <div class="card" style="text-align: center;">
+    <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+      <div>
+        <div style="font-size: 2em; font-weight: 700; color: var(--vscode-testing-iconPassed, #4caf50);">~${stats.timeSavedMinutes}</div>
+        <div style="color: var(--vscode-descriptionForeground); font-size: 0.8em;">MIN SAVED</div>
+      </div>
+      <div>
+        <div style="font-size: 2em; font-weight: 700; color: var(--vscode-textLink-foreground);">${stats.searchRecalls}</div>
+        <div style="color: var(--vscode-descriptionForeground); font-size: 0.8em;">RECALLS</div>
+      </div>
+      <div>
+        <div style="font-size: 2em; font-weight: 700; color: #ffc107;">${stats.learningsSaved}</div>
+        <div style="color: var(--vscode-descriptionForeground); font-size: 0.8em;">SAVED</div>
+      </div>
+      <div>
+        <div style="font-size: 2em; font-weight: 700; color: var(--vscode-foreground);">${stats.toolCalls}</div>
+        <div style="color: var(--vscode-descriptionForeground); font-size: 0.8em;">TOOL CALLS</div>
+      </div>
+    </div>
+    <div style="display: flex; justify-content: center; gap: 20px; font-size: 0.85em; color: var(--vscode-descriptionForeground);">
+      <span>📋 ${stats.nudgesIssued} nudge${stats.nudgesIssued !== 1 ? "s" : ""}</span>
+      <span>⛔ ${stats.truncations} truncation${stats.truncations !== 1 ? "s" : ""}</span>
+      <span>⏱ ${stats.uptimeMinutes} min uptime</span>
+      <span>💾 Session ${stats.sessionSaved ? "✅" : "❌"}</span>
+    </div>
+  </div>
+  ` : `
+  <div class="card" style="text-align: center; padding: 16px;">
+    <div style="color: var(--vscode-descriptionForeground); font-size: 0.9em;">
+      📊 <strong>Value Meter</strong> — Start an MCP session to see live stats
+      <br><span style="font-size: 0.85em;">(learnings recalled, time saved, compliance nudges)</span>
+    </div>
+  </div>
+  `}
 
   <!-- ======================================================== -->
   <!-- PLAIN-ENGLISH EXPLANATION                                 -->
@@ -426,7 +469,7 @@ function getInfoHtml(snapshot?: GitSnapshot): string {
   </div>
 
   <p style="text-align: center; margin-top: 24px; color: var(--vscode-descriptionForeground);">
-    ContextEngine v0.5.0 · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
+    ContextEngine v0.6.0 · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
     · <a href="https://www.npmjs.com/package/@compr/contextengine-mcp">npm</a>
   </p>
 
