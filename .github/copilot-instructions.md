@@ -145,7 +145,7 @@
 ## Stats (as of v1.19.1)
 - ~9,700 lines of source code (~7,700 src/ + ~1,050 server/ + ~900 vscode-extension/)
 - 17 MCP tools (13 free + 4 gated)
-- 15 CLI subcommands (10 original + 5 new in v1.16.0)
+- 16 CLI subcommands (10 original + 5 new in v1.16.0 + stats in v1.20.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
 - 173 learnings across 17 categories in store
 - 14 bundled starter learnings ship with npm (trimmed from 30 to prevent dedup re-merge)
@@ -155,7 +155,7 @@
 - Semantic search: ~200ms from cache, ~15s first run
 - CI: GitHub Actions — Node 18/20/22, lint + build + test + smoke
 - Score: 89% A (30/30 doc, 22/30 infra, 17/20 quality, 20/20 security)
-- VS Code Extension: v0.5.0 published on marketplace (css-llc.contextengine)
+- VS Code Extension: v0.6.0 published on marketplace (css-llc.contextengine)
 - Pricing page: https://api.compr.ch/contextengine/pricing (live, static HTML)
 - E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 23, 2026)
 - Protocol Firewall: escalating compliance enforcement on all 17 tool responses
@@ -263,11 +263,11 @@
 - Projects deploying via managed platforms (Vercel, Netlify, Render, Fly) get full infrastructure points without needing Docker
 - Prevents agents from creating dummy files to game the score
 
-## VS Code Extension (v0.5.0)
+## VS Code Extension (v0.6.0)
 - **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **Publisher**: `css-llc` (Azure DevOps org `css-llc`, personal MS account `ymolinier@hotmail.com`)
 - **PAT**: stored in Azure DevOps — Marketplace → Manage scope, 1-year expiry
-- **Source**: `vscode-extension/` (8 TypeScript source files, ~1,300 lines)
+- **Source**: `vscode-extension/` (9 TypeScript source files, ~1,500 lines)
 - **Icon**: Red compr.app logo (256x256 PNG, from `COMPR-app/pwa_assets/compr/logo512.png` hue-shifted)
 
 ### Extension Architecture
@@ -275,16 +275,19 @@
 |---|---|
 | `vscode-extension/src/extension.ts` | Entry point — activation, command registration, wiring |
 | `vscode-extension/src/gitMonitor.ts` | Periodic git status scanning, `GitSnapshot` type, `onSnapshot()` event |
-| `vscode-extension/src/statusBar.ts` | `StatusBarController` — persistent CE:N indicator with escalating colors |
-| `vscode-extension/src/infoPanel.ts` | `InfoStatusBarController` — ℹ️ icon, WebView panel with monitoring checklist |
+| `vscode-extension/src/statusBar.ts` | `StatusBarController` — value meter (recalls/saves/time saved) with git fallback |
+| `vscode-extension/src/infoPanel.ts` | `InfoStatusBarController` — ℹ️ icon, WebView dashboard with live stats + monitoring checklist |
 | `vscode-extension/src/notifications.ts` | Escalating warning notifications with cooldown |
 | `vscode-extension/src/chatParticipant.ts` | `@contextengine` chat participant — `/status`, `/commit`, `/search`, `/remind`, `/sync` |
 | `vscode-extension/src/contextEngineClient.ts` | CLI delegation for search/sessions + direct git operations + CE doc freshness |
 | `vscode-extension/src/terminalWatcher.ts` | Terminal command completion monitor — classifies commands, fires notifications, triggers git rescan |
+| `vscode-extension/src/statsPoller.ts` | Polls `~/.contextengine/session-stats.json` for live MCP session metrics |
 
 ### Extension Features
-- **CE:N status bar** — live count of uncommitted files across all workspace repos (green→yellow→red)
-- **ℹ️ info panel** — WebView with Protocol Firewall hero (plain-English "speed camera" analogy), escalation flow visualization, compact git status one-liner
+- **Value meter status bar** — (v0.6.0) shows MCP session value: recalls, saves, time saved. Falls back to git status when no session active
+- **Live stats dashboard** — (v0.6.0) info panel shows real-time session metrics (tool calls, recalls, nudges, truncations, estimated time saved)
+- **Stats poller** — (v0.6.0) reads `~/.contextengine/session-stats.json` every 15s, written by MCP server firewall
+- **ℹ️ info panel** — WebView with Protocol Firewall hero (plain-English "speed camera" analogy), escalation flow visualization, live value meter
 - **`@contextengine` chat** — Chat Participant with 5 slash commands for agent interaction
 - **`/sync` command** — (v0.4.0) Checks CE doc freshness per project, shows which docs are stale or missing
 - **Doc staleness notifications** — (v0.4.0) Fires warning when code committed but CE docs not updated (15-min cooldown)

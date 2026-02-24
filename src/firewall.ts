@@ -11,8 +11,9 @@
 // through progressive response degradation.
 
 import { execSync } from "child_process";
-import { existsSync, statSync } from "fs";
+import { existsSync, statSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
+import { homedir } from "os";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -70,6 +71,18 @@ export class ProtocolFirewall {
   private learningsSaved = 0;
   private sessionSaved = false;
   private readonly startTime = Date.now();
+  private nudgesIssued = 0;
+  private searchRecalls = 0; // learnings surfaced via search
+  private truncations = 0;   // degraded responses issued
+
+  // --- Stats flush (debounce disk writes) ---
+  private statsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly STATS_FLUSH_MS = 10_000; // every 10s max
+  private static readonly STATS_FILE = join(
+    homedir(),
+    ".contextengine",
+    "session-stats.json"
+  );
 
   // --- Cached checks (avoid hammering git on every call) ---
   private gitCache: CacheEntry<string[]> = { data: [], timestamp: 0 };
@@ -113,21 +126,26 @@ export class ProtocolFirewall {
     if (level === "silent") return responseText;
 
     const block = this.formatBlock(obligations, score, level);
+    this.nudgesIssued++;
 
     switch (level) {
       case "degraded": {
+        this.truncations++;
         const truncated =
           responseText.length > DEGRADED_MAX_CHARS
             ? responseText.slice(0, DEGRADED_MAX_CHARS) +
               `\n\n⛔ [${responseText.length - DEGRADED_MAX_CHARS} chars hidden — ` +
               `call save_learning or save_session to restore full output]`
             : responseText;
+        this.scheduleStatsFlush();
         return block + "\n\n" + truncated;
       }
       case "header":
+        this.scheduleStatsFlush();
         return block + "\n\n" + responseText;
       case "footer":
       default:
+        this.scheduleStatsFlush();
         return responseText + "\n\n" + block;
     }
   }
@@ -141,7 +159,75 @@ export class ProtocolFirewall {
       learningsSaved: this.learningsSaved,
       sessionSaved: this.sessionSaved,
       uptimeMinutes: Math.round((Date.now() - this.startTime) / 60_000),
+      nudgesIssued: this.nudgesIssued,
+      searchRecalls: this.searchRecalls,
+      truncations: this.truncations,
+      timeSavedMinutes: this.estimateTimeSaved(),
     };
+  }
+
+  /**
+   * Record that N learnings were surfaced in a search result.
+   * Call from search_context handler after counting learning-sourced results.
+   */
+  recordSearchRecalls(count: number): void {
+    this.searchRecalls += count;
+    this.scheduleStatsFlush();
+  }
+
+  // -----------------------------------------------------------------------
+  // Internal: time-saved heuristic
+  // -----------------------------------------------------------------------
+
+  /**
+   * Estimate minutes saved by ContextEngine this session.
+   * - Each learning recall ≈ 2 min (avoids re-discovery / googling)
+   * - Each nudge ≈ 1 min (prevented forgetting / cleanup later)
+   * - Each learning saved ≈ 1 min (future sessions benefit)
+   * - Session save ≈ 3 min (avoids cold-start next session)
+   */
+  private estimateTimeSaved(): number {
+    return (
+      this.searchRecalls * 2 +
+      this.nudgesIssued * 1 +
+      this.learningsSaved * 1 +
+      (this.sessionSaved ? 3 : 0)
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Internal: stats persistence (debounced disk write)
+  // -----------------------------------------------------------------------
+
+  private scheduleStatsFlush(): void {
+    if (this.statsFlushTimer) return; // already scheduled
+    this.statsFlushTimer = setTimeout(() => {
+      this.statsFlushTimer = null;
+      this.flushStats();
+    }, ProtocolFirewall.STATS_FLUSH_MS);
+  }
+
+  private flushStats(): void {
+    try {
+      const dir = join(homedir(), ".contextengine");
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+
+      const state = this.getState();
+      const stats = {
+        pid: process.pid,
+        startedAt: new Date(this.startTime).toISOString(),
+        updatedAt: new Date().toISOString(),
+        ...state,
+      };
+
+      writeFileSync(
+        ProtocolFirewall.STATS_FILE,
+        JSON.stringify(stats, null, 2) + "\n",
+        "utf-8"
+      );
+    } catch {
+      // Non-critical — silently ignore write failures
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -151,6 +237,7 @@ export class ProtocolFirewall {
   private recordCompliance(toolName: string): void {
     if (toolName === "save_learning") this.learningsSaved++;
     if (toolName === "save_session") this.sessionSaved = true;
+    this.scheduleStatsFlush();
   }
 
   // -----------------------------------------------------------------------

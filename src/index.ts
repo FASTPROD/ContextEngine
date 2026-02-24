@@ -409,6 +409,14 @@ server.tool(
       };
     }
 
+    // Track how many results came from learnings (for value meter)
+    const learningRecalls = results.filter(
+      (r) => r.chunk.source.includes("Learnings") || r.chunk.source.includes("learning")
+    ).length;
+    if (learningRecalls > 0) {
+      firewall.recordSearchRecalls(learningRecalls);
+    }
+
     const searchMode = isEmbeddingsReady() ? mode : "keyword (embeddings loading)";
     const text = [
       `Search: "${query}" | Mode: ${searchMode} | ${results.length} results`,
