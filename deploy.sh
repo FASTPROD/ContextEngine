@@ -16,7 +16,19 @@ deploy_npm() {
 
 deploy_server() {
   echo "🚀 Deploying activation server to VPS..."
-  
+
+  # Load VPS SSH password from environment or .env file
+  if [ -z "${VPS_SSH_PASS:-}" ]; then
+    if [ -f ".env" ]; then
+      VPS_SSH_PASS=$(grep -E '^VPS_SSH_PASS=' .env | cut -d'=' -f2-)
+    fi
+    if [ -z "${VPS_SSH_PASS:-}" ]; then
+      echo "❌ VPS_SSH_PASS not set. Set it in .env or as an environment variable." >&2
+      exit 1
+    fi
+  fi
+  export SSHPASS="$VPS_SSH_PASS"
+
   SSH_OPTS="-o PubkeyAuthentication=no -o StrictHostKeyChecking=no"
   SERVER="admin@92.243.24.157"
   SERVER_DIR="/var/www/contextengine-server"
@@ -27,18 +39,18 @@ deploy_server() {
   rsync -avz --delete \
     --exclude='node_modules/' --exclude='dist/' \
     --exclude='data/' --exclude='delta-modules/' \
-    -e "sshpass -p '#Crowlr@2023' ssh $SSH_OPTS" \
+    -e "sshpass -e ssh $SSH_OPTS" \
     server/ "$SERVER:$SERVER_DIR/"
 
   # Sync compiled dist (for gen-delta)
   echo "📦 Syncing dist/ for delta generation..."
   rsync -avz \
-    -e "sshpass -p '#Crowlr@2023' ssh $SSH_OPTS" \
+    -e "sshpass -e ssh $SSH_OPTS" \
     dist/ "$SERVER:$DIST_DIR/"
 
   # Install, build, gen-delta, restart
   echo "🔧 Building on server..."
-  sshpass -p '#Crowlr@2023' ssh $SSH_OPTS "$SERVER" "
+  sshpass -e ssh $SSH_OPTS "$SERVER" "
     cd $SERVER_DIR && \
     npm install --production && \
     npx tsc && \
