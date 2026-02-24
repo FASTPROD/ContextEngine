@@ -3,9 +3,10 @@
  *
  * Uses VS Code Shell Integration API (1.93+) to detect when commands
  * finish in any terminal. Surfaces results via:
- *  - Output channel logging
+ *  - Output channel logging (with credential redaction)
  *  - Notifications for important commands (git, npm, deploy, ssh)
  *  - Git monitor rescan trigger after git operations
+ *  - Stuck-pattern detection (e.g. repeated exit 130 on git commit)
  *
  * This is the **event-driven fix** for the "agent goes blind after
  * cancelled terminal commands" problem. Instead of relying on the agent
@@ -27,6 +28,8 @@ type CommandCategory =
   | "build"
   | "deploy"
   | "test"
+  | "database"
+  | "python"
   | "ssh"
   | "other";
 
@@ -44,15 +47,30 @@ type CommandResultListener = (result: CommandResult) => void;
 // ---------------------------------------------------------------------------
 
 const COMMAND_PATTERNS: { pattern: RegExp; category: CommandCategory }[] = [
+  // Git
   { pattern: /^git\s/, category: "git" },
-  { pattern: /\bgit\s+(commit|push|pull|merge|rebase|checkout|add)\b/, category: "git" },
+  { pattern: /\bgit\s+(commit|push|pull|merge|rebase|checkout|add|status|log|diff|stash|reset|restore)\b/, category: "git" },
+  // Database
+  { pattern: /\b(psql|mysql|mongosh|redis-cli|sqlite3)\b/, category: "database" },
+  { pattern: /\bPGPASSWORD\b/, category: "database" },
+  { pattern: /\bmigrate/, category: "database" },
+  // Python
+  { pattern: /^(python3?|pip3?|pytest|poetry|pdm)\s/, category: "python" },
+  { pattern: /\bpython3?\s+-[cm]\b/, category: "python" },
+  { pattern: /\bsource\s+\.venv/, category: "python" },
+  // Test
+  { pattern: /^(vitest|jest|npm test|npx vitest|pytest|python -m pytest)/, category: "test" },
+  // Build
+  { pattern: /^(tsc|npx tsc|npm run build|npm run compile)/, category: "build" },
+  { pattern: /\bvite\s+build\b/, category: "build" },
+  { pattern: /\bwebpack\b/, category: "build" },
+  // npm
   { pattern: /^npm\s+(publish|install|run|test)/, category: "npm" },
   { pattern: /^npx\s/, category: "npm" },
-  { pattern: /^(tsc|npx tsc|npm run build|npm run compile)/, category: "build" },
-  { pattern: /^(vitest|jest|npm test|npx vitest)/, category: "test" },
+  // Deploy / infra
   { pattern: /\b(sshpass|ssh|rsync|scp|deploy)\b/, category: "deploy" },
   { pattern: /\bpm2\b/, category: "deploy" },
-  { pattern: /\bcurl\b.*\b(api|health|contextengine)\b/, category: "deploy" },
+  { pattern: /\bcurl\b/, category: "deploy" },
 ];
 
 // Commands that warrant a notification (not just logging)
@@ -62,6 +80,29 @@ const NOTIFY_CATEGORIES: CommandCategory[] = [
   "deploy",
   "build",
   "test",
+];
+
+// ---------------------------------------------------------------------------
+// Credential redaction patterns
+// ---------------------------------------------------------------------------
+
+const REDACT_PATTERNS: { pattern: RegExp; replacement: string }[] = [
+  // Database passwords: PGPASSWORD='...' or PGPASSWORD=...
+  { pattern: /PGPASSWORD=['\"]?[^'"\s]+['\"]?/gi, replacement: "PGPASSWORD=***" },
+  // Generic password flags: -p 'password', --password=xxx
+  { pattern: /(-p\s+|--password[= ])['\"]?[^'"\s]+['\"]?/gi, replacement: "$1***" },
+  // sshpass -p 'xxx'
+  { pattern: /sshpass\s+-p\s+['\"]?[^'"\s]+['\"]?/gi, replacement: "sshpass -p ***" },
+  // Bearer tokens
+  { pattern: /Bearer\s+[A-Za-z0-9._\-]+/gi, replacement: "Bearer ***" },
+  // Authorization headers with token value
+  { pattern: /Authorization:\s*['\"]?Bearer\s+\$?\{?[A-Za-z0-9._\-]+\}?['\"]?/gi, replacement: "Authorization: Bearer ***" },
+  // TOKEN=xxx or $TOKEN inline (only long tokens, not the variable name)
+  { pattern: /TOKEN=(['\"]?[A-Za-z0-9._\-]{20,}['\"]?)/gi, replacement: "TOKEN=***" },
+  // API keys: key=xxx, api_key=xxx, apikey=xxx
+  { pattern: /(api[_-]?key|secret[_-]?key|access[_-]?token)\s*=\s*['\"]?[^'"\s]+['\"]?/gi, replacement: "$1=***" },
+  // Connection strings with passwords: ://user:pass@host
+  { pattern: /:\/\/([^:]+):([^@]{4,})@/gi, replacement: "://$1:***@" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -76,7 +117,7 @@ export class TerminalWatcher implements vscode.Disposable {
   private _disposed = false;
 
   /** Max recent results to keep */
-  private static readonly MAX_RECENT = 50;
+  private static readonly MAX_RECENT = 100;
 
   /** Cooldown between notifications for the same category (30s) */
   private static readonly NOTIFY_COOLDOWN_MS = 30_000;
@@ -86,9 +127,19 @@ export class TerminalWatcher implements vscode.Disposable {
     build: 0,
     deploy: 0,
     test: 0,
+    database: 0,
+    python: 0,
     ssh: 0,
     other: 0,
   };
+
+  // Track consecutive failures for stuck-pattern detection
+  // Key: category + exit code, Value: count + last command
+  private _failStreaks: Map<string, { count: number; lastCmd: string; lastTime: number }> = new Map();
+  /** How many consecutive same-type failures before alerting */
+  private static readonly STUCK_THRESHOLD = 3;
+  /** Reset streak if more than 5 min between failures */
+  private static readonly STREAK_TIMEOUT_MS = 5 * 60_000;
 
   constructor(outputChannel: vscode.OutputChannel) {
     this._outputChannel = outputChannel;
@@ -145,10 +196,14 @@ export class TerminalWatcher implements vscode.Disposable {
     const commandLine = event.execution.commandLine?.value || "";
     const exitCode = event.exitCode;
 
-    if (!commandLine.trim()) return;
+    const trimmed = commandLine.trim();
+    if (!trimmed) return;
+
+    // Filter out comment-only lines (shell sends them as commands)
+    if (/^#\s/.test(trimmed)) return;
 
     // Classify the command
-    const category = this._classifyCommand(commandLine);
+    const category = this._classifyCommand(trimmed);
 
     const result: CommandResult = {
       command: commandLine,
@@ -163,15 +218,24 @@ export class TerminalWatcher implements vscode.Disposable {
       this._recentResults.shift();
     }
 
-    // Log to output channel
+    // Log to output channel (with credential redaction)
     const icon = exitCode === 0 ? "✅" : exitCode !== undefined ? "❌" : "⚡";
+    const redacted = this._redactCredentials(commandLine);
     const shortCmd =
-      commandLine.length > 80
-        ? commandLine.substring(0, 77) + "…"
-        : commandLine;
+      redacted.length > 80
+        ? redacted.substring(0, 77) + "…"
+        : redacted;
     this._outputChannel.appendLine(
       `${icon} [${category}] ${shortCmd} (exit: ${exitCode ?? "?"})`
     );
+
+    // Check for stuck patterns (repeated failures)
+    if (exitCode !== undefined && exitCode !== 0) {
+      this._trackFailStreak(result);
+    } else if (exitCode === 0) {
+      // Success resets the streak for this category
+      this._resetFailStreak(category);
+    }
 
     // Fire notification for important commands
     if (NOTIFY_CATEGORIES.includes(category)) {
@@ -232,5 +296,89 @@ export class TerminalWatcher implements vscode.Disposable {
     }
 
     this._lastNotifyTime[result.category] = now;
+  }
+
+  // -----------------------------------------------------------------------
+  // Credential redaction
+  // -----------------------------------------------------------------------
+
+  private _redactCredentials(cmd: string): string {
+    let redacted = cmd;
+    for (const { pattern, replacement } of REDACT_PATTERNS) {
+      redacted = redacted.replace(pattern, replacement);
+    }
+    return redacted;
+  }
+
+  // -----------------------------------------------------------------------
+  // Stuck-pattern detection
+  // -----------------------------------------------------------------------
+
+  /**
+   * Track consecutive failures of the same type.
+   * If the agent keeps failing on e.g. `git commit` with exit 130,
+   * surface a warning after 3 consecutive failures.
+   */
+  private _trackFailStreak(result: CommandResult): void {
+    const key = `${result.category}:${result.exitCode}`;
+    const existing = this._failStreaks.get(key);
+    const now = Date.now();
+
+    if (existing && now - existing.lastTime < TerminalWatcher.STREAK_TIMEOUT_MS) {
+      existing.count++;
+      existing.lastCmd = result.command;
+      existing.lastTime = now;
+
+      if (existing.count === TerminalWatcher.STUCK_THRESHOLD) {
+        this._notifyStuck(result, existing.count);
+      } else if (
+        existing.count > TerminalWatcher.STUCK_THRESHOLD &&
+        existing.count % 5 === 0
+      ) {
+        // Re-alert every 5 additional failures
+        this._notifyStuck(result, existing.count);
+      }
+    } else {
+      this._failStreaks.set(key, { count: 1, lastCmd: result.command, lastTime: now });
+    }
+  }
+
+  private _resetFailStreak(category: CommandCategory): void {
+    // Reset all streaks for this category
+    for (const key of this._failStreaks.keys()) {
+      if (key.startsWith(`${category}:`)) {
+        this._failStreaks.delete(key);
+      }
+    }
+  }
+
+  private _notifyStuck(result: CommandResult, count: number): void {
+    const exitName = result.exitCode === 130 ? "SIGINT/cancelled" :
+                     result.exitCode === 127 ? "command not found" :
+                     result.exitCode === 1   ? "error" :
+                     `exit ${result.exitCode}`;
+
+    const msg = `⚠️ Agent appears stuck: ${count}× ${result.category} failures (${exitName})`;
+    this._outputChannel.appendLine(`\n🔴 STUCK PATTERN DETECTED: ${msg}`);
+
+    // Specific advice based on the pattern
+    let advice = "";
+    if (result.category === "git" && result.exitCode === 130) {
+      advice = "Pre-commit hook or GPG signing may be blocking non-interactive commits.";
+    } else if (result.exitCode === 127) {
+      advice = "Command not found — wrong PATH or virtualenv not activated.";
+    } else if (result.category === "deploy" && result.exitCode === 130) {
+      advice = "SSH connection timing out or requiring interactive auth.";
+    }
+
+    if (advice) {
+      this._outputChannel.appendLine(`   💡 ${advice}`);
+    }
+
+    void vscode.window.showWarningMessage(msg, "Show Output").then((action) => {
+      if (action === "Show Output") {
+        this._outputChannel.show();
+      }
+    });
   }
 }
