@@ -28,12 +28,14 @@ export class StatusBarController implements vscode.Disposable {
   private _lastSnapshot: GitSnapshot | undefined;
   private _lastStats: SessionStats | undefined;
   private _sessionActive = false;
+  private _log: vscode.OutputChannel | undefined;
 
-  constructor() {
+  constructor(outputChannel?: vscode.OutputChannel) {
+    this._log = outputChannel;
+
     this._item = vscode.window.createStatusBarItem(
-      "contextengine.status",
       vscode.StatusBarAlignment.Left,
-      50 // priority — lower than git, higher than most
+      100 // high priority — visible near the left edge
     );
 
     this._item.command = "contextengine.showStatus";
@@ -43,11 +45,15 @@ export class StatusBarController implements vscode.Disposable {
     this._threshold = config.get<number>("maxDirtyFilesBeforeWarning", 5);
 
     // Show immediately with "scanning" state
-    this._item.text = "$(sync~spin) CE";
-    this._item.tooltip = "ContextEngine — scanning…";
+    this._item.text = "$(shield) CE — scanning…";
+    this._item.tooltip = "ContextEngine — scanning workspace…";
 
-    if (config.get<boolean>("enableStatusBar", true)) {
+    const enabled = config.get<boolean>("enableStatusBar", true);
+    this._log?.appendLine(`Status bar: created (enabled=${enabled}, priority=100, alignment=Left)`);
+
+    if (enabled) {
       this._item.show();
+      this._log?.appendLine(`Status bar: shown`);
     }
   }
 
@@ -57,6 +63,9 @@ export class StatusBarController implements vscode.Disposable {
   updateStats(stats: SessionStats, active: boolean): void {
     this._lastStats = stats;
     this._sessionActive = active;
+    this._log?.appendLine(
+      `Status bar: stats update (active=${active}, recalls=${stats.searchRecalls}, saved=${stats.learningsSaved}, timeSaved=${stats.timeSavedMinutes}min)`
+    );
     this._render();
   }
 
@@ -65,6 +74,9 @@ export class StatusBarController implements vscode.Disposable {
    */
   update(snapshot: GitSnapshot): void {
     this._lastSnapshot = snapshot;
+    this._log?.appendLine(
+      `Status bar: git update (dirty=${snapshot.totalDirty}, projects=${snapshot.projects.length}, sessionActive=${this._sessionActive})`
+    );
     // Only render from git if we don't have active session stats
     if (!this._sessionActive) {
       this._render();

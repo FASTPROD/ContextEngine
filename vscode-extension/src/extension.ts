@@ -66,12 +66,18 @@ export function activate(context: vscode.ExtensionContext): void {
   // -----------------------------------------------------------------------
   // 2. Status Bar
   // -----------------------------------------------------------------------
-  statusBar = new StatusBarController();
+  statusBar = new StatusBarController(outputChannel);
   disposables.push(statusBar);
 
   // Connect git monitor → status bar + info panel
   disposables.push(
     gitMonitor.onSnapshot((snapshot) => {
+      outputChannel.appendLine(
+        `Git scan: ${snapshot.projects.length} projects, ${snapshot.totalDirty} dirty files` +
+        (snapshot.dirtyProjects.length > 0
+          ? ` (${snapshot.dirtyProjects.map(p => `${p.name}:${p.dirty}`).join(", ")})`
+          : "")
+      );
       statusBar.update(snapshot);
       updateInfoPanel(snapshot, statsPoller?.stats, statsPoller?.isActive);
     })
@@ -92,6 +98,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // Connect stats poller → status bar + info panel
   disposables.push(
     statsPoller.onStats((stats) => {
+      outputChannel.appendLine(
+        `Stats poll: toolCalls=${stats.toolCalls}, recalls=${stats.searchRecalls}, saved=${stats.learningsSaved}, timeSaved=${stats.timeSavedMinutes}min, active=${statsPoller.isActive}`
+      );
       statusBar.updateStats(stats, statsPoller.isActive);
       // Also refresh the info panel if open
       const lastSnapshot = gitMonitor.lastSnapshot;
@@ -189,6 +198,9 @@ export function activate(context: vscode.ExtensionContext): void {
   // -----------------------------------------------------------------------
   gitMonitor.start();
   statsPoller.start(15_000); // poll every 15s
+
+  outputChannel.appendLine(`Git monitor started (interval: ${vscode.workspace.getConfiguration("contextengine").get<number>("gitCheckInterval", 120)}s)`);
+  outputChannel.appendLine(`Stats poller started (interval: 15s, path: ~/.contextengine/session-stats.json)`);
 
   // Register all disposables with the context
   for (const d of disposables) {
