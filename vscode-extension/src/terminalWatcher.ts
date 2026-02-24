@@ -60,10 +60,12 @@ const COMMAND_PATTERNS: { pattern: RegExp; category: CommandCategory }[] = [
   { pattern: /\bsource\s+\.venv/, category: "python" },
   // Test
   { pattern: /^(vitest|jest|npm test|npx vitest|pytest|python -m pytest)/, category: "test" },
+  { pattern: /\bphp\s+artisan\s+test\b/, category: "test" },
   // Build
   { pattern: /^(tsc|npx tsc|npm run build|npm run compile)/, category: "build" },
   { pattern: /\bvite\s+build\b/, category: "build" },
   { pattern: /\bwebpack\b/, category: "build" },
+  { pattern: /\breact-scripts\s+build\b/, category: "build" },
   // npm
   { pattern: /^npm\s+(publish|install|run|test)/, category: "npm" },
   { pattern: /^npx\s/, category: "npm" },
@@ -71,6 +73,9 @@ const COMMAND_PATTERNS: { pattern: RegExp; category: CommandCategory }[] = [
   { pattern: /\b(sshpass|ssh|rsync|scp|deploy)\b/, category: "deploy" },
   { pattern: /\bpm2\b/, category: "deploy" },
   { pattern: /\bcurl\b/, category: "deploy" },
+  { pattern: /\bdocker\s+(compose|build|run|exec|push|pull)\b/, category: "deploy" },
+  { pattern: /\bwhois\b/, category: "deploy" },
+  { pattern: /\bnc\s+-z\b/, category: "deploy" },
 ];
 
 // Commands that warrant a notification (not just logging)
@@ -86,8 +91,8 @@ const NOTIFY_CATEGORIES: CommandCategory[] = [
 // Credential redaction patterns
 // ---------------------------------------------------------------------------
 
-const REDACT_PATTERNS: { pattern: RegExp; replacement: string }[] = [
-  // Database passwords: PGPASSWORD='...' or PGPASSWORD=...
+const REDACT_PATTERNS: { pattern: RegExp; replacement: string }[] = [  // printf '%s' 'password' > file (common sshpass workaround)
+  { pattern: /printf\s+['"]%s['"]\s+['"][^'"]{4,}['"]\s*>/gi, replacement: "printf '%s' '***' >" },  // Database passwords: PGPASSWORD='...' or PGPASSWORD=...
   { pattern: /PGPASSWORD=['\"]?[^'"\s]+['\"]?/gi, replacement: "PGPASSWORD=***" },
   // Generic password flags: -p 'password', --password=xxx
   { pattern: /(-p\s+|--password[= ])['\"]?[^'"\s]+['\"]?/gi, replacement: "$1***" },
