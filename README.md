@@ -133,13 +133,14 @@ ContextEngine has a **free VS Code extension** that provides proactive enforceme
 
 [![Install Extension](https://img.shields.io/badge/Install-VS%20Code%20Marketplace-007ACC?logo=visualstudiocode&style=for-the-badge)](https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine)
 
-- **CE:N status bar** — live count of uncommitted files across all workspace repos (green→yellow→red)
-- **ℹ️ info panel** — what ContextEngine monitors, end-of-session checklist
-- **@contextengine chat** — `/status`, `/commit`, `/search`, `/remind` in Copilot Chat
+- **📊 Value meter** — shows what ContextEngine saved you this session: learnings recalled, learnings saved, estimated time saved. Falls back to git status when no MCP session is active
+- **📈 Live stats dashboard** — click ℹ️ to see real-time session metrics (tool calls, recalls, nudges, truncations, time saved)
+- **@contextengine chat** — `/status`, `/commit`, `/search`, `/remind`, `/sync` in Copilot Chat
 - **Escalating notifications** — warns when files accumulate without commits
+- **Terminal watcher** — monitors git/npm/deploy/test commands and triggers rescans
 - **One-click commit** — commit all changes across all repos
 
-The extension works standalone for git monitoring. For search, learnings, sessions, and scoring — it uses the MCP server (`npx @compr/contextengine-mcp`).
+The extension reads live metrics from the MCP server (via `~/.contextengine/session-stats.json`). For search, learnings, sessions, and scoring — it uses the MCP server (`npx @compr/contextengine-mcp`).
 
 ## ⭐ PRO Features
 
@@ -201,6 +202,9 @@ npx @compr/contextengine-mcp score ContextEngine --html
 # List permanent learnings (optionally by category)
 npx @compr/contextengine-mcp list-learnings
 npx @compr/contextengine-mcp list-learnings security
+
+# Show live MCP session stats (value meter)
+npx @compr/contextengine-mcp stats
 
 # Run compliance audit across all projects
 npx @compr/contextengine-mcp audit
@@ -417,6 +421,7 @@ Everything happens locally — search, scoring, learnings, sessions, embeddings.
 | Project files & source code | Read locally, never stored externally | ❌ Never |
 | Learnings (operational rules) | `~/.contextengine/learnings.json` | ❌ Never |
 | Sessions (decisions, progress) | `~/.contextengine/sessions/` | ❌ Never |
+| Session stats (value meter) | `~/.contextengine/session-stats.json` | ❌ Never |
 | Search index & embeddings | In-memory + `~/.contextengine/embedding-cache.json` | ❌ Never |
 | Git history & branches | Local `git` commands | ❌ Never |
 | Dependencies & package.json | Read locally | ❌ Never |

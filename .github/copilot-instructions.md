@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine (PUBLIC repo)
-- **Version**: v1.19.1
+- **Version**: v1.20.0
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
 - **VS Code Extension**: `css-llc.contextengine` — https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
@@ -11,7 +11,7 @@
 
 ## Architecture
 - MCP protocol over `stdio` transport — works with Claude Desktop, VS Code Copilot, Cursor, etc.
-- **CLI**: 15 subcommands — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `audit`, `activate`, `deactivate`, `status`, `save-session`, `load-session`, `list-sessions`, `end-session`, `import-learnings` (no MCP required)
+- **CLI**: 16 subcommands — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `audit`, `activate`, `deactivate`, `status`, `save-session`, `load-session`, `list-sessions`, `end-session`, `import-learnings`, `stats` (no MCP required)
 - Dual search: BM25 keyword (instant) + semantic embeddings (Xenova `all-MiniLM-L6-v2`, ~200ms from cache)
 - Sources auto-discovered: `copilot-instructions.md`, `CLAUDE.md`, `SKILLS.md`, `contextengine.json`, session docs
 - Operational context: git log, branch, recent commits, file tree, dependency versions
@@ -99,7 +99,7 @@
 | File | Purpose |
 |---|---|
 | `src/index.ts` | MCP server entry — tool registration, stdio transport |
-| `src/cli.ts` | CLI entry — 15 subcommands (search, score, sessions, audit, activate, etc.) |
+| `src/cli.ts` | CLI entry — 16 subcommands (search, score, sessions, audit, activate, stats, etc.) |
 | `src/search.ts` | BM25 keyword + semantic search, temporal decay, chunk ranking |
 | `src/sources.ts` | Auto-discovery of project docs, git context, dependency info |
 | `src/learnings.ts` | Append-only learning store, category validation, dedup, project-scoped filtering |
@@ -142,7 +142,7 @@
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.19.1)
+## Stats (as of v1.20.0)
 - ~9,700 lines of source code (~7,700 src/ + ~1,050 server/ + ~900 vscode-extension/)
 - 17 MCP tools (13 free + 4 gated)
 - 16 CLI subcommands (10 original + 5 new in v1.16.0 + stats in v1.20.0)
@@ -196,6 +196,23 @@
 - Extracted `<script>` from pricing.html → `public/pricing.js` (external file)
 - Added `express.static` route: `/contextengine/static/` → `public/`
 - Configured Helmet CSP directives: `script-src 'self'`, `style-src 'unsafe-inline'`, `connect-src` for Stripe
+
+## v1.20.0 — Value Meter & Session Stats (Feb 2026)
+### Session Stats File
+- **Path**: `~/.contextengine/session-stats.json` — written by firewall, polled by extension
+- **Writer**: `flushStats()` in `src/firewall.ts` — debounced every 10s via `scheduleStatsFlush()`
+- **Reader**: `StatsPoller` in `vscode-extension/src/statsPoller.ts` — polls every 15s, `isActive` true if updated within 5min
+- **Fields**: `toolCalls`, `learningsSaved`, `sessionSaved`, `uptimeMinutes`, `nudgesIssued`, `searchRecalls`, `truncations`, `estimatedTimeSavedMinutes`, `lastUpdated`
+- **Time-saved heuristic**: `recall×2min + nudge×1min + save×1min + session×3min` (in `estimateTimeSaved()`)
+
+### CLI `stats` Command
+- **Function**: `cliStats()` in `src/cli.ts` — reads `session-stats.json`, prints all metrics with emoji formatting
+- **Fallback**: "No active session stats found" if file missing or never written
+
+### VS Code Extension Value Meter (v0.6.0)
+- **Status bar**: `CE ~12min saved` or `CE 8🔍 3💾` (recalls + saves), falls back to git dirty count when no MCP session
+- **Info panel**: 4 big counters (MIN SAVED / RECALLS / SAVED / TOOL CALLS) + detail row (nudges, truncations, uptime)
+- **Wiring**: `extension.ts` connects `StatsPoller.onStats` → `statusBar.updateStats()` + `updateInfoPanel()`
 
 ## v1.19.1 — Auto-Import, Quality Gates & Delta Obfuscation (Feb 2026)
 ### Learning Quality Gates
