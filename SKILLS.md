@@ -53,7 +53,7 @@
 - `server/` is NEVER published to npm
 
 ### VPS Deployment
-- SSH: `sshpass -p '#Crowlr@2023' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`
+- SSH: Credentials in `.copilot-credentials.md` (local, gitignored) — use `sshpass -p "$VPS_SSH_PASS"` or source credentials file before running SSH commands
 - rsync/scp hang — use `cat local | ssh 'cat > remote'` instead
 - Server path: `/var/www/contextengine-server/`
 - Dist path: `/var/www/contextengine-dist/`
@@ -121,7 +121,9 @@ await saveLearning({
 
 ### Deploying a single file to VPS
 ```bash
-cat dist/file.js | sshpass -p '#Crowlr@2023' ssh -o PubkeyAuthentication=no \
+# Load VPS_SSH_PASS from .env or .copilot-credentials.md, then:
+export SSHPASS="$VPS_SSH_PASS"
+cat dist/file.js | sshpass -e ssh -o PubkeyAuthentication=no \
   -o StrictHostKeyChecking=no admin@92.243.24.157 \
   'cat > /var/www/contextengine-dist/file.js'
 ```

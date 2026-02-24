@@ -5,3 +5,4 @@ dist/
 .npmrc
 .DS_Store
 *.vsix
+.copilot-credentials.md
