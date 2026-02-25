@@ -2,11 +2,15 @@
   "sources": [
     { "name": "SKILLS", "path": "~/Projects/EXO/SKILLS.md" },
     { "name": "Session Doc", "path": "~/FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md" },
+    { "name": "FASTPROD Session", "path": "~/FASTPROD/SESSION.md" },
+    { "name": "FASTPROD App Docs", "path": "~/FASTPROD/FASTPROD_APPLICATION_DOCUMENTATION.md" },
+    { "name": "FASTPROD DB Schema", "path": "~/FASTPROD/FASTPROD_DATABASE_SCHEMA.md" },
     { "name": "Server Audit", "path": "~/Projects/EXO/SERVER_AUDIT_2026-02-11.md" },
     { "name": "Pipeline Diagnostic Map", "path": "~/FASTPROD/docs/PIPELINE_DIAGNOSTIC_MAP.md" }
   ],
   "workspaces": [
-    "~/Projects"
+    "~/Projects",
+    "~/FASTPROD"
   ],
   "patterns": [
     ".github/copilot-instructions.md"
