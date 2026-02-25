@@ -78,7 +78,18 @@
 - Chat commands: `/status`, `/commit`, `/search`, `/remind`, `/sync`
 - Doc freshness: `checkCEDocFreshness()` in contextEngineClient.ts — checks copilot-instructions, SKILLS.md, SCORE.md staleness
 - Pre-commit hook: `hooks/pre-commit` — **BLOCKS** (exit 1) when CE docs stale >4h. Override: `git commit --no-verify`
-- Terminal watcher: `terminalWatcher.ts` — 9 categories (git, npm, build, deploy, test, database, python, ssh, other), credential redaction, stuck-pattern detection
+- Terminal watcher: `terminalWatcher.ts` — 9 categories (git, npm, build, deploy, test, database, python, ssh, other), 10 credential redaction patterns, stuck-pattern detection
+
+### MCP Configuration Per Workspace
+- VS Code DEPRECATED MCP in user `settings.json` — use `.vscode/mcp.json` per workspace
+- Without it, agents in that project have zero ContextEngine tools
+- Template: `{"servers":{"contextengine":{"type":"stdio","command":"node","args":["/path/to/ContextEngine/dist/index.js"]}}}`
+- Every new project workspace needs this file — the bootstrapping gap means agents can't access the knowledge base that would tell them how to configure it
+
+### Credential Redaction (v0.6.6)
+- 10 patterns: WORD_API_KEY=, WORD_SECRET_KEY=, WORD_SECRET=, WORD_ACCESS_TOKEN=, WORD_API_SECRET=, vendor prefixes (gsk_, sk-live_, sk-test_, ghp_, glpat-, xoxb-, xoxp-), Bearer tokens, connection strings
+- Always test redaction with real-world Output panel samples — `api_key=` is too narrow, need `WORD_API_KEY=` format
+- `.git/hooks/` path operations classified as [git] not [other]
 
 ### Git Hooks & Terminal Patterns
 - **Post-commit hook** (`hooks/post-commit`): Auto-pushes to origin + gdrive after every commit
@@ -143,4 +154,4 @@ cat dist/file.js | sshpass -p '<PASSWORD>' ssh -o PubkeyAuthentication=no \
 ```
 
 ---
-*Last updated: 2026-02-25 — v1.20.1 + extension v0.6.5 log dedup + pre-commit BLOCKS*
+*Last updated: 2026-02-25 — v1.20.1 + extension v0.6.6 credential redaction + MCP bootstrapping + pre-commit BLOCKS*

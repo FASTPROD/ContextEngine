@@ -155,7 +155,7 @@
 - Semantic search: ~200ms from cache, ~15s first run
 - CI: GitHub Actions — Node 18/20/22, lint + build + test + smoke
 - Score: 89% A (30/30 doc, 22/30 infra, 17/20 quality, 20/20 security)
-- VS Code Extension: v0.6.5 published on marketplace (css-llc.contextengine)
+- VS Code Extension: v0.6.6 published on marketplace (css-llc.contextengine)
 - Pricing page: https://api.compr.ch/contextengine/pricing (live, static HTML)
 - E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 23, 2026)
 - Protocol Firewall: escalating compliance enforcement on all 17 tool responses
@@ -179,7 +179,8 @@
 9. **Never expose Protocol Firewall internals in README** — exact escalation thresholds, scoring formula, truncation limits, exempt tool list, and cache intervals are trade secrets
 10. **SSH to Gandi VPS** — Use `sshpass -p '<REDACTED_PASSWORD>' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`. SSH key passphrase is lost. For rsync: exclude `node_modules/`, `data/`, `delta-modules/`.
 11. **End-of-session protocol** — before ending ANY session, the agent MUST: (a) update `copilot-instructions.md` with new facts, (b) create/update `SKILLS.md`, (c) call `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit with descriptive message, (f) push to all remotes.
-12. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
+12. **Every project workspace needs `.vscode/mcp.json`** — MCP servers are NOT configured globally in VS Code user settings (deprecated). Each workspace must have its own `.vscode/mcp.json` with the ContextEngine stdio config. Without it, agents in that project have zero access to the knowledge base. See admin.CROWLR, FASTPROD, PLANK.io, CROWLR.io, FC_project for examples.
+13. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
 
 ## v1.19.0 — Protocol Firewall (Feb 2026)
 ### Architecture
@@ -299,7 +300,7 @@
 ### Terminal Watcher Categories (v0.6.5)
 - 9 categories: git, npm, build, deploy, test, database, python, ssh, other
 - v0.6.5 additions: `tsc --noEmit` → build, `npm version` → npm, `code --install-extension` → npm, `npx @vscode/vsce` → npm
-- 8 credential redaction patterns (passwords, tokens, API keys, SSH passphrases)
+- 10 credential redaction patterns (passwords, tokens, API keys, SSH passphrases, vendor key prefixes)
 - Stuck-pattern detection: threshold 3 identical commands before alerting
 
 ### Extension Architecture
@@ -336,6 +337,21 @@
 - **Install**: `cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`
 - **Philosophy**: Mechanical enforcement > memory-driven compliance. Agents create rules retroactively when caught — only hard gates prevent drift.
 - **⚠ zsh `$path` gotcha**: NEVER use `path` as a variable name in zsh scripts — `$path` is a special tied variable to `$PATH` (lowercase array). Overwriting it destroys PATH for the rest of the script. Use `candidate_path` or `file_path` instead.
+
+### Credential Redaction (v0.6.6)
+- **Problem**: PGPASSWORD, GROQ_API_KEY, and other secrets visible in plain text in Output panel logs
+- **Fix**: Broadened redaction patterns from 8 to 10:
+  - `WORD_API_KEY=`, `WORD_SECRET_KEY=`, `WORD_SECRET=`, `WORD_ACCESS_TOKEN=`, `WORD_API_SECRET=` — catches any env var pattern
+  - Known vendor key prefixes: `gsk_`, `sk-live_`, `sk-test_`, `ghp_`, `glpat-`, `xoxb-`, `xoxp-` — auto-redacted regardless of context
+- **Classification fix**: `.git/hooks/` path operations (cp, chmod, cat) now classified as `[git]` instead of `[other]`
+- **Lesson**: Credential redaction patterns must cover `WORD_KEY=value` format, not just `api_key=value`
+
+### MCP Bootstrapping (v0.6.6)
+- **Problem**: ContextEngine MCP was only configured in the ContextEngine workspace itself — agents in other projects had zero tools
+- **Fix**: Added `.vscode/mcp.json` to all project workspaces: admin.CROWLR, FASTPROD, PLANK.io, CROWLR.io, FC_project, COMPR-app, EXO
+- **Critical**: VS Code DEPRECATED `mcp` in user `settings.json` — message: "MCP servers should no longer be configured in user settings"
+- **Config location**: `.vscode/mcp.json` per workspace (NOT user settings.json)
+- **Template**: `{"servers":{"contextengine":{"type":"stdio","command":"node","args":["/Users/yan/Projects/ContextEngine/dist/index.js"]}}}`
 
 ### Post-Commit Hook
 - **File**: `hooks/post-commit` — auto-pushes to `origin` and `gdrive` remotes after every commit
