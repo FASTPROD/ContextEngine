@@ -137,7 +137,7 @@ ContextEngine has a **free VS Code extension** that provides proactive enforceme
 - **📈 Live stats dashboard** — click ℹ️ to see real-time session metrics (tool calls, recalls, nudges, truncations, time saved)
 - **@contextengine chat** — `/status`, `/commit`, `/search`, `/remind`, `/sync` in Copilot Chat
 - **Escalating notifications** — warns when files accumulate without commits
-- **Terminal watcher** — monitors git/npm/deploy/test commands and triggers rescans
+- **Terminal watcher** — monitors commands with smart classification (git, deploy, database, python, build, test), credential redaction in logs, and stuck-pattern detection (alerts after 3+ consecutive failures)
 - **One-click commit** — commit all changes across all repos
 
 The extension reads live metrics from the MCP server (via `~/.contextengine/session-stats.json`). For search, learnings, sessions, and scoring — it uses the MCP server (`npx @compr/contextengine-mcp`).

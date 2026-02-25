@@ -44,15 +44,18 @@ Click the ℹ️ status bar icon for a WebView panel showing:
 - Action buttons: "Commit All", "Show Status", "Run Sync"
 - 5-minute cooldown between notifications (no spam)
 
-### 🖥️ Terminal Watcher *(v0.4.0)*
+### 🖥️ Terminal Watcher *(v0.4.0, upgraded v0.6.2)*
 Monitors all terminal command completions via VS Code Shell Integration API:
-- Classifies commands: git, npm, build, deploy, test, ssh
+- **Smart classification**: git, npm, build, deploy, test, database, python, ssh
+- **Credential redaction** — passwords, tokens, API keys masked as `***` in Output log
+- **Stuck-pattern detection** — alerts after 3+ consecutive same-type failures (e.g. "Agent appears stuck: 3× git failures (SIGINT/cancelled)")
+- **Comment filtering** — shell comment lines (`# ...`) silently ignored
 - Fires notifications on success/failure
 - Auto-triggers git rescan after git commands
 - 30-second cooldown per category (no notification flood)
 
-### 🪝 Pre-Commit Hook *(v0.4.0)*
-Bundled at `hooks/pre-commit` — warns (never blocks) when code is staged but CE docs are stale (>4h) or missing. Install:
+### 🪝 Pre-Commit Hook *(v0.4.0, upgraded v1.20.0)*
+Bundled at `hooks/pre-commit` — **BLOCKS commits** (exit 1) when code is staged but CE docs are stale (>4h) or missing. Agents ignore warnings — only hard blocks prevent compliance drift. Override: `git commit --no-verify`. Install:
 ```bash
 cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 ```
