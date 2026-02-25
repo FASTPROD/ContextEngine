@@ -462,7 +462,7 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
     <div style="font-size: 1.3em; font-weight: 700;">⭐ Unlock PRO Features</div>
     <p class="cta-subtitle">Project scoring, compliance audit, port conflict detection, multi-project discovery.</p>
     <div style="margin: 12px 0;">
-      <strong>Pro</strong> $2/mo · <strong>Team</strong> $12/mo · <strong>Enterprise</strong> $36/mo
+      <strong>Pro</strong> CHF 2/mo · <strong>Team</strong> CHF 12/mo · <strong>Enterprise</strong> CHF 36/mo
     </div>
     <a class="cta-button" href="https://api.compr.ch/contextengine/pricing">Get ContextEngine PRO →</a>
     <p class="cta-subtitle">Already have a key? Run <code>npx @compr/contextengine-mcp activate</code></p>

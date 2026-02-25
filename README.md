@@ -165,9 +165,9 @@ ContextEngine is **free and open-core**. The free tier covers everything agents 
 
 | Plan | Price | Machines |
 |------|-------|----------|
-| **Pro** | $2/mo | 2 |
-| **Team** | $12/mo | 5 |
-| **Enterprise** | $36/mo | 10 |
+| **Pro** | CHF 2/mo | 2 |
+| **Team** | CHF 12/mo | 5 |
+| **Enterprise** | CHF 36/mo | 10 |
 
 → **[Get PRO](https://api.compr.ch/contextengine/pricing)** · Annual plans save 17%
 
