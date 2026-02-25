@@ -313,11 +313,12 @@
 - **Notifications** — Escalating warnings when files are uncommitted (5-min cooldown)
 - **Commit All** — One-click commit across all workspace repos
 
-### Pre-Commit Hook (v0.4.0)
+### Pre-Commit Hook (v0.4.0, upgraded v1.20.0)
 - **File**: `hooks/pre-commit` — checks CE doc freshness when code files are staged
-- **Behavior**: WARNS (does not block) when copilot-instructions.md, SKILLS.md, or SCORE.md are stale (>4h) or missing
+- **Behavior**: **BLOCKS** (exit 1) when copilot-instructions.md, SKILLS.md, or SCORE.md are stale (>4h) or missing. Override: `git commit --no-verify`
+- **Rationale**: Agents ignore warnings (exit 0) but cannot bypass blocks — proven across ContextEngine + STRIPE backend projects
 - **Install**: `cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`
-- **Philosophy**: Event-driven compliance (hooks + extension triggers), not memory-driven (hoping agent remembers)
+- **Philosophy**: Mechanical enforcement > memory-driven compliance. Agents create rules retroactively when caught — only hard gates prevent drift.
 - **⚠ zsh `$path` gotcha**: NEVER use `path` as a variable name in zsh scripts — `$path` is a special tied variable to `$PATH` (lowercase array). Overwriting it destroys PATH for the rest of the script. Use `candidate_path` or `file_path` instead.
 
 ### Post-Commit Hook

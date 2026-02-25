@@ -1,7 +1,10 @@
 #!/bin/zsh
 # ContextEngine — Pre-commit CE Compliance Check
 #
-# Warns (does NOT block) when code files changed but CE docs are stale.
+# BLOCKS commits when code files changed but CE docs are stale or missing.
+# Agents ignore warnings — only hard blocks prevent compliance drift.
+# Bypass: git commit --no-verify (requires explicit human override)
+#
 # Install: cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 
 # Ensure standard tools are on PATH (git hooks run with minimal PATH)
@@ -86,14 +89,17 @@ fi
 # ---------------------------------------------------------------------------
 if [[ $WARNINGS -gt 0 ]]; then
   echo ""
-  echo "╔═══════════════════════════════════════════════════╗"
-  echo "║  ContextEngine: $WARNINGS CE compliance warning(s)       ║"
-  echo "║  Code changed but CE docs may be stale.          ║"
-  echo "║  Consider: copilot-instructions, SKILLS, SCORE   ║"
-  echo "║  Commit proceeds — this is a reminder, not block ║"
-  echo "╚═══════════════════════════════════════════════════╝"
+  echo "╔═══════════════════════════════════════════════════════╗"
+  echo "║  ContextEngine: $WARNINGS CE compliance violation(s)          ║"
+  echo "║  Code changed but CE docs are stale or missing.      ║"
+  echo "║  Update: copilot-instructions, SKILLS, SCORE         ║"
+  echo "║                                                       ║"
+  echo "║  ❌ COMMIT BLOCKED — update docs first                ║"
+  echo "║  Override: git commit --no-verify                     ║"
+  echo "╚═══════════════════════════════════════════════════════╝"
   echo ""
+  exit 1  # BLOCK the commit
 fi
 
-# Always allow the commit (exit 0 = don't block)
+# All checks passed
 exit 0
