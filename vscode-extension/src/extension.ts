@@ -33,6 +33,7 @@ import { registerChatParticipant } from "./chatParticipant";
 import { InfoStatusBarController, showInfoPanel, updateInfoPanel } from "./infoPanel";
 import { TerminalWatcher } from "./terminalWatcher";
 import { StatsPoller } from "./statsPoller";
+import { LoggedOutputChannel } from "./outputLogger";
 import * as client from "./contextEngineClient";
 
 // ---------------------------------------------------------------------------
@@ -52,9 +53,13 @@ const disposables: vscode.Disposable[] = [];
 // ---------------------------------------------------------------------------
 
 export function activate(context: vscode.ExtensionContext): void {
-  const outputChannel = vscode.window.createOutputChannel("ContextEngine");
+  const rawChannel = vscode.window.createOutputChannel("ContextEngine");
+  const outputChannel = new LoggedOutputChannel(rawChannel);
   outputChannel.appendLine(
     `ContextEngine extension activated — ${new Date().toISOString()}`
+  );
+  outputChannel.appendLine(
+    `Output log: ${LoggedOutputChannel.logPath}`
   );
 
   // -----------------------------------------------------------------------
@@ -211,6 +216,7 @@ export function activate(context: vscode.ExtensionContext): void {
   for (const d of disposables) {
     context.subscriptions.push(d);
   }
+  context.subscriptions.push(outputChannel); // flush log file on deactivate
 
   outputChannel.appendLine(
     `ContextEngine ready — monitoring ${vscode.workspace.workspaceFolders?.length || 0} workspace folders`

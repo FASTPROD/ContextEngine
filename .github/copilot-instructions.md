@@ -155,7 +155,7 @@
 - Semantic search: ~200ms from cache, ~15s first run
 - CI: GitHub Actions — Node 18/20/22, lint + build + test + smoke
 - Score: 89% A (30/30 doc, 22/30 infra, 17/20 quality, 20/20 security)
-- VS Code Extension: v0.6.6 published on marketplace (css-llc.contextengine)
+- VS Code Extension: v0.6.7 published on marketplace (css-llc.contextengine)
 - Pricing page: https://api.compr.ch/contextengine/pricing (live, static HTML)
 - E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 23, 2026)
 - Protocol Firewall: escalating compliance enforcement on all 17 tool responses
@@ -282,11 +282,11 @@
 - Projects deploying via managed platforms (Vercel, Netlify, Render, Fly) get full infrastructure points without needing Docker
 - Prevents agents from creating dummy files to game the score
 
-## VS Code Extension (v0.6.0)
+## VS Code Extension (v0.6.7)
 - **Marketplace**: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **Publisher**: `css-llc` (Azure DevOps org `css-llc`, personal MS account `ymolinier@hotmail.com`)
 - **PAT**: stored in Azure DevOps — Marketplace → Manage scope, 1-year expiry
-- **Source**: `vscode-extension/` (9 TypeScript source files, ~1,500 lines)
+- **Source**: `vscode-extension/` (10 TypeScript source files, ~1,700 lines)
 - **Icon**: Red compr.app logo (256x256 PNG, from `COMPR-app/pwa_assets/compr/logo512.png` hue-shifted)
 
 ### Extension Log Dedup (v0.6.5)
@@ -315,6 +315,18 @@
 | `vscode-extension/src/contextEngineClient.ts` | CLI delegation for search/sessions + direct git operations + CE doc freshness |
 | `vscode-extension/src/terminalWatcher.ts` | Terminal command completion monitor — classifies commands, fires notifications, triggers git rescan |
 | `vscode-extension/src/statsPoller.ts` | Polls `~/.contextengine/session-stats.json` for live MCP session metrics |
+| `vscode-extension/src/outputLogger.ts` | Mirrors OutputChannel to `~/.contextengine/output.log` — enables agent log analysis |
+
+### Output File Logger (v0.6.7)
+- **File**: `vscode-extension/src/outputLogger.ts` — `LoggedOutputChannel` class
+- **Problem**: VS Code provides no API to read OutputChannel history — agents couldn't analyze Output panel content without user copy-paste
+- **Solution**: Wraps `vscode.OutputChannel`, mirrors every `appendLine()` to `~/.contextengine/output.log` with `[HH:MM:SS]` timestamps
+- **Log path**: `~/.contextengine/output.log` — readable by agents in ANY project via `read_file`
+- **Rotation**: Truncates oldest lines when file exceeds 512 KB (keeps most recent 384 KB)
+- **Session markers**: Writes `═══` separator with ISO timestamp on each activation
+- **Graceful failure**: If disk write fails, the real OutputChannel still works
+- **Debounced writes**: Buffers lines and flushes every 2 seconds to reduce I/O
+- **Static accessor**: `LoggedOutputChannel.logPath` returns the file path for logging at startup
 
 ### Extension Features
 - **Value meter status bar** — (v0.6.0) shows MCP session value: recalls, saves, time saved. Falls back to git status when no session active
