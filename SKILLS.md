@@ -77,15 +77,22 @@
 - Extension delegates to CLI — benefits from CLI fixes automatically
 - Chat commands: `/status`, `/commit`, `/search`, `/remind`, `/sync`
 - Doc freshness: `checkCEDocFreshness()` in contextEngineClient.ts — checks copilot-instructions, SKILLS.md, SCORE.md staleness
-- Pre-commit hook: `hooks/pre-commit` — warns about stale CE docs (never blocks)
-- Terminal watcher: `terminalWatcher.ts` — monitors all terminal commands via Shell Integration API, fires notifications on completion
+- Pre-commit hook: `hooks/pre-commit` — **BLOCKS** (exit 1) when CE docs stale >4h. Override: `git commit --no-verify`
+- Terminal watcher: `terminalWatcher.ts` — 9 categories (git, npm, build, deploy, test, database, python, ssh, other), credential redaction, stuck-pattern detection
 
 ### Git Hooks & Terminal Patterns
 - **Post-commit hook** (`hooks/post-commit`): Auto-pushes to origin + gdrive after every commit
 - Push takes 3-10s → VS Code terminal tool reports "cancelled" — but commit AND push succeed
 - **MANDATORY**: After ANY "cancelled" git commit, run `git log --oneline -1` to verify — NEVER re-attempt
-- **Pre-commit hook** (`hooks/pre-commit`): zsh script — NEVER use `path` as a variable name (zsh ties `$path` to `$PATH`)
+- **Pre-commit hook** (`hooks/pre-commit`): **BLOCKS** (exit 1) when code staged but CE docs stale (>4h) or missing
+- zsh script — NEVER use `path` as a variable name (zsh ties `$path` to `$PATH`)
 - Use `candidate_path`, `file_path`, etc. instead — overwriting `$path` destroys PATH for the rest of the script
+
+### Polling & Event Source Dedup (v0.6.5)
+- Polling-based architectures (StatsPoller, GitMonitor) must deduplicate at the event source
+- Pattern: cheap fingerprint string comparison (`${key1}|${key2}|...`) — only fire events/log when fingerprint changes
+- Eliminates 99% of log noise in VS Code Output panel
+- Apply to: `onStats` events, git scan logging, status bar updates
 
 ### Critical Constraints
 - **NEVER commit `.contextengine/`** — user data directory
@@ -136,4 +143,4 @@ cat dist/file.js | sshpass -p '<PASSWORD>' ssh -o PubkeyAuthentication=no \
 ```
 
 ---
-*Last updated: 2026-02-24 — v1.19.1 + quality gates + repo public*
+*Last updated: 2026-02-25 — v1.20.1 + extension v0.6.5 log dedup + pre-commit BLOCKS*

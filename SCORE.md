@@ -1,9 +1,9 @@
 # SCORE.md — AI-Readiness Score
 
 **Project**: ContextEngine
-**Version**: v1.19.1
+**Version**: v1.20.1
 **Score**: 89/100 (A)
-**Date**: 2026-02-24
+**Date**: 2026-02-25
 
 ## Summary
 

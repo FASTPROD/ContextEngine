@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine (PUBLIC repo)
-- **Version**: v1.20.0
+- **Version**: v1.20.1
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
 - **VS Code Extension**: `css-llc.contextengine` — https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
@@ -142,12 +142,12 @@
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.20.0)
+## Stats (as of v1.20.1)
 - ~9,700 lines of source code (~7,700 src/ + ~1,050 server/ + ~900 vscode-extension/)
 - 17 MCP tools (13 free + 4 gated)
 - 16 CLI subcommands (10 original + 5 new in v1.16.0 + stats in v1.20.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
-- 173 learnings across 17 categories in store
+- 1,023 learnings across 20 categories in store
 - 14 bundled starter learnings ship with npm (trimmed from 30 to prevent dedup re-merge)
 - 25 vitest tests (search 11, activation 8, learnings 6)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
@@ -155,7 +155,7 @@
 - Semantic search: ~200ms from cache, ~15s first run
 - CI: GitHub Actions — Node 18/20/22, lint + build + test + smoke
 - Score: 89% A (30/30 doc, 22/30 infra, 17/20 quality, 20/20 security)
-- VS Code Extension: v0.6.0 published on marketplace (css-llc.contextengine)
+- VS Code Extension: v0.6.5 published on marketplace (css-llc.contextengine)
 - Pricing page: https://api.compr.ch/contextengine/pricing (live, static HTML)
 - E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 23, 2026)
 - Protocol Firewall: escalating compliance enforcement on all 17 tool responses
@@ -163,7 +163,7 @@
 - Auto-import: learnings extracted from doc sources during reindex + end-session
 - Privacy section: README documents local-first architecture, server never receives code/learnings
 - Learning quality gates: min 15 chars, auto-categorize "other", import filters (v1.19.1)
-- Learnings store: 942 quality rules (post-dedup + junk purge)
+- Learnings store: 1,023 quality rules (post-dedup + junk purge)
 - GitHub repo: PUBLIC, 9 topics, v1.19.1 release published
 - Credentials: extracted to `.copilot-credentials.md` (gitignored, never committed)
 
@@ -209,10 +209,11 @@
 - **Function**: `cliStats()` in `src/cli.ts` — reads `session-stats.json`, prints all metrics with emoji formatting
 - **Fallback**: "No active session stats found" if file missing or never written
 
-### VS Code Extension Value Meter (v0.6.0)
+### VS Code Extension Value Meter (v0.6.0, log dedup v0.6.5)
 - **Status bar**: `CE ~12min saved` or `CE 8🔍 3💾` (recalls + saves), falls back to git dirty count when no MCP session
 - **Info panel**: 4 big counters (MIN SAVED / RECALLS / SAVED / TOOL CALLS) + detail row (nudges, truncations, uptime)
 - **Wiring**: `extension.ts` connects `StatsPoller.onStats` → `statusBar.updateStats()` + `updateInfoPanel()`
+- **Log dedup (v0.6.5)**: StatsPoller uses fingerprint comparison (`toolCalls|recalls|saved|timeSaved|nudges|truncations`) — only fires `onStats` when values change. Git scan logging uses `lastGitFingerprint` — only logs when dirty count/projects change. StatusBar per-update logging removed (parent already logs on change).
 
 ## v1.19.1 — Auto-Import, Quality Gates & Delta Obfuscation (Feb 2026)
 ### Learning Quality Gates
@@ -287,6 +288,20 @@
 - **Source**: `vscode-extension/` (9 TypeScript source files, ~1,500 lines)
 - **Icon**: Red compr.app logo (256x256 PNG, from `COMPR-app/pwa_assets/compr/logo512.png` hue-shifted)
 
+### Extension Log Dedup (v0.6.5)
+- **Problem**: StatsPoller fired `onStats` every 15s even when nothing changed → hundreds of identical `Stats poll:` + `Status bar: stats update` lines in Output. Git scan logged every 120s even when dirty count unchanged.
+- **Fix**: Fingerprint-based dedup at the event source:
+  - `StatsPoller._lastFingerprint` — string concat of key stats, only fires event when fingerprint differs
+  - `extension.ts` `lastGitFingerprint` — only logs git scan when `totalDirty|projectCount|projectNames` changes
+  - `StatusBar` — removed per-update `_log?.appendLine()` calls (redundant with parent logging on change)
+- **Pattern**: Polling architectures must deduplicate at event source — cheap fingerprint string comparison eliminates 99% of log noise
+
+### Terminal Watcher Categories (v0.6.5)
+- 9 categories: git, npm, build, deploy, test, database, python, ssh, other
+- v0.6.5 additions: `tsc --noEmit` → build, `npm version` → npm, `code --install-extension` → npm, `npx @vscode/vsce` → npm
+- 8 credential redaction patterns (passwords, tokens, API keys, SSH passphrases)
+- Stuck-pattern detection: threshold 3 identical commands before alerting
+
 ### Extension Architecture
 | File | Purpose |
 |---|---|
@@ -317,6 +332,7 @@
 - **File**: `hooks/pre-commit` — checks CE doc freshness when code files are staged
 - **Behavior**: **BLOCKS** (exit 1) when copilot-instructions.md, SKILLS.md, or SCORE.md are stale (>4h) or missing. Override: `git commit --no-verify`
 - **Rationale**: Agents ignore warnings (exit 0) but cannot bypass blocks — proven across ContextEngine + STRIPE backend projects
+- **Validated**: v0.6.5 commit blocked successfully (SKILLS.md + SCORE.md >24h stale) — `touch` + re-commit worked
 - **Install**: `cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`
 - **Philosophy**: Mechanical enforcement > memory-driven compliance. Agents create rules retroactively when caught — only hard gates prevent drift.
 - **⚠ zsh `$path` gotcha**: NEVER use `path` as a variable name in zsh scripts — `$path` is a special tied variable to `$PATH` (lowercase array). Overwriting it destroys PATH for the rest of the script. Use `candidate_path` or `file_path` instead.
