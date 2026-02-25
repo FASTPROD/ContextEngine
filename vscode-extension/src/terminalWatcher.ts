@@ -50,6 +50,7 @@ const COMMAND_PATTERNS: { pattern: RegExp; category: CommandCategory }[] = [
   // Git
   { pattern: /^git\s/, category: "git" },
   { pattern: /\bgit\s+(commit|push|pull|merge|rebase|checkout|add|status|log|diff|stash|reset|restore)\b/, category: "git" },
+  { pattern: /\b(cp|chmod|cat|ls|rm)\b.*\.git\/(hooks|config)/, category: "git" },
   // Database
   { pattern: /\b(psql|mysql|mongosh|redis-cli|sqlite3)\b/, category: "database" },
   { pattern: /\bPGPASSWORD\b/, category: "database" },
@@ -108,8 +109,10 @@ const REDACT_PATTERNS: { pattern: RegExp; replacement: string }[] = [  // printf
   { pattern: /Authorization:\s*['\"]?Bearer\s+\$?\{?[A-Za-z0-9._\-]+\}?['\"]?/gi, replacement: "Authorization: Bearer ***" },
   // TOKEN=xxx or $TOKEN inline (only long tokens, not the variable name)
   { pattern: /TOKEN=(['\"]?[A-Za-z0-9._\-]{20,}['\"]?)/gi, replacement: "TOKEN=***" },
-  // API keys: key=xxx, api_key=xxx, apikey=xxx
-  { pattern: /(api[_-]?key|secret[_-]?key|access[_-]?token)\s*=\s*['\"]?[^'"\s]+['\"]?/gi, replacement: "$1=***" },
+  // ENV_API_KEY=value, ENV_SECRET_KEY=value, ENV_SECRET=value (e.g. GROQ_API_KEY=gsk_xxx, STRIPE_SECRET_KEY=sk_xxx)
+  { pattern: /[A-Z_]*(?:API_KEY|SECRET_KEY|SECRET|ACCESS_TOKEN|API_SECRET)\s*=\s*['\"]?[^'"\s]{4,}['\"]?/gi, replacement: "***_REDACTED=***" },
+  // Known API key prefixes: gsk_, sk-live_, sk-test_, sk-, ghp_, glpat-, xoxb-, xoxp-
+  { pattern: /\b(gsk_|sk-live_|sk-test_|sk-|ghp_|glpat-|xoxb-|xoxp-)[A-Za-z0-9_\-]{10,}/gi, replacement: "***" },
   // Connection strings with passwords: ://user:pass@host
   { pattern: /:\/\/([^:]+):([^@]{4,})@/gi, replacement: "://$1:***@" },
 ];
