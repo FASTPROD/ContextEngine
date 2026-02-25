@@ -53,9 +53,11 @@ export class StatsPoller implements vscode.Disposable {
   private _timer: ReturnType<typeof setInterval> | undefined;
   private _stats: SessionStats = { ...EMPTY_STATS };
   private _active = false;
+  /** Fingerprint of last emitted stats — only fire event on change. */
+  private _lastFingerprint = "";
 
   private readonly _onStats = new vscode.EventEmitter<SessionStats>();
-  /** Fires whenever stats are refreshed from disk. */
+  /** Fires only when stats actually change (not every poll). */
   readonly onStats = this._onStats.event;
 
   private static readonly STATS_PATH = path.join(
@@ -109,9 +111,15 @@ export class StatsPoller implements vscode.Disposable {
 
       // Consider session active if updated within the last 5 minutes
       const updatedAt = new Date(this._stats.updatedAt).getTime();
+      const wasActive = this._active;
       this._active = !isNaN(updatedAt) && Date.now() - updatedAt < 5 * 60_000;
 
-      this._onStats.fire(this._stats);
+      // Only fire event when stats actually change
+      const fp = `${this._stats.toolCalls}|${this._stats.searchRecalls}|${this._stats.learningsSaved}|${this._stats.timeSavedMinutes}|${this._active}|${this._stats.nudgesIssued}|${this._stats.truncations}`;
+      if (fp !== this._lastFingerprint || this._active !== wasActive) {
+        this._lastFingerprint = fp;
+        this._onStats.fire(this._stats);
+      }
     } catch {
       // File might be mid-write or corrupt — skip this cycle
     }

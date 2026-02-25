@@ -66,9 +66,13 @@ const COMMAND_PATTERNS: { pattern: RegExp; category: CommandCategory }[] = [
   { pattern: /\bvite\s+build\b/, category: "build" },
   { pattern: /\bwebpack\b/, category: "build" },
   { pattern: /\breact-scripts\s+build\b/, category: "build" },
+  { pattern: /\btsc\s+--noEmit\b/, category: "build" },
   // npm
-  { pattern: /^npm\s+(publish|install|run|test)/, category: "npm" },
+  { pattern: /^npm\s+(publish|install|run|test|version)/, category: "npm" },
+  { pattern: /^npx\s+@vscode\/vsce\b/, category: "npm" },
   { pattern: /^npx\s/, category: "npm" },
+  // VS Code
+  { pattern: /^code\s+--install-extension\b/, category: "npm" },
   // Deploy / infra
   { pattern: /\b(sshpass|ssh|rsync|scp|deploy)\b/, category: "deploy" },
   { pattern: /\bpm2\b/, category: "deploy" },

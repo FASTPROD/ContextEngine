@@ -69,15 +69,20 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBar = new StatusBarController(outputChannel);
   disposables.push(statusBar);
 
-  // Connect git monitor → status bar + info panel
+  // Connect git monitor → status bar + info panel (only log on change)
+  let lastGitFingerprint = "";
   disposables.push(
     gitMonitor.onSnapshot((snapshot) => {
-      outputChannel.appendLine(
-        `Git scan: ${snapshot.projects.length} projects, ${snapshot.totalDirty} dirty files` +
-        (snapshot.dirtyProjects.length > 0
-          ? ` (${snapshot.dirtyProjects.map(p => `${p.name}:${p.dirty}`).join(", ")})`
-          : "")
-      );
+      const fp = `${snapshot.totalDirty}|${snapshot.projects.length}|${snapshot.dirtyProjects.map(p => `${p.name}:${p.dirty}`).join(",")}`;
+      if (fp !== lastGitFingerprint) {
+        lastGitFingerprint = fp;
+        outputChannel.appendLine(
+          `Git scan: ${snapshot.projects.length} projects, ${snapshot.totalDirty} dirty files` +
+          (snapshot.dirtyProjects.length > 0
+            ? ` (${snapshot.dirtyProjects.map(p => `${p.name}:${p.dirty}`).join(", ")})`
+            : "")
+        );
+      }
       statusBar.update(snapshot);
       updateInfoPanel(snapshot, statsPoller?.stats, statsPoller?.isActive);
     })
@@ -95,11 +100,11 @@ export function activate(context: vscode.ExtensionContext): void {
   statsPoller = new StatsPoller();
   disposables.push(statsPoller);
 
-  // Connect stats poller → status bar + info panel
+  // Connect stats poller → status bar + info panel (only fires on change)
   disposables.push(
     statsPoller.onStats((stats) => {
       outputChannel.appendLine(
-        `Stats poll: toolCalls=${stats.toolCalls}, recalls=${stats.searchRecalls}, saved=${stats.learningsSaved}, timeSaved=${stats.timeSavedMinutes}min, active=${statsPoller.isActive}`
+        `Stats changed: toolCalls=${stats.toolCalls}, recalls=${stats.searchRecalls}, saved=${stats.learningsSaved}, timeSaved=${stats.timeSavedMinutes}min, active=${statsPoller.isActive}`
       );
       statusBar.updateStats(stats, statsPoller.isActive);
       // Also refresh the info panel if open

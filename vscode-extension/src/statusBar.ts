@@ -63,9 +63,6 @@ export class StatusBarController implements vscode.Disposable {
   updateStats(stats: SessionStats, active: boolean): void {
     this._lastStats = stats;
     this._sessionActive = active;
-    this._log?.appendLine(
-      `Status bar: stats update (active=${active}, recalls=${stats.searchRecalls}, saved=${stats.learningsSaved}, timeSaved=${stats.timeSavedMinutes}min)`
-    );
     this._render();
   }
 
@@ -74,9 +71,6 @@ export class StatusBarController implements vscode.Disposable {
    */
   update(snapshot: GitSnapshot): void {
     this._lastSnapshot = snapshot;
-    this._log?.appendLine(
-      `Status bar: git update (dirty=${snapshot.totalDirty}, projects=${snapshot.projects.length}, sessionActive=${this._sessionActive})`
-    );
     // Only render from git if we don't have active session stats
     if (!this._sessionActive) {
       this._render();
