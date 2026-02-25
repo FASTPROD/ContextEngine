@@ -49,7 +49,7 @@
 - **Events handled**: `checkout.session.completed` (auto-seed license + email key), `customer.subscription.deleted` (deactivate), `invoice.payment_failed` (log)
 - **License email**: HTML template via Gandi SMTP (`mail.gandi.net:465`)
 - **Graceful degradation**: Server runs without `STRIPE_SECRET_KEY` — payment endpoints simply not mounted
-- **Plans**: Pro ($2/mo, 2 machines), Team ($12/mo, 5 machines), Enterprise ($36/mo, 10 machines)
+- **Plans**: Pro (CHF 2/mo, 2 machines), Team (CHF 12/mo, 5 machines), Enterprise (CHF 36/mo, 10 machines)
 - **Price IDs**: 6 env vars (`STRIPE_PRICE_PRO_MONTHLY`, `..._ANNUAL`, etc.) — set from Stripe Dashboard
 - **License dedup**: If same email+plan already has active license, extends expiry instead of creating duplicate
 - **stripe_mapping table**: Tracks `subscription_id → license_id` for cancellation handling
