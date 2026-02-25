@@ -105,6 +105,14 @@
 - Eliminates 99% of log noise in VS Code Output panel
 - Apply to: `onStats` events, git scan logging, status bar updates
 
+### Output File Logger (v0.6.7)
+- `LoggedOutputChannel` wraps `vscode.OutputChannel`, mirrors all writes to `~/.contextengine/output.log`
+- Agents in any project can `read_file ~/.contextengine/output.log` for terminal/extension activity analysis
+- Log has `[HH:MM:SS]` timestamps, session markers (`═══`), auto-rotation at 512 KB
+- Debounced writes (2s) — not every appendLine triggers a disk write
+- Graceful failure: if logging fails, real OutputChannel still works
+- Constructor: `new LoggedOutputChannel(rawChannel)` — drop-in replacement
+
 ### Critical Constraints
 - **NEVER commit `.contextengine/`** — user data directory
 - **BSL-1.1 license** — no hosted/SaaS competitor allowed
@@ -154,4 +162,4 @@ cat dist/file.js | sshpass -p '<PASSWORD>' ssh -o PubkeyAuthentication=no \
 ```
 
 ---
-*Last updated: 2026-02-25 — v1.20.1 + extension v0.6.6 credential redaction + MCP bootstrapping + pre-commit BLOCKS*
+*Last updated: 2026-02-25 — v1.20.1 + extension v0.6.7 output file logger + credential redaction + MCP bootstrapping*
