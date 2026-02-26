@@ -1,6 +1,7 @@
 {
-  "mcpServers": {
-    "ContextEngine": {
+  "servers": {
+    "contextengine": {
+      "type": "stdio",
       "command": "node",
       "args": ["/Users/yan/Projects/ContextEngine/dist/index.js"]
     }
