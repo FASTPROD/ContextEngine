@@ -19,7 +19,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import type * as vscode from "vscode";
+import * as vscode from "vscode";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -51,6 +51,8 @@ export class LoggedOutputChannel implements vscode.OutputChannel {
   private _bytesWritten = 0;
   private _writeBuffer: string[] = [];
   private _flushTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Short workspace tag to distinguish multiple VS Code windows in the shared log. */
+  private _wsTag: string;
 
   /** Debounce interval for flushing writes to disk (ms). */
   private static readonly FLUSH_INTERVAL_MS = 2_000;
@@ -58,9 +60,22 @@ export class LoggedOutputChannel implements vscode.OutputChannel {
   constructor(channel: vscode.OutputChannel) {
     this._channel = channel;
     this.name = channel.name;
+    this._wsTag = LoggedOutputChannel._deriveWsTag();
     this._ensureDir();
     this._openFile();
     this._writeSessionMarker();
+  }
+
+  /**
+   * Derive a short workspace tag from the first workspace folder name.
+   * Returns e.g. "CE", "compR", "CROWLR" — or "no-ws" if no folder open.
+   */
+  private static _deriveWsTag(): string {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) return "no-ws";
+    const name = folders[0].name;
+    // Abbreviate: take first 8 chars, strip spaces
+    return name.replace(/\s+/g, "").slice(0, 8);
   }
 
   // -- OutputChannel interface (used methods) --------------------------------
@@ -158,7 +173,7 @@ export class LoggedOutputChannel implements vscode.OutputChannel {
     const marker = [
       "",
       "════════════════════════════════════════════════════════════════",
-      `  ContextEngine Extension Session — ${new Date().toISOString()}`,
+      `  ContextEngine Extension Session — ${new Date().toISOString()} [${this._wsTag}]`,
       "════════════════════════════════════════════════════════════════",
       "",
     ].join("\n");
@@ -168,7 +183,7 @@ export class LoggedOutputChannel implements vscode.OutputChannel {
 
   private _bufferLine(value: string): void {
     const ts = new Date().toISOString().slice(11, 19); // HH:MM:SS
-    this._writeBuffer.push(`[${ts}] ${value}\n`);
+    this._writeBuffer.push(`[${ts}] [${this._wsTag}] ${value}\n`);
     this._scheduleFlush();
   }
 
