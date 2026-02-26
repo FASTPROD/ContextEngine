@@ -2,6 +2,47 @@
 
 All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
+## [1.20.2] — 2026-02-26
+
+### Fixed
+- **MCP config schema** — `.vscode/mcp.json` corrected from `mcpServers` to `servers`, added `"type": "stdio"`. MCP was disconnected from Copilot Chat without this fix.
+- Removed deprecated MCP config from `.code-workspace` settings.
+- **Multi-window output.log** — `outputLogger.ts` now tags every line with workspace name (e.g. `[ContextE]`, `[compR]`) to disambiguate shared log from multiple VS Code windows.
+
+### Added
+- 3 new test suites: `cli.test.ts` (8 tests), `sessions.test.ts` (16 tests), `firewall.test.ts` (8 tests).
+- **57 tests across 6 files** (was 25 in 3 files). Score: 95% A+.
+- PM2 `ecosystem.config.cjs` for local dev orchestration.
+
+## [1.20.1] — 2026-02-25
+
+### Fixed
+- **Pre-commit hook now BLOCKS** (exit 1) — agents ignore warnings, only hard gates prevent compliance drift.
+
+### VS Code Extension v0.6.2–v0.6.7
+- Terminal watcher — 9 categories, 10 credential redaction patterns, stuck-pattern detection (3+ failures).
+- Log dedup (v0.6.5) — fingerprint-based, 99% output noise reduction.
+- Output file logger (v0.6.7) — mirrors Output panel to `~/.contextengine/output.log` for agent analysis.
+- Credential redaction broadened to `WORD_API_KEY=` patterns + vendor prefixes (gsk_, sk-live_, ghp_, etc.).
+
+## [1.20.0] — 2026-02-25
+
+### Added
+- **Value Meter** — status bar shows recalls, saves, estimated time saved.
+- **Live stats dashboard** — ℹ️ info panel shows real-time session metrics.
+- **CLI `stats` command** — reads `~/.contextengine/session-stats.json` for live metrics.
+- Stats written by Protocol Firewall via `flushStats()` (debounced every 10s).
+
+## [1.19.0–1.19.1] — 2026-02-24
+
+### Added
+- **Protocol Firewall** — escalating compliance enforcement on all 17 tool responses.
+- **Learning quality gates** — min 15 chars, auto-categorization, import filters.
+- **Auto-import learnings** from discovered markdown sources during reindex.
+- **Delta module obfuscation** — terser mangle+compress, 46–72% size reduction.
+- Privacy & Data Security section in README.
+- GitHub repo made PUBLIC.
+
 ## [1.18.0] — 2026-02-23
 
 ### Security

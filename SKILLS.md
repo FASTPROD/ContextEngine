@@ -50,7 +50,7 @@
 
 ### Build & Test
 - `npx tsc` — TypeScript compilation (strict mode)
-- `npx vitest run` — 25 tests across 3 files (search, learnings, activation)
+- `npx vitest run` — 57 tests across 6 files (search, learnings, activation, cli, sessions, firewall)
 - `npx eslint .` — typescript-eslint flat config
 - Tests must pass before any commit
 
@@ -70,7 +70,7 @@
 - After deploy: `npx pm2 restart ecosystem.config.cjs && npx pm2 save`
 
 ### VS Code Extension
-- Source: `vscode-extension/` — 8 TypeScript files
+- Source: `vscode-extension/` — 10 TypeScript files
 - Publisher: `css-llc` (Azure DevOps PAT, `ymolinier@hotmail.com`)
 - Package: `npx @vscode/vsce package` → `.vsix`
 - Publish: `echo '<PAT>' | npx @vscode/vsce publish`
@@ -79,11 +79,12 @@
 - Doc freshness: `checkCEDocFreshness()` in contextEngineClient.ts — checks copilot-instructions, SKILLS.md, SCORE.md staleness
 - Pre-commit hook: `hooks/pre-commit` — **BLOCKS** (exit 1) when CE docs stale >4h. Override: `git commit --no-verify`
 - Terminal watcher: `terminalWatcher.ts` — 9 categories (git, npm, build, deploy, test, database, python, ssh, other), 10 credential redaction patterns, stuck-pattern detection
+- Multi-window output.log: `outputLogger.ts` tags lines with `[wsTag]` (workspace name) to disambiguate shared log across windows
 
 ### MCP Configuration Per Workspace
-- VS Code DEPRECATED MCP in user `settings.json` — use `.vscode/mcp.json` per workspace
+- VS Code DEPRECATED MCP in user `settings.json` AND global `mcp.json` — use `.vscode/mcp.json` per workspace
+- Schema: `{"servers":{"contextengine":{"type":"stdio","command":"node","args":["..."]}}}` (NOT `mcpServers`)
 - Without it, agents in that project have zero ContextEngine tools
-- Template: `{"servers":{"contextengine":{"type":"stdio","command":"node","args":["/path/to/ContextEngine/dist/index.js"]}}}`
 - Every new project workspace needs this file — the bootstrapping gap means agents can't access the knowledge base that would tell them how to configure it
 
 ### Credential Redaction (v0.6.6)
@@ -162,4 +163,4 @@ cat dist/file.js | sshpass -p '<PASSWORD>' ssh -o PubkeyAuthentication=no \
 ```
 
 ---
-*Last updated: 2026-02-25 — v1.20.1 + extension v0.6.7 output file logger + credential redaction + MCP bootstrapping*
+*Last updated: 2026-02-26 — v1.20.2 + 57 tests + MCP config fix + multi-window output.log tagging*

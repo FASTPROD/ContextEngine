@@ -49,14 +49,15 @@ Detects your project type, creates `contextengine.json` + `.github/copilot-instr
 
 ### 2. Add to your MCP client
 
-**VS Code (recommended — global setup)**
+**VS Code (recommended — per-project setup)**
 
-Create `~/Library/Application Support/Code/User/mcp.json` (macOS) or `~/.config/Code/User/mcp.json` (Linux):
+Create `.vscode/mcp.json` in your project root:
 
 ```json
 {
-  "mcpServers": {
-    "ContextEngine": {
+  "servers": {
+    "contextengine": {
+      "type": "stdio",
       "command": "npx",
       "args": ["-y", "@compr/contextengine-mcp"]
     }
@@ -64,9 +65,9 @@ Create `~/Library/Application Support/Code/User/mcp.json` (macOS) or `~/.config/
 }
 ```
 
-This makes ContextEngine available in **every VS Code workspace** automatically — no per-project config needed.
+This activates ContextEngine when the workspace is open. Add this file to each project that needs it.
 
-> **Per-project alternative:** Create `.vscode/mcp.json` in any repo with the same content. This only activates ContextEngine when that workspace is open.
+> **Note:** VS Code deprecated MCP configuration in user `settings.json`. Use `.vscode/mcp.json` per workspace instead.
 
 **Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
