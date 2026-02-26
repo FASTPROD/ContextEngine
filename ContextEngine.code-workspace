@@ -1,18 +1,8 @@
 {
 	"folders": [
 		{
-			"name": "ContextEngine",
 			"path": "."
 		}
 	],
-	"settings": {
-		"mcp": {
-			"servers": {
-				"ContextEngine": {
-					"command": "node",
-					"args": ["/Users/yan/Projects/ContextEngine/dist/index.js"]
-				}
-			}
-		}
-	}
+	"settings": {}
 }
