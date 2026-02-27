@@ -180,7 +180,7 @@
 9. **Never expose Protocol Firewall internals in README** — exact escalation thresholds, scoring formula, truncation limits, exempt tool list, and cache intervals are trade secrets
 10. **SSH to Gandi VPS** — Use `sshpass -p '<REDACTED_PASSWORD>' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`. SSH key passphrase is lost. For rsync: exclude `node_modules/`, `data/`, `delta-modules/`.
 11. **End-of-session protocol** — before ending ANY session, the agent MUST: (a) update `copilot-instructions.md` with new facts, (b) create/update `SKILLS.md`, (c) call `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit with descriptive message, (f) push to all remotes.
-12. **Every project workspace needs `.vscode/mcp.json`** — MCP servers are NOT configured globally in VS Code user settings (deprecated). Each workspace must have its own `.vscode/mcp.json` with the ContextEngine stdio config. Without it, agents in that project have zero access to the knowledge base. See admin.CROWLR, FASTPROD, PLANK.io, CROWLR.io, FC_project for examples.
+12. **Every project workspace needs `.vscode/mcp.json`** — MCP servers are NOT configured globally in VS Code user settings (deprecated). Each workspace must have its own `.vscode/mcp.json` with the ContextEngine stdio config. Without it, agents in that project have zero access to the knowledge base. **MUST use absolute node path** (not bare `node`) to avoid shell-env resolution failures. See admin.CROWLR, FASTPROD, PLANK.io, CROWLR.io, FC_project, COMPR-app, EXO, GOOGLE Analytics, shop.invoc.io for examples.
 13. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
 
 ## v1.19.0 — Protocol Firewall (Feb 2026)
@@ -364,7 +364,8 @@
 - **Fix**: Added `.vscode/mcp.json` to all project workspaces: admin.CROWLR, FASTPROD, PLANK.io, CROWLR.io, FC_project, COMPR-app, EXO
 - **Critical**: VS Code DEPRECATED `mcp` in user `settings.json` — message: "MCP servers should no longer be configured in user settings"
 - **Config location**: `.vscode/mcp.json` per workspace (NOT user settings.json)
-- **Template**: `{"servers":{"contextengine":{"type":"stdio","command":"node","args":["/Users/yan/Projects/ContextEngine/dist/index.js"]}}}`
+- **Template**: `{"servers":{"contextengine":{"type":"stdio","command":"/Users/yan/.nvm/versions/node/v20.19.4/bin/node","args":["/Users/yan/Projects/ContextEngine/dist/index.js"]}}}`
+- **⚠ MUST use absolute node path** — bare `node` causes `spawn node ENOENT` when VS Code fails to resolve shell environment
 
 ### Multi-Window Output Logs (v0.6.7+)
 - **Problem**: Multiple VS Code windows all write to `~/.contextengine/output.log` — stats events looked like dedup failures but were correct per-instance behavior from different windows
@@ -378,6 +379,14 @@
 - **Workspace settings**: Removed deprecated MCP config from `ContextEngine.code-workspace` `settings.mcp` block
 - **README**: Updated Quick Start to recommend per-project `.vscode/mcp.json` instead of global user config
 - **Lesson**: VS Code deprecated MCP in user `settings.json` and global `mcp.json`. Per-workspace `.vscode/mcp.json` with `servers` key is the correct location.
+
+### MCP Node Resolution Fix (Feb 27, 2026)
+- **Problem**: VS Code intermittently fails to resolve shell environment → `spawn node ENOENT` → MCP server won't start → all chat windows lost
+- **Error**: "Unable to resolve your shell environment in a reasonable time" + "The command 'node' needed to run contextengine was not found"
+- **Root cause**: VS Code launches MCP servers before nvm/shell init completes — bare `node` command not on PATH
+- **Fix**: Changed ALL 9 workspace `.vscode/mcp.json` files to use absolute node path: `/Users/yan/.nvm/versions/node/v20.19.4/bin/node`
+- **Also fixed**: 6 workspaces still used old `mcpServers` key (admin.CROWLR, COMPR-app, CROWLR.io, EXO, FC_project, shop.invoc.io); 2 used `npx` (shop.invoc.io, PLANK.io) — all now use `servers` + `type:stdio` + absolute path + local dist
+- **Lesson**: NEVER use bare `node` or `npx` in `.vscode/mcp.json` on nvm-managed systems. Always use the absolute path from `which node`. Dev machines should point to local `dist/index.js` (instant startup, always latest), not `npx` (slow, stale).
 
 ### Post-Commit Hook
 - **File**: `hooks/post-commit` — auto-pushes to `origin` and `gdrive` remotes after every commit
