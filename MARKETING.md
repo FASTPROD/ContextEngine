@@ -70,12 +70,12 @@ So I built **ContextEngine** — an MCP server that turns your project docs into
 **What it does:**
 - 🔍 Hybrid search (BM25 keyword + semantic embeddings) across all your docs
 - 🧠 Persistent learnings that survive across sessions (1,000+ rules in my knowledge base)
-- 🛡️ Protocol Firewall — escalating compliance enforcement (nudge → header → degraded responses)
+- 🛡️ Protocol Firewall — built-in enforcement that ensures agents save learnings, commit code, and update docs
 - 💾 Session save/load so agents can resume where they left off
 - ⚡ Zero config — auto-discovers copilot-instructions.md, CLAUDE.md, SKILLS.md
 - 🔒 100% local — embeddings run on CPU, nothing leaves your machine
 
-**The Protocol Firewall is the real differentiator.** It progressively degrades tool responses when agents skip learnings, commits, or documentation. Warnings don't work (agents ignore them). Blocking exit codes don't work (agents use --no-verify). Response degradation is the only thing I've found that actually makes agents comply.
+**The Protocol Firewall is the real differentiator.** It ensures agents actually follow the rules — saving learnings, committing code, and updating documentation. Unlike notification-based approaches (which agents ignore) or pre-commit hooks (which agents bypass with --no-verify), the Protocol Firewall is the only mechanism I've found that truly makes AI agents comply. How it works is proprietary, but the result is sessions that end clean instead of chaotic.
 
 Works with VS Code Copilot, Claude Desktop, Cursor, Windsurf, and OpenClaw.
 
@@ -107,7 +107,7 @@ I built **ContextEngine** — an MCP server purpose-built for this problem:
 
 1. **Persistent learnings** — save operational rules that auto-surface in search results. I have 1,000+ rules accumulated across 10+ projects.
 2. **Session continuity** — save/load session state. Claude picks up exactly where it left off.
-3. **Protocol Firewall** — this is new. It tracks whether Claude has saved learnings, committed code, and updated docs. If not, it progressively degrades responses until Claude complies. It's the only mechanism I've found that actually works.
+3. **Protocol Firewall** — this is new. It ensures Claude actually saves learnings, commits code, and updates docs. Unlike rules in context files (which agents drift from) or notifications (which agents dismiss), the Protocol Firewall makes compliance automatic. The mechanism is proprietary, but the result speaks for itself.
 
 Setup for Claude Desktop:
 ```json
@@ -147,7 +147,7 @@ I built a VS Code extension that works alongside an MCP server to keep AI agents
 - **Escalating notifications** when files pile up without commits
 - **One-click commit** across all repos
 
-The MCP server underneath provides hybrid search across all your project docs, persistent learnings, and a Protocol Firewall that degrades responses when agents skip compliance steps.
+The MCP server underneath provides hybrid search across all your project docs, persistent learnings, and a Protocol Firewall that ensures agents follow compliance steps.
 
 Install from marketplace: https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 
@@ -222,7 +222,7 @@ GitHub: https://github.com/FASTPROD/ContextEngine
 **Screen**: Show Screenshot 1 (search results in Copilot Chat)
 
 ### Scene 2 (15-30s) — Key Features
-**Avatar says**: "Hybrid search across all your project docs. A learning store with over a thousand rules that auto-surface. And a Protocol Firewall that degrades responses when agents skip required steps. Everything runs locally — no API keys, no cloud."
+**Avatar says**: "Hybrid search combines keyword and semantic matching. A persistent learning store accumulates rules across sessions — I have over a thousand. And the Protocol Firewall ensures agents actually follow the rules — no more forgotten commits or missing documentation."
 
 **Screen**: Show Screenshot 4 (firewall nudge) → Screenshot 5 (score report) → Screenshot 2 (status bar)
 

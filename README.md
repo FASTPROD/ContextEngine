@@ -241,7 +241,7 @@ CLI mode uses keyword search (BM25) which is instant — no model loading requir
 | `run_audit` | Compliance agent — git, hooks, .env, Docker, PM2, versions | PRO |
 | `score_project` | AI-readiness scoring 0-100% with letter grades (A+ to F) | PRO |
 
-All tools are wrapped by the **Protocol Firewall** — an escalating compliance system that ensures agents save learnings, persist sessions, and commit code. No action needed from users; it's automatic.
+All tools are wrapped by the **Protocol Firewall** — a built-in enforcement layer that ensures agents save learnings, persist sessions, and commit code. No action needed from users; it's automatic.
 
 ## Configuration
 

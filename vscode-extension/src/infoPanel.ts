@@ -279,42 +279,23 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
 
   <div class="analogy-box">
     <p>
-      Think of it like a <strong>speed camera for your AI agent</strong>.
+      AI agents forget everything between sessions. They skip commits, ignore documentation,
+      and create dummy files to game checklists.
     </p>
     <p>
-      When you hire a real developer, they naturally remember lessons, save their work,
-      and document what they did. AI agents don't — they <strong>forget everything</strong>
-      the moment the conversation ends.
+      The Protocol Firewall is a <strong>built-in enforcement layer</strong> that ensures
+      your AI agent does the right thing — saving learnings, committing code, and updating docs —
+      without you having to remind it.
     </p>
     <p>
-      The Protocol Firewall <strong>watches what the agent does</strong> during a session.
-      If the agent isn't saving learnings, isn't committing code, isn't updating documentation —
-      the firewall <strong>progressively reduces the quality of answers</strong> the agent gets back.
-    </p>
-    <p>
-      First a gentle reminder. Then a visible warning. Then it actually
-      <strong>cuts the data short</strong>, making it impossible for the agent to work
-      effectively without doing the housekeeping first.
-    </p>
-    <p>
-      <strong>Why this works:</strong> Rules in documents can be ignored. Extension notifications
-      can be dismissed. But an agent can't ignore getting truncated data from its own tools.
-      It's the only mechanism that truly makes AI agents comply.
+      <strong>It just works.</strong> No configuration needed. Active on all 17 MCP tools.
+      When agents comply, they get full access. When they don't, ContextEngine handles it.
     </p>
   </div>
 
   <div style="text-align: center; margin: 16px 0;">
-    <div class="step-flow">
-      <span class="step-pill step-green">✅ Silent</span>
-      <span class="step-arrow">→</span>
-      <span class="step-pill step-yellow">📝 Footer reminder</span>
-      <span class="step-arrow">→</span>
-      <span class="step-pill step-orange">⚠️ Header warning</span>
-      <span class="step-arrow">→</span>
-      <span class="step-pill step-red">🚫 Data truncated</span>
-    </div>
-    <div style="color: var(--vscode-descriptionForeground); font-size: 0.85em; margin-top: 4px;">
-      Escalation resets when the agent does the right thing (saves learnings, commits, etc.)
+    <div style="color: var(--vscode-descriptionForeground); font-size: 0.85em;">
+      Compliance is automatic — the agent self-corrects without user intervention.
     </div>
   </div>
 
@@ -421,7 +402,7 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
   <!-- ======================================================== -->
   <h2>🏁 What the Agent Must Do Before Ending</h2>
   <p style="color: var(--vscode-descriptionForeground); font-size: 0.9em;">
-    The Protocol Firewall enforces this automatically — no need to remind the agent yourself.
+    ContextEngine ensures these happen — you don't need to remind the agent.
   </p>
 
   <div class="card">
