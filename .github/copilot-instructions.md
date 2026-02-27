@@ -142,14 +142,14 @@
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.20.2)
+## Stats (as of v1.21.0)
 - ~12,800 lines of source code (~8,200 src/ + ~1,100 server/ + ~3,500 vscode-extension/)
 - 17 MCP tools (13 free + 4 gated)
 - 16 CLI subcommands (10 original + 5 new in v1.16.0 + stats in v1.20.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
 - 1,023 learnings across 20 categories in store
 - 14 bundled starter learnings ship with npm (trimmed from 30 to prevent dedup re-merge)
-- 57 vitest tests across 6 files (search 11, activation 8, learnings 6, cli 8, sessions 16, firewall 8)
+- 76 vitest tests across 6 files (search 11, activation 8, learnings 6, cli 8, sessions 16, firewall 31)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
 - Keyword search: instant (BM25 with IDF)
 - Semantic search: ~200ms from cache, ~15s first run
@@ -158,7 +158,7 @@
 - VS Code Extension: v0.6.7 published on marketplace (css-llc.contextengine)
 - Pricing page: https://api.compr.ch/contextengine/pricing (live, static HTML)
 - E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 23, 2026)
-- Protocol Firewall: escalating compliance enforcement on all 17 tool responses
+- Protocol Firewall: round-based 3-strike enforcement + auto-inject learnings + cross-window state
 - Delta obfuscation: terser mangle+compress, 46-72% size reduction
 - Auto-import: learnings extracted from doc sources during reindex + end-session
 - Privacy section: README documents local-first architecture, server never receives code/learnings
@@ -186,7 +186,7 @@
 ## v1.19.0 — Protocol Firewall (Feb 2026)
 ### Architecture
 - **File**: `src/firewall.ts` — `ProtocolFirewall` class
-- **Design**: Wraps EVERY tool response via `respond(toolName, text)` helper in `index.ts`
+- **Design**: Wraps EVERY tool response via `respond(toolName, text, contextHint?)` helper in `index.ts`
 - **Replaces**: Old `maybeNudge()` system (only on 2/17 tools, zero consequences)
 - **Exempt tools**: Compliance actions (save_learning, save_session, end_session, etc.) pass through unmodified
 - **Obligations tracked**: learnings saved, session saved, git status, doc freshness
@@ -198,6 +198,33 @@
 - Extracted `<script>` from pricing.html → `public/pricing.js` (external file)
 - Added `express.static` route: `/contextengine/static/` → `public/`
 - Configured Helmet CSP directives: `script-src 'self'`, `style-src 'unsafe-inline'`, `connect-src` for Stripe
+
+## v1.21.0 — Auto-Inject Learnings & Cross-Window State (Feb 2026)
+### Learning Auto-Injection
+- **Mechanism**: `buildLearningInjection()` in `src/firewall.ts` — searches learnings by context hint, prepends top 3 to tool response
+- **Callback pattern**: `setLearningSearchFn(fn)` avoids circular imports — index.ts wires up `searchLearnings()` at startup
+- **Context hints**: `respond()` passes tool-specific hints (query text, project name, audit scope) to `wrap()`
+- **Compartmentalization**: Output separates project-specific learnings (`[Project/category]`) from universal ones (`[category]`)
+- **Caching**: Results cached per round (`injectionCache` + `injectionCacheRound`) — same hint in same round = no re-search
+- **Tracking**: `learningsInjected` counter exposed in `getState()`, bumps `searchRecalls` for value meter
+- **Limit**: `INJECT_MAX = 3` learnings per response
+
+### Cross-Window Firewall State
+- **Problem**: Crashed VS Code window restarted MCP → firewall reset to round 0, agent escaped enforcement
+- **Fix**: `loadPriorState()` reads `session-stats.json` on construction, resumes round/escalation counters
+- **Guards**: Only resumes if prior session was recent (<5 min), different PID (not same process), valid JSON
+- **Constructor**: `new ProtocolFirewall({ skipRestore?: boolean })` — testing uses `skipRestore: true`
+- **Log**: `[ContextEngine] 🔄 Resumed firewall state from prior session (round N, M rounds since save)`
+
+### Round-Based Escalation (refined)
+- Rounds tracked via `ROUND_GAP_MS = 30_000` (30s gap between non-exempt calls = new round)
+- `roundsSinceSessionSave` drives escalation: 2=footer, 3=header, 4+=degraded
+- `save_session` resets `roundsSinceSessionSave` to 0 and `roundAtLastSave` to current round
+- All constants and thresholds are IP-protected (trade secrets)
+
+### Test Coverage
+- 31 firewall tests (was 15): 16 unit, 5 round escalation, 7 injection, 3 cross-window
+- 76 total tests across 6 files (was 60)
 
 ## v1.20.0 — Value Meter & Session Stats (Feb 2026)
 ### Session Stats File

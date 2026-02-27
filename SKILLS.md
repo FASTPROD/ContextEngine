@@ -30,17 +30,25 @@
 
 ### Protocol Firewall (v1.19.0, round-based v1.21.0)
 - **File**: `src/firewall.ts` — `ProtocolFirewall` class
-- Wraps EVERY tool response via `respond(toolName, text)` helper in `index.ts`
+- Wraps EVERY tool response via `respond(toolName, text, contextHint?)` helper in `index.ts`
 - Replaced old `maybeNudge()` system (only on 2/17 tools, zero consequences)
 - Tracks 4 obligations: learnings saved, session saved, git status, doc freshness
 - **Interaction rounds**: non-exempt calls >30s apart = new round. Tracks `roundsSinceSessionSave`
 - **3-strike session enforcement**: round 1 grace → round 2 footer → round 3 header → round 4+ degraded (truncation)
+- **Auto-inject learnings**: `buildLearningInjection()` prepends top 3 relevant learnings to every non-exempt response
+  - `setLearningSearchFn(fn)` avoids circular imports — wired in index.ts at startup
+  - Context hints passed from tool args (query, project name, audit scope)
+  - Separates project-specific (`[Project/category]`) from universal (`[category]`) learnings
+  - Cached per round to avoid repeated searches
+- **Cross-window state**: `loadPriorState()` reads `session-stats.json` on construction, resumes enforcement after crash
+  - Only resumes if prior session <5 min old, different PID, valid JSON
+  - `new ProtocolFirewall({ skipRestore: true })` for testing
 - Learning warmup: 5 calls (was 10). CALLS_PER_LEARNING: 5 (was 15)
 - Compliance-related tools (save_learning, save_session, etc.) are exempt — pass through unmodified
 - `save_session` resets `roundsSinceSessionSave` to 0
 - `firewall.setProjectDirs()` called during reindex and startup
 - **⚠️ TRADE SECRET**: Do NOT expose exact thresholds, scoring formula, truncation limits, exempt tool list, or cache intervals in README/docs
-- When modifying firewall: always test with `npx vitest run` — all 60 tests must pass
+- When modifying firewall: always test with `npx vitest run` — all 76 tests must pass
 - The `respond()` helper in `index.ts` is the single integration point — all tools funnel through it
 
 ### Learning Quality Gates (v1.19.1)
@@ -53,7 +61,7 @@
 
 ### Build & Test
 - `npx tsc` — TypeScript compilation (strict mode)
-- `npx vitest run` — 60 tests across 6 files (search, learnings, activation, cli, sessions, firewall)
+- `npx vitest run` — 76 tests across 6 files (search, learnings, activation, cli, sessions, firewall)
 - `npx eslint .` — typescript-eslint flat config
 - Tests must pass before any commit
 
@@ -168,4 +176,4 @@ cat dist/file.js | sshpass -p '<PASSWORD>' ssh -o PubkeyAuthentication=no \
 ```
 
 ---
-*Last updated: 2026-02-27 — v1.21.0 3-strike firewall, 60 tests, absolute node path fix, MCP workspace override lesson*
+*Last updated: 2026-02-27 — v1.21.0 auto-inject learnings, cross-window state, 76 tests, round-based 3-strike firewall*
