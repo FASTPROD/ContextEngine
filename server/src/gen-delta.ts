@@ -29,6 +29,7 @@ const PREMIUM_MODULES = [
   { src: "agents.js", dest: "agents.mjs", description: "Scorer, auditor, port checker, formatters (1653 lines)" },
   { src: "collectors.js", dest: "collectors.mjs", description: "11 operational data collectors (705 lines)" },
   { src: "search.js", dest: "search-adv.mjs", description: "Advanced BM25 search with tuned parameters" },
+  { src: "firewall.js", dest: "firewall.mjs", description: "Protocol Firewall — escalation, auto-inject, cross-window state" },
 ];
 
 async function main(): Promise<void> {
