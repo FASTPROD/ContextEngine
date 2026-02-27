@@ -52,7 +52,7 @@ const EXEMPT_TOOLS = new Set([
 ]);
 
 /** Minimum tool calls expected per learning saved */
-const CALLS_PER_LEARNING = 15;
+const CALLS_PER_LEARNING = 5;
 
 /** Cache durations */
 const GIT_CACHE_MS = 60_000; // 1 minute
@@ -60,6 +60,9 @@ const DOC_CACHE_MS = 120_000; // 2 minutes
 
 /** Maximum response length in degraded mode */
 const DEGRADED_MAX_CHARS = 500;
+
+/** Interaction round gap — calls within this window are one round */
+const ROUND_GAP_MS = 30_000; // 30 seconds
 
 // ---------------------------------------------------------------------------
 // ProtocolFirewall
@@ -74,6 +77,12 @@ export class ProtocolFirewall {
   private nudgesIssued = 0;
   private searchRecalls = 0; // learnings surfaced via search
   private truncations = 0;   // degraded responses issued
+
+  // --- Interaction round tracking ---
+  private lastNonExemptCall = 0; // timestamp of last non-exempt tool call
+  private round = 0;            // current interaction round (1-based)
+  private roundAtLastSave = 0;  // round when session was last saved
+  private roundsSinceSessionSave = 0; // consecutive rounds without save_session
 
   // --- Stats flush (debounce disk writes) ---
   private statsFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -115,6 +124,14 @@ export class ProtocolFirewall {
       this.recordCompliance(toolName);
       return responseText;
     }
+
+    // Track interaction rounds — calls >30s apart = new round
+    const now = Date.now();
+    if (now - this.lastNonExemptCall > ROUND_GAP_MS) {
+      this.round++;
+      this.roundsSinceSessionSave = this.round - this.roundAtLastSave;
+    }
+    this.lastNonExemptCall = now;
 
     // Evaluate obligations
     const obligations = this.evaluate();
@@ -163,6 +180,8 @@ export class ProtocolFirewall {
       searchRecalls: this.searchRecalls,
       truncations: this.truncations,
       timeSavedMinutes: this.estimateTimeSaved(),
+      round: this.round,
+      roundsSinceSessionSave: this.roundsSinceSessionSave,
     };
   }
 
@@ -236,7 +255,11 @@ export class ProtocolFirewall {
 
   private recordCompliance(toolName: string): void {
     if (toolName === "save_learning") this.learningsSaved++;
-    if (toolName === "save_session") this.sessionSaved = true;
+    if (toolName === "save_session") {
+      this.sessionSaved = true;
+      this.roundAtLastSave = this.round;
+      this.roundsSinceSessionSave = 0;
+    }
     this.scheduleStatsFlush();
   }
 
@@ -251,7 +274,7 @@ export class ProtocolFirewall {
 
     // 1. Learnings — expect 1 per CALLS_PER_LEARNING calls
     const expected = Math.max(1, Math.floor(calls / CALLS_PER_LEARNING));
-    if (calls < 10) {
+    if (calls < 5) {
       obs.push({
         id: "learn",
         label: "Learnings",
@@ -281,34 +304,45 @@ export class ProtocolFirewall {
       });
     }
 
-    // 2. Session — expect save_session after warmup
-    if (this.sessionSaved) {
+    // 2. Session — 3-strike per interaction round
+    //    Round 1: grace period (ok)
+    //    Round 2 without save: warn
+    //    Round 3+ without save: fail
+    const rss = this.roundsSinceSessionSave;
+    if (this.sessionSaved && rss <= 1) {
       obs.push({
         id: "session",
         label: "Session",
         status: "ok",
         detail: "saved",
       });
-    } else if (minutes > 30 || calls > 30) {
+    } else if (rss >= 3) {
       obs.push({
         id: "session",
         label: "Session",
         status: "fail",
-        detail: `${Math.round(minutes)}min without save`,
+        detail: `${rss} rounds without save — SAVE NOW`,
       });
-    } else if (minutes > 15 || calls > 15) {
+    } else if (rss >= 2) {
       obs.push({
         id: "session",
         label: "Session",
         status: "warn",
-        detail: "not saved yet",
+        detail: `${rss} rounds without save`,
+      });
+    } else if (this.round <= 1) {
+      obs.push({
+        id: "session",
+        label: "Session",
+        status: "ok",
+        detail: "warmup",
       });
     } else {
       obs.push({
         id: "session",
         label: "Session",
         status: "ok",
-        detail: "warmup",
+        detail: this.sessionSaved ? "saved" : "first round",
       });
     }
 
@@ -419,12 +453,14 @@ export class ProtocolFirewall {
   // -----------------------------------------------------------------------
 
   private computeLevel(score: number): Level {
-    const calls = this.toolCalls;
-    if (calls < 10) return "silent"; // warmup — don't nag early
     if (score === 0) return "silent"; // all obligations met
-    if (calls < 20) return "footer"; // gentle reminder at bottom
-    if (score < 50 || calls < 40) return "header"; // prominent, top of response
-    return "degraded"; // nuclear: truncate output
+    const rss = this.roundsSinceSessionSave;
+    // Round-based escalation: 2 rounds without save → footer,
+    // 3 rounds → header, 4+ → degraded. Also escalate on high score.
+    if (rss >= 4 || score >= 80) return "degraded";
+    if (rss >= 3 || score >= 50) return "header";
+    if (rss >= 2 || this.toolCalls >= 5) return "footer";
+    return "silent"; // first round grace
   }
 
   // -----------------------------------------------------------------------

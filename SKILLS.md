@@ -28,16 +28,19 @@
 - CLI: `cliListLearnings()` and `initEngine()` scope by project
 - **NEVER expose all learnings without project scoping** — cross-project IP leakage risk
 
-### Protocol Firewall (v1.19.0)
+### Protocol Firewall (v1.19.0, round-based v1.21.0)
 - **File**: `src/firewall.ts` — `ProtocolFirewall` class
 - Wraps EVERY tool response via `respond(toolName, text)` helper in `index.ts`
 - Replaced old `maybeNudge()` system (only on 2/17 tools, zero consequences)
 - Tracks 4 obligations: learnings saved, session saved, git status, doc freshness
-- Escalation: silent → footer → header → degraded (output truncation)
+- **Interaction rounds**: non-exempt calls >30s apart = new round. Tracks `roundsSinceSessionSave`
+- **3-strike session enforcement**: round 1 grace → round 2 footer → round 3 header → round 4+ degraded (truncation)
+- Learning warmup: 5 calls (was 10). CALLS_PER_LEARNING: 5 (was 15)
 - Compliance-related tools (save_learning, save_session, etc.) are exempt — pass through unmodified
+- `save_session` resets `roundsSinceSessionSave` to 0
 - `firewall.setProjectDirs()` called during reindex and startup
 - **⚠️ TRADE SECRET**: Do NOT expose exact thresholds, scoring formula, truncation limits, exempt tool list, or cache intervals in README/docs
-- When modifying firewall: always test with `npx vitest run` — all 25 tests must pass
+- When modifying firewall: always test with `npx vitest run` — all 60 tests must pass
 - The `respond()` helper in `index.ts` is the single integration point — all tools funnel through it
 
 ### Learning Quality Gates (v1.19.1)
@@ -50,7 +53,7 @@
 
 ### Build & Test
 - `npx tsc` — TypeScript compilation (strict mode)
-- `npx vitest run` — 57 tests across 6 files (search, learnings, activation, cli, sessions, firewall)
+- `npx vitest run` — 60 tests across 6 files (search, learnings, activation, cli, sessions, firewall)
 - `npx eslint .` — typescript-eslint flat config
 - Tests must pass before any commit
 
@@ -83,7 +86,9 @@
 
 ### MCP Configuration Per Workspace
 - VS Code DEPRECATED MCP in user `settings.json` AND global `mcp.json` — use `.vscode/mcp.json` per workspace
-- Schema: `{"servers":{"contextengine":{"type":"stdio","command":"node","args":["..."]}}}` (NOT `mcpServers`)
+- Schema: `{"servers":{"contextengine":{"type":"stdio","command":"/Users/yan/.nvm/versions/node/v20.19.4/bin/node","args":["..."]}}}` (NOT `mcpServers`)
+- **MUST use absolute node path** — bare `node` causes `spawn node ENOENT` on nvm-managed systems
+- Also check `.code-workspace` files for deprecated `settings.mcp` blocks — they override `.vscode/mcp.json`
 - Without it, agents in that project have zero ContextEngine tools
 - Every new project workspace needs this file — the bootstrapping gap means agents can't access the knowledge base that would tell them how to configure it
 
@@ -163,4 +168,4 @@ cat dist/file.js | sshpass -p '<PASSWORD>' ssh -o PubkeyAuthentication=no \
 ```
 
 ---
-*Last updated: 2026-02-26 — v1.20.2 + 57 tests + MCP config fix + multi-window output.log tagging*
+*Last updated: 2026-02-27 — v1.21.0 3-strike firewall, 60 tests, absolute node path fix, MCP workspace override lesson*

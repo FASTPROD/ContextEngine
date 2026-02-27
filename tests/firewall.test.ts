@@ -94,4 +94,33 @@ describe("ProtocolFirewall", () => {
       expect(result.length).toBeGreaterThan(0);
     }
   });
+
+  it("getState exposes round and roundsSinceSessionSave", () => {
+    const fw = new ProtocolFirewall();
+    const state = fw.getState();
+    expect(state.round).toBe(0);
+    expect(state.roundsSinceSessionSave).toBe(0);
+  });
+
+  it("session save resets roundsSinceSessionSave", () => {
+    const fw = new ProtocolFirewall();
+    // Simulate some calls (all in one round since <30s apart)
+    fw.wrap("search_context", "results");
+    fw.wrap("search_context", "results");
+    fw.wrap("save_session", "ok");
+    expect(fw.getState().roundsSinceSessionSave).toBe(0);
+    expect(fw.getState().sessionSaved).toBe(true);
+  });
+
+  it("learning warmup lowered to 5 calls", () => {
+    const fw = new ProtocolFirewall();
+    // At 5+ calls without any learning, output should include a nudge
+    for (let i = 0; i < 8; i++) {
+      fw.wrap("search_context", "test");
+    }
+    // Since calls >= 5 and learningsSaved = 0, obligation should fail
+    const state = fw.getState();
+    expect(state.toolCalls).toBe(8);
+    expect(state.learningsSaved).toBe(0);
+  });
 });
