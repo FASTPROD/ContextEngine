@@ -27,18 +27,18 @@ deploy_server() {
   rsync -avz --delete \
     --exclude='node_modules/' --exclude='dist/' \
     --exclude='data/' --exclude='delta-modules/' \
-    -e "sshpass -p '<REDACTED_PASSWORD>' ssh $SSH_OPTS" \
+    -e "sshpass -p '<VPS_PASSWORD>' ssh $SSH_OPTS" \
     server/ "$SERVER:$SERVER_DIR/"
 
   # Sync compiled dist (for gen-delta)
   echo "📦 Syncing dist/ for delta generation..."
   rsync -avz \
-    -e "sshpass -p '<REDACTED_PASSWORD>' ssh $SSH_OPTS" \
+    -e "sshpass -p '<VPS_PASSWORD>' ssh $SSH_OPTS" \
     dist/ "$SERVER:$DIST_DIR/"
 
   # Install, build, gen-delta, restart
   echo "🔧 Building on server..."
-  sshpass -p '<REDACTED_PASSWORD>' ssh $SSH_OPTS "$SERVER" "
+  sshpass -p '<VPS_PASSWORD>' ssh $SSH_OPTS "$SERVER" "
     cd $SERVER_DIR && \
     npm install --production && \
     npx tsc && \
