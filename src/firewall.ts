@@ -11,7 +11,7 @@
 // through progressive response degradation.
 
 import { execSync } from "child_process";
-import { existsSync, statSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, statSync, writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
@@ -64,6 +64,24 @@ const DEGRADED_MAX_CHARS = 500;
 /** Interaction round gap — calls within this window are one round */
 const ROUND_GAP_MS = 30_000; // 30 seconds
 
+/** Max age for prior session state to be resumed (crash recovery) */
+const STALE_SESSION_MS = 5 * 60_000; // 5 minutes
+
+/** Max learnings to auto-inject per tool response */
+const INJECT_MAX = 3;
+
+/** Minimum score for a learning to be injected (from searchLearnings scoring) */
+const INJECT_MIN_SCORE_TOKENS = 2; // at least 2 keyword token matches
+
+/**
+ * Callback type for searching learnings — avoids circular import.
+ * Returns top matches with rule text + optional project scope.
+ */
+export type LearningSearchFn = (
+  query: string,
+  projects?: string[]
+) => Array<{ rule: string; project?: string; category: string }>;
+
 // ---------------------------------------------------------------------------
 // ProtocolFirewall
 // ---------------------------------------------------------------------------
@@ -93,6 +111,13 @@ export class ProtocolFirewall {
     "session-stats.json"
   );
 
+  // --- Learning auto-injection ---
+  private learningSearchFn: LearningSearchFn | null = null;
+  private activeProjects: string[] = [];
+  private injectionCache = new Map<string, string>(); // hint → formatted block
+  private injectionCacheRound = 0; // round when cache was built
+  private learningsInjected = 0; // total learnings injected this session
+
   // --- Cached checks (avoid hammering git on every call) ---
   private gitCache: CacheEntry<string[]> = { data: [], timestamp: 0 };
   private docCache: CacheEntry<number> = { data: 0, timestamp: 0 };
@@ -100,23 +125,86 @@ export class ProtocolFirewall {
   // --- Project dirs (set during reindex) ---
   private projectDirs: Array<{ path: string; name: string }> = [];
 
+  constructor(opts?: { skipRestore?: boolean }) {
+    if (!opts?.skipRestore) {
+      this.loadPriorState();
+    }
+  }
+
+  /**
+   * Resume enforcement from a prior session if it crashed recently.
+   * Reads session-stats.json and restores round counters so a crashed
+   * window doesn't reset enforcement back to silent.
+   */
+  private loadPriorState(): void {
+    try {
+      if (!existsSync(ProtocolFirewall.STATS_FILE)) return;
+      const raw = readFileSync(ProtocolFirewall.STATS_FILE, "utf-8");
+      const prior = JSON.parse(raw) as Record<string, unknown>;
+
+      // Only resume if the prior session was active recently
+      const updatedAt = prior.updatedAt as string | undefined;
+      if (!updatedAt) return;
+      const age = Date.now() - new Date(updatedAt).getTime();
+      if (age > STALE_SESSION_MS) return;
+
+      // Don't resume from the same process (already running)
+      if (prior.pid === process.pid) return;
+
+      // Restore enforcement state
+      if (typeof prior.round === "number" && prior.round > 0) {
+        this.round = prior.round;
+      }
+      if (typeof prior.roundsSinceSessionSave === "number") {
+        this.roundsSinceSessionSave = prior.roundsSinceSessionSave;
+        this.roundAtLastSave = this.round - this.roundsSinceSessionSave;
+      }
+      if (prior.sessionSaved === true) {
+        this.sessionSaved = true;
+      }
+      if (typeof prior.searchRecalls === "number") {
+        this.searchRecalls = prior.searchRecalls;
+      }
+
+      console.error(
+        `[ContextEngine] 🔄 Resumed firewall state from prior session ` +
+        `(round ${this.round}, ${this.roundsSinceSessionSave} rounds since save)`
+      );
+    } catch {
+      // Non-critical — start fresh
+    }
+  }
+
   /**
    * Update project directories (call during reindex).
    */
   setProjectDirs(dirs: Array<{ path: string; name: string }>): void {
     this.projectDirs = dirs;
+    this.activeProjects = dirs.map((d) => d.name);
   }
 
   /**
-   * Wrap a tool response with protocol status.
+   * Register the learning search function.
+   * Call once at startup to enable auto-injection without circular imports.
+   */
+  setLearningSearchFn(fn: LearningSearchFn): void {
+    this.learningSearchFn = fn;
+  }
+
+  /**
+   * Wrap a tool response with protocol status + learning injection.
    * This is the ONLY public API. Call on every tool response.
    *
    * - Exempt tools (save_learning, etc.) pass through unmodified
    * - Silent phase (first 10 calls or 0 obligations): no change
    * - Footer/Header: status block appended/prepended
    * - Degraded: response TRUNCATED + status block
+   *
+   * @param toolName  MCP tool name
+   * @param responseText  Original tool response text
+   * @param contextHint  Optional query/args string for learning injection
    */
-  wrap(toolName: string, responseText: string): string {
+  wrap(toolName: string, responseText: string, contextHint?: string): string {
     this.toolCalls++;
 
     // Compliance tools get a free pass — don't firewall the remedy
@@ -133,6 +221,9 @@ export class ProtocolFirewall {
     }
     this.lastNonExemptCall = now;
 
+    // --- Auto-inject relevant learnings ---
+    const injection = this.buildLearningInjection(contextHint);
+
     // Evaluate obligations
     const obligations = this.evaluate();
     const fails = obligations.filter((o) => o.status === "fail").length;
@@ -140,7 +231,10 @@ export class ProtocolFirewall {
     const score = Math.min(100, fails * 30 + warns * 10);
     const level = this.computeLevel(score);
 
-    if (level === "silent") return responseText;
+    // Prepend learning injection to response (always, if available)
+    let text = injection ? injection + "\n\n" + responseText : responseText;
+
+    if (level === "silent") return text;
 
     const block = this.formatBlock(obligations, score, level);
     this.nudgesIssued++;
@@ -149,21 +243,21 @@ export class ProtocolFirewall {
       case "degraded": {
         this.truncations++;
         const truncated =
-          responseText.length > DEGRADED_MAX_CHARS
-            ? responseText.slice(0, DEGRADED_MAX_CHARS) +
-              `\n\n⛔ [${responseText.length - DEGRADED_MAX_CHARS} chars hidden — ` +
+          text.length > DEGRADED_MAX_CHARS
+            ? text.slice(0, DEGRADED_MAX_CHARS) +
+              `\n\n⛔ [${text.length - DEGRADED_MAX_CHARS} chars hidden — ` +
               `call save_learning or save_session to restore full output]`
-            : responseText;
+            : text;
         this.scheduleStatsFlush();
         return block + "\n\n" + truncated;
       }
       case "header":
         this.scheduleStatsFlush();
-        return block + "\n\n" + responseText;
+        return block + "\n\n" + text;
       case "footer":
       default:
         this.scheduleStatsFlush();
-        return responseText + "\n\n" + block;
+        return text + "\n\n" + block;
     }
   }
 
@@ -182,6 +276,7 @@ export class ProtocolFirewall {
       timeSavedMinutes: this.estimateTimeSaved(),
       round: this.round,
       roundsSinceSessionSave: this.roundsSinceSessionSave,
+      learningsInjected: this.learningsInjected,
     };
   }
 
@@ -195,6 +290,67 @@ export class ProtocolFirewall {
   }
 
   // -----------------------------------------------------------------------
+  // Internal: learning auto-injection
+  // -----------------------------------------------------------------------
+
+  /**
+   * Search and format relevant learnings for injection into tool response.
+   * Returns null if no relevant learnings or no search function registered.
+   * Results are cached per round to avoid repeated searches for same hint.
+   */
+  private buildLearningInjection(hint?: string): string | null {
+    if (!hint || !this.learningSearchFn) return null;
+
+    // Normalize hint to first 200 chars to keep cache keys sane
+    const key = hint.slice(0, 200).toLowerCase().trim();
+    if (!key) return null;
+
+    // Invalidate cache on new round
+    if (this.round !== this.injectionCacheRound) {
+      this.injectionCache.clear();
+      this.injectionCacheRound = this.round;
+    }
+
+    // Return cached result if available
+    if (this.injectionCache.has(key)) {
+      return this.injectionCache.get(key) || null;
+    }
+
+    // Search learnings (project-scoped + universal)
+    const matches = this.learningSearchFn(key, this.activeProjects);
+    if (matches.length === 0) {
+      this.injectionCache.set(key, "");
+      return null;
+    }
+
+    const top = matches.slice(0, INJECT_MAX);
+
+    // Separate project-specific vs universal
+    const projectSpecific = top.filter((m) => m.project);
+    const universal = top.filter((m) => !m.project);
+
+    const lines: string[] = ["💡 **Relevant learnings from your knowledge base:**"];
+
+    if (projectSpecific.length > 0) {
+      for (const m of projectSpecific) {
+        lines.push(`  • [${m.project}/${m.category}] ${m.rule}`);
+      }
+    }
+
+    if (universal.length > 0) {
+      for (const m of universal) {
+        lines.push(`  • [${m.category}] ${m.rule}`);
+      }
+    }
+
+    const block = lines.join("\n");
+    this.injectionCache.set(key, block);
+    this.learningsInjected += top.length;
+    this.searchRecalls += top.length; // counts toward value meter
+    return block;
+  }
+
+  // -----------------------------------------------------------------------
   // Internal: time-saved heuristic
   // -----------------------------------------------------------------------
 
@@ -204,6 +360,7 @@ export class ProtocolFirewall {
    * - Each nudge ≈ 1 min (prevented forgetting / cleanup later)
    * - Each learning saved ≈ 1 min (future sessions benefit)
    * - Session save ≈ 3 min (avoids cold-start next session)
+   * Note: learningsInjected already counted via searchRecalls bump
    */
   private estimateTimeSaved(): number {
     return (

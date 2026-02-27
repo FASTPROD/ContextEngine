@@ -76,6 +76,21 @@ let embeddedChunks: EmbeddedChunk[] = [];
 let activeProjectNames: string[] = [];
 const firewall = new ProtocolFirewall();
 
+// Wire up learning search for auto-injection (avoids circular import)
+firewall.setLearningSearchFn((query, projects) => {
+  return searchLearnings(query)
+    .filter((l) => {
+      // Project-scoped: include if no project set OR project matches
+      if (!projects || projects.length === 0) return true;
+      if (!l.project) return true; // universal learning
+      return projects.some(
+        (p) => p.toLowerCase() === l.project!.toLowerCase()
+      );
+    })
+    .slice(0, 10) // return generous set, firewall trims to INJECT_MAX
+    .map((l) => ({ rule: l.rule, project: l.project, category: l.category }));
+});
+
 /**
  * (Re-)ingest all sources. Called at startup and on file changes.
  */
@@ -324,9 +339,9 @@ const server = new McpServer({
 // See src/firewall.ts for the full design.
 
 /** Helper: wrap a single-text tool response through the firewall */
-function respond(toolName: string, text: string) {
+function respond(toolName: string, text: string, contextHint?: string) {
   return {
-    content: [{ type: "text" as const, text: firewall.wrap(toolName, text) }],
+    content: [{ type: "text" as const, text: firewall.wrap(toolName, text, contextHint) }],
   };
 }
 
@@ -433,7 +448,7 @@ server.tool(
       ),
     ].join("\n\n");
 
-    return respond("search_context", text);
+    return respond("search_context", text, query);
   }
 );
 
@@ -512,7 +527,7 @@ server.tool(
     }
 
     const content = readFileSync(source.path, "utf-8");
-    return respond("read_source", `# ${source.name}\n\n${content}`);
+    return respond("read_source", `# ${source.name}\n\n${content}`, source_name);
   }
 );
 
@@ -542,7 +557,7 @@ server.tool(
     const projectDirs = loadProjectDirs();
     const projects = listProjects(projectDirs);
     const text = formatProjectList(projects);
-    return respond("list_projects", text);
+    return respond("list_projects", text, "projects infrastructure stack");
   }
 );
 
@@ -559,7 +574,7 @@ server.tool(
     const projectDirs = loadProjectDirs();
     const { ports, conflicts } = checkPorts(projectDirs);
     const text = formatPortMap(ports, conflicts);
-    return respond("check_ports", text);
+    return respond("check_ports", text, "port conflicts allocation");
   }
 );
 
@@ -581,7 +596,7 @@ server.tool(
     const projectDirs = loadProjectDirs();
     const plan = runComplianceAudit(projectDirs);
     const text = formatPlan(plan);
-    return respond("run_audit", text);
+    return respond("run_audit", text, `audit ${scope}`);
   }
 );
 
@@ -623,7 +638,7 @@ server.tool(
     }
 
     const text = formatScoreReport(scores);
-    return respond("score_project", text);
+    return respond("score_project", text, project || "all projects scoring");
   }
 );
 
