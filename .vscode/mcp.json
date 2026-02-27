@@ -2,7 +2,7 @@
   "servers": {
     "contextengine": {
       "type": "stdio",
-      "command": "node",
+      "command": "/Users/yan/.nvm/versions/node/v20.19.4/bin/node",
       "args": ["/Users/yan/Projects/ContextEngine/dist/index.js"]
     }
   }
