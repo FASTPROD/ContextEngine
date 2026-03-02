@@ -450,4 +450,20 @@ You may use ContextEngine for any purpose, including production, **except** offe
 
 Converts to AGPL-3.0 on February 22, 2030.
 
-For commercial licensing: yannick@compr.ch
+For commercial licensing: [yannick@compr.ch](mailto:yannick@compr.ch)
+
+---
+
+## Built by [PROD LLC](https://compr.fr)
+
+ContextEngine is built by the team behind:
+
+| Product | Description |
+|---------|-------------|
+| [compr.app](https://compr.app) | Smart shopping — scan, compare, save |
+| [crowlr.io](https://crowlr.io) | Web monitoring & change detection |
+| [crowlr.com](https://crowlr.com) | Enterprise crawling platform |
+| [invoc.io](https://invoc.io) | Invoice management for freelancers |
+| [plank.io](https://plank.io) | Location sharing & social maps |
+| [konive.com](https://konive.com) | Swiss knife marketplace |
+| [invoc.me](https://invoc.me) | Payment links & invoicing |

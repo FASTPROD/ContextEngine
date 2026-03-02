@@ -32,13 +32,16 @@
     "search",
     "developer-tools"
   ],
-  "author": "FASTPROD (PROD LLC)",
+  "author": {
+    "name": "FASTPROD (PROD LLC)",
+    "url": "https://compr.fr"
+  },
   "license": "BSL-1.1",
   "repository": {
     "type": "git",
-    "url": "https://www.npmjs.com/package/@compr/contextengine-mcp"
+    "url": "https://github.com/FASTPROD/ContextEngine.git"
   },
-  "homepage": "https://www.npmjs.com/package/@compr/contextengine-mcp",
+  "homepage": "https://compr.fr",
   "bugs": {
     "email": "yannick@compr.ch"
   },
