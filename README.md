@@ -456,14 +456,5 @@ For commercial licensing: [yannick@compr.ch](mailto:yannick@compr.ch)
 
 ## Built by [PROD LLC](https://compr.fr)
 
-ContextEngine is built by the team behind:
-
-| Product | Description |
-|---------|-------------|
-| [compr.app](https://compr.app) | Smart shopping — scan, compare, save |
-| [crowlr.io](https://crowlr.io) | Web monitoring & change detection |
-| [crowlr.com](https://crowlr.com) | Enterprise crawling platform |
-| [invoc.io](https://invoc.io) | Invoice management for freelancers |
-| [plank.io](https://plank.io) | Location sharing & social maps |
-| [konive.com](https://konive.com) | Swiss knife marketplace |
-| [invoc.me](https://invoc.me) | Payment links & invoicing |
+ContextEngine is built by the team behind
+[compr.app](https://compr.app) · [crowlr.io](https://crowlr.io) · [crowlr.com](https://crowlr.com) · [invoc.io](https://invoc.io) · [plank.io](https://plank.io) · [konive.com](https://konive.com) · [invoc.me](https://invoc.me)
