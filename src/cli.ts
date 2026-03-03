@@ -5,7 +5,7 @@
  *
  * Usage:
  *   contextengine                     Start MCP server (stdio transport)
- *   contextengine init                Scaffold contextengine.json + copilot-instructions.md
+ *   contextengine init                Scaffold project for ContextEngine (mcp.json, docs, hooks)
  *   contextengine search <query>      Search across all indexed knowledge
  *   contextengine list-sources        Show all indexed sources with chunk counts
  *   contextengine list-projects       Discover and analyze all projects
@@ -137,6 +137,188 @@ function generateCopilotInstructions(det: ProjectDetection): string {
 }
 
 // ---------------------------------------------------------------------------
+// Template for SKILLS.md
+// ---------------------------------------------------------------------------
+function generateSkillsMd(det: ProjectDetection): string {
+  const lines: string[] = [];
+  lines.push(`# SKILLS.md — ${det.projectName}\n`);
+  lines.push("## What This Agent Can Do");
+  lines.push("<!-- List the key capabilities this project's AI agent should have -->");
+  lines.push("");
+  lines.push("## Key Patterns");
+  lines.push("<!-- Document reusable patterns agents should follow -->");
+  lines.push("");
+  lines.push("## What NOT to Do");
+  lines.push("<!-- Document anti-patterns and known pitfalls -->");
+  lines.push("");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Template for SCORE.md
+// ---------------------------------------------------------------------------
+function generateScoreMd(det: ProjectDetection): string {
+  const lines: string[] = [];
+  lines.push(`# SCORE.md — ${det.projectName}\n`);
+  lines.push("## AI-Readiness Score");
+  lines.push("<!-- Run `contextengine score` to generate this section -->");
+  lines.push("");
+  lines.push("## History");
+  lines.push(`| Date | Score | Notes |`);
+  lines.push(`|------|-------|-------|`);
+  lines.push(`| ${new Date().toISOString().split("T")[0]} | -- | Initial scaffold |`);
+  lines.push("");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Template for CLAUDE.md
+// ---------------------------------------------------------------------------
+function generateClaudeMd(det: ProjectDetection): string {
+  const lines: string[] = [];
+  lines.push(`# CLAUDE.md — ${det.projectName}\n`);
+  lines.push("## What This Is");
+  lines.push(`<!-- Brief description of ${det.projectName} -->`);
+  lines.push("");
+  lines.push("## Critical Rules");
+  lines.push("");
+  lines.push("1. <!-- Rule 1 -->");
+  lines.push("2. <!-- Rule 2 -->");
+  lines.push("");
+  lines.push("## Key Commands");
+  lines.push("```bash");
+  if (det.language === "javascript/typescript") {
+    lines.push("npm run build          # Compile");
+    lines.push("npm test               # Run tests");
+    lines.push("npm start              # Start");
+  } else if (det.language === "python") {
+    lines.push("python -m pytest       # Run tests");
+    lines.push("python main.py         # Start");
+  } else if (det.language === "php") {
+    lines.push("composer install        # Install deps");
+    lines.push("php artisan serve       # Start (Laravel)");
+  } else {
+    lines.push("# Add your key commands here");
+  }
+  lines.push("```");
+  lines.push("");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Template for .vscode/mcp.json
+// ---------------------------------------------------------------------------
+function generateMcpJson(): object {
+  // Detect absolute node path for nvm compatibility
+  let nodePath = "node";
+  try {
+    nodePath = execSync("which node", { encoding: "utf-8" }).trim();
+  } catch { /* fallback to bare node */ }
+
+  return {
+    servers: {
+      contextengine: {
+        type: "stdio",
+        command: nodePath,
+        args: ["-y", "@compr/contextengine-mcp"],
+      },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Template for pre-commit hook (CE doc freshness + secret scanner)
+// ---------------------------------------------------------------------------
+function generatePreCommitHook(): string {
+  const lines: string[] = [];
+  lines.push("#!/bin/zsh");
+  lines.push("# ContextEngine — Pre-commit CE Compliance Check");
+  lines.push("# Blocks commits when CE docs are stale (>4h) or missing.");
+  lines.push("# Override: git commit --no-verify");
+  lines.push("#");
+  lines.push("# Checks: copilot-instructions.md, SKILLS.md, SCORE.md freshness");
+  lines.push("# Also scans for accidentally committed secrets.");
+  lines.push("");
+  lines.push("violations=0");
+  lines.push("");
+  lines.push("# Check CE doc freshness (4 hours = 14400 seconds)");
+  lines.push("now=$(date +%s)");
+  lines.push("max_age=14400");
+  lines.push("");
+  lines.push('for candidate_path in ".github/copilot-instructions.md" "SKILLS.md" "SCORE.md"; do');
+  lines.push('  if [[ -f "$candidate_path" ]]; then');
+  lines.push('    mod=$(stat -f %m "$candidate_path" 2>/dev/null || stat -c %Y "$candidate_path" 2>/dev/null)');
+  lines.push('    age=$((now - mod))');
+  lines.push('    if (( age > max_age )); then');
+  lines.push('      hours=$((age / 3600))');
+  lines.push('      echo "⚠️  CE: $candidate_path — last updated ${hours}h ago (not in this commit)"');
+  lines.push("      violations=$((violations + 1))");
+  lines.push("    fi");
+  lines.push("  fi");
+  lines.push("done");
+  lines.push("");
+  lines.push("# Secret scanning — block known secret patterns in staged files");
+  lines.push('secret_patterns=(');
+  lines.push('  "sk_live_" "sk_test_" "pk_live_" "pk_test_"');
+  lines.push('  "ghp_[A-Za-z0-9]" "glpat-[A-Za-z0-9]"');
+  lines.push('  "gsk_[A-Za-z0-9]" "xoxb-" "xoxp-"');
+  lines.push('  "AKIA[A-Z0-9]{16}" "SG\\.[A-Za-z0-9]"');
+  lines.push('  "sshpass.*-p"');
+  lines.push(")");
+  lines.push("");
+  lines.push("staged_files=$(git diff --cached --name-only --diff-filter=ACM)");
+  lines.push('for file in $staged_files; do');
+  lines.push('  # Skip known safe files');
+  lines.push('  case "$file" in');
+  lines.push('    .env|.env.*|.copilot-credentials.md|*/pre-commit*) continue ;;');
+  lines.push("  esac");
+  lines.push('  for pattern in "${secret_patterns[@]}"; do');
+  lines.push('    if grep -qE "$pattern" "$file" 2>/dev/null; then');
+  lines.push('      echo "🔴 SECRET DETECTED in $file (pattern: $pattern)"');
+  lines.push("      violations=$((violations + 1))");
+  lines.push("    fi");
+  lines.push("  done");
+  lines.push("done");
+  lines.push("");
+  lines.push("if (( violations > 0 )); then");
+  lines.push('  echo ""');
+  lines.push('  echo "╔═══════════════════════════════════════════════════════╗"');
+  lines.push('  echo "║  ContextEngine: ${violations} CE compliance violation(s)          ║"');
+  lines.push('  echo "║  Code changed but CE docs are stale or missing.      ║"');
+  lines.push('  echo "║  Update: copilot-instructions, SKILLS, SCORE         ║"');
+  lines.push('  echo "║                                                       ║"');
+  lines.push('  echo "║  ❌ COMMIT BLOCKED — update docs first                ║"');
+  lines.push('  echo "║  Override: git commit --no-verify                     ║"');
+  lines.push('  echo "╚═══════════════════════════════════════════════════════╝"');
+  lines.push('  echo ""');
+  lines.push("  exit 1");
+  lines.push("fi");
+  lines.push("");
+  lines.push("exit 0");
+  lines.push("");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Template for post-commit hook (auto-push)
+// ---------------------------------------------------------------------------
+function generatePostCommitHook(): string {
+  const lines: string[] = [];
+  lines.push("#!/bin/zsh");
+  lines.push("# ContextEngine — Post-commit auto-push");
+  lines.push("# Pushes to origin (and gdrive if configured) in background.");
+  lines.push("# Runs async so commits return instantly.");
+  lines.push("");
+  lines.push("(");
+  lines.push('  git push origin "$(git branch --show-current)" 2>/dev/null &');
+  lines.push('  git push gdrive "$(git branch --show-current)" 2>/dev/null &');
+  lines.push("  wait");
+  lines.push(") &");
+  lines.push("");
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // Template for contextengine.json
 // ---------------------------------------------------------------------------
 function generateConfig(det: ProjectDetection, cwd: string): object {
@@ -193,39 +375,155 @@ async function runInit(): Promise<void> {
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
+  let created = 0;
+  let skipped = 0;
+
   try {
-    // 1. contextengine.json
+    // -----------------------------------------------------------------------
+    // Tier 1: Required — .vscode/mcp.json
+    // -----------------------------------------------------------------------
+    console.log("  📦 Tier 1: Required");
+
+    const mcpPath = join(cwd, ".vscode", "mcp.json");
+    if (existsSync(mcpPath)) {
+      console.log("  ⏭  .vscode/mcp.json already exists — skipping");
+      skipped++;
+    } else {
+      const answer = isNonInteractive ? "y" : await ask(rl, "  Create .vscode/mcp.json (MCP connectivity)? [Y/n] ");
+      if (answer.toLowerCase() !== "n") {
+        mkdirSync(join(cwd, ".vscode"), { recursive: true });
+        writeFileSync(mcpPath, JSON.stringify(generateMcpJson(), null, 2) + "\n");
+        console.log("  ✅ Created .vscode/mcp.json");
+        created++;
+      }
+    }
+
+    console.log("");
+
+    // -----------------------------------------------------------------------
+    // Tier 2: Strongly Recommended
+    // -----------------------------------------------------------------------
+    console.log("  📋 Tier 2: Strongly Recommended");
+
+    // contextengine.json
     const configPath = join(cwd, "contextengine.json");
     if (existsSync(configPath)) {
       console.log("  ⏭  contextengine.json already exists — skipping");
+      skipped++;
     } else {
       const createConfig = isNonInteractive ? "y" : await ask(rl, "  Create contextengine.json? [Y/n] ");
       if (createConfig.toLowerCase() !== "n") {
         const config = generateConfig(det, cwd);
         writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
         console.log("  ✅ Created contextengine.json");
+        created++;
       }
     }
 
-    // 2. .github/copilot-instructions.md
+    // .github/copilot-instructions.md
     const copilotPath = join(cwd, ".github", "copilot-instructions.md");
     if (existsSync(copilotPath)) {
       console.log("  ⏭  .github/copilot-instructions.md already exists — skipping");
+      skipped++;
     } else {
       const createCopilot = isNonInteractive ? "y" : await ask(rl, "  Create .github/copilot-instructions.md? [Y/n] ");
       if (createCopilot.toLowerCase() !== "n") {
         mkdirSync(join(cwd, ".github"), { recursive: true });
         writeFileSync(copilotPath, generateCopilotInstructions(det));
         console.log("  ✅ Created .github/copilot-instructions.md");
+        created++;
       }
     }
 
-    // 3. Summary
-    console.log("\n✨ Done! Next steps:");
+    // SKILLS.md
+    const skillsPath = join(cwd, "SKILLS.md");
+    if (existsSync(skillsPath)) {
+      console.log("  ⏭  SKILLS.md already exists — skipping");
+      skipped++;
+    } else {
+      const answer = isNonInteractive ? "y" : await ask(rl, "  Create SKILLS.md (agent skill tracking)? [Y/n] ");
+      if (answer.toLowerCase() !== "n") {
+        writeFileSync(skillsPath, generateSkillsMd(det));
+        console.log("  ✅ Created SKILLS.md");
+        created++;
+      }
+    }
+
+    // SCORE.md
+    const scorePath = join(cwd, "SCORE.md");
+    if (existsSync(scorePath)) {
+      console.log("  ⏭  SCORE.md already exists — skipping");
+      skipped++;
+    } else {
+      const answer = isNonInteractive ? "y" : await ask(rl, "  Create SCORE.md (AI-readiness tracking)? [Y/n] ");
+      if (answer.toLowerCase() !== "n") {
+        writeFileSync(scorePath, generateScoreMd(det));
+        console.log("  ✅ Created SCORE.md");
+        created++;
+      }
+    }
+
+    // Git hooks (only if .git exists)
+    if (det.hasGit) {
+      const hooksDir = join(cwd, ".git", "hooks");
+      const preCommitDest = join(hooksDir, "pre-commit");
+      const postCommitDest = join(hooksDir, "post-commit");
+
+      if (existsSync(preCommitDest)) {
+        console.log("  ⏭  .git/hooks/pre-commit already exists — skipping");
+        skipped++;
+      } else {
+        const answer = isNonInteractive ? "y" : await ask(rl, "  Install pre-commit hook (doc freshness + secret scan)? [Y/n] ");
+        if (answer.toLowerCase() !== "n") {
+          mkdirSync(hooksDir, { recursive: true });
+          writeFileSync(preCommitDest, generatePreCommitHook(), { mode: 0o755 });
+          console.log("  ✅ Installed .git/hooks/pre-commit");
+          created++;
+        }
+      }
+
+      if (existsSync(postCommitDest)) {
+        console.log("  ⏭  .git/hooks/post-commit already exists — skipping");
+        skipped++;
+      } else {
+        const answer = isNonInteractive ? "y" : await ask(rl, "  Install post-commit hook (auto-push)? [Y/n] ");
+        if (answer.toLowerCase() !== "n") {
+          mkdirSync(hooksDir, { recursive: true });
+          writeFileSync(postCommitDest, generatePostCommitHook(), { mode: 0o755 });
+          console.log("  ✅ Installed .git/hooks/post-commit");
+          created++;
+        }
+      }
+    }
+
+    console.log("");
+
+    // -----------------------------------------------------------------------
+    // Tier 3: Optional
+    // -----------------------------------------------------------------------
+    console.log("  💡 Tier 3: Optional");
+
+    // CLAUDE.md
+    const claudePath = join(cwd, "CLAUDE.md");
+    if (existsSync(claudePath)) {
+      console.log("  ⏭  CLAUDE.md already exists — skipping");
+      skipped++;
+    } else {
+      const answer = isNonInteractive ? "y" : await ask(rl, "  Create CLAUDE.md (Claude-specific instructions)? [Y/n] ");
+      if (answer.toLowerCase() !== "n") {
+        writeFileSync(claudePath, generateClaudeMd(det));
+        console.log("  ✅ Created CLAUDE.md");
+        created++;
+      }
+    }
+
+    // Summary
+    console.log(`\n✨ Done! Created ${created} files, skipped ${skipped} (already exist).`);
+    console.log("");
+    console.log("  Next steps:");
     console.log("  1. Edit .github/copilot-instructions.md with your project details");
-    console.log("  2. Edit contextengine.json to add explicit sources if needed");
-    console.log("  3. Add ContextEngine to your MCP client config:");
-    console.log(`     { "command": "npx", "args": ["contextengine"] }`);
+    console.log("  2. Start a Copilot chat — ContextEngine tools are now available");
+    console.log("  3. Run `contextengine score` to get your AI-readiness baseline");
     console.log("");
   } finally {
     rl.close();
@@ -884,7 +1182,7 @@ ContextEngine — queryable knowledge base for AI coding agents
 
 Usage:
   contextengine                        Start MCP server (stdio transport)
-  contextengine init                   Scaffold contextengine.json + copilot-instructions.md
+  contextengine init                   Scaffold project (mcp.json, docs, hooks, config)
   contextengine search <query> [-n N]  Search indexed knowledge (default: top 5)
   contextengine list-sources           Show all indexed sources with chunk counts
   contextengine list-projects          Discover and analyze all projects (Pro)

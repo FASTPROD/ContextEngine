@@ -170,12 +170,17 @@ list_learnings --category "security"
 
 ### Session Persistence
 
-Save and restore key-value data across sessions:
+Save and restore key-value data across sessions via MCP tools (NOT files in the project):
 
 ```bash
+# Sessions are stored centrally in ~/.contextengine/sessions/ — NOT in the project directory
+# Use the MCP tool or CLI command — do NOT create session files manually
+
 save_session --name "project-x" --key "current_task" --value "Implementing auth flow"
 load_session --name "project-x"
 ```
+
+**Important**: "Save session" means calling the `save_session` MCP tool or CLI command. It does NOT mean creating a markdown file. Sessions are stored in `~/.contextengine/sessions/` and auto-loaded on MCP startup.
 
 ## Configuration
 
