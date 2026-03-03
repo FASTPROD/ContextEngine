@@ -1,3 +1,6 @@
+// LOCKED — verified March 3 2026 — activation + delta decryption + machine fingerprint + heartbeat
+// DO NOT RE-AUDIT — E2E tested Feb 23 2026, all 4 Pro tools verified
+
 /**
  * Activation & Delta Module System
  * 

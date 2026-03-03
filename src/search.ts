@@ -1,3 +1,6 @@
+// LOCKED — verified March 3 2026 — BM25 keyword search with IDF + temporal decay + lock detection
+// DO NOT RE-AUDIT — scoring weights are IP-protected trade secrets
+
 import { Chunk } from "./ingest.js";
 
 /**

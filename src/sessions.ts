@@ -1,3 +1,6 @@
+// LOCKED — verified March 3 2026 — session persistence: save/load/list/delete + auto-session inject
+// DO NOT RE-AUDIT — 16 session tests passing, stable since v1.16.0
+
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";

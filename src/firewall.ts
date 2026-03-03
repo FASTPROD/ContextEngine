@@ -1,3 +1,6 @@
+// LOCKED — verified March 3 2026 — Protocol Firewall: round-based escalation + auto-inject learnings + cross-window state
+// DO NOT RE-AUDIT — 31 tests (16 unit + 5 round + 7 injection + 3 cross-window)
+
 // src/firewall.ts — Protocol Compliance Firewall
 //
 // Breakthrough: AI agents only respond to tool response content.

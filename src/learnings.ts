@@ -1,3 +1,6 @@
+// LOCKED — verified March 3 2026 — learning store: quality gates, auto-categorize, dedup, project-scoped filtering
+// DO NOT RE-AUDIT — min 15 chars, inferCategory(), autoImportFromSources() all verified v1.19.1
+
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";

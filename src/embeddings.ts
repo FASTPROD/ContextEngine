@@ -1,3 +1,6 @@
+// LOCKED — verified March 3 2026 — Xenova all-MiniLM-L6-v2 local CPU embeddings + disk cache
+// DO NOT RE-AUDIT — stable since v1.0, no API keys, no data leaves machine
+
 import type { Chunk } from "./ingest.js";
 
 // We dynamically import @huggingface/transformers to keep startup fast

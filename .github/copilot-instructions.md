@@ -168,6 +168,39 @@
 - Credentials: extracted to `.copilot-credentials.md` (gitignored, never committed)
 - npm: 1,233 weekly downloads
 
+## 🔒 Locked Files — DO NOT Modify Without Explicit User Request
+| File | Lock Date | What's Verified | Tests |
+|---|---|---|---|
+| `src/activation.ts` | 2026-03-03 | License validation, AES-256-CBC delta decryption, machine fingerprint, daily heartbeat | E2E verified Feb 23 2026, all 4 Pro tools |
+| `src/firewall.ts` | 2026-03-03 | Protocol Firewall: round-based escalation, auto-inject learnings, cross-window state | 31 tests (16 unit + 5 round + 7 injection + 3 cross-window) |
+| `src/search.ts` | 2026-03-03 | BM25 keyword search with IDF, temporal decay, lock marker detection | 11 search tests |
+| `src/embeddings.ts` | 2026-03-03 | Xenova all-MiniLM-L6-v2 local CPU embeddings, disk cache, non-blocking startup | Stable since v1.0 |
+| `src/learnings.ts` | 2026-03-03 | Learning store: quality gates (min 15 chars), auto-categorize, dedup, project-scoped filtering | 6 learnings tests |
+| `src/sessions.ts` | 2026-03-03 | Session persistence: save/load/list/delete, auto-session inject on MCP startup | 16 session tests |
+
+## AI Agent Rework Prevention Protocol
+1. **Check the LOCKED FILES table above before editing ANY `src/` file** — if the file is listed, DO NOT modify it unless the user explicitly requests a change to that specific file.
+2. **Check the ALREADY IMPLEMENTED table below before implementing ANY feature** — if it's listed, it's done. Do not re-implement, re-audit, or "improve" it.
+3. **Read search results carefully** — if a result shows `🔒 LOCKED — DO NOT re-audit`, treat it as read-only context. Do not open the file to fix or improve it.
+4. **After completing any new feature**, add `// LOCKED — verified <date> — <description>` at the top of modified files, update the LOCKED FILES table, and add an entry to ALREADY IMPLEMENTED.
+5. **If you must modify a locked file** (user explicitly requests it), remove the old lock marker, make the change, add a new lock marker with the current date, and update the LOCKED FILES table.
+
+## Already Implemented — DO NOT Re-implement
+| Feature | Version | Date | Files | Status |
+|---|---|---|---|---|
+| Protocol Firewall (3-strike escalation) | v1.19.0 | Feb 2026 | `src/firewall.ts` | ✅ LOCKED — 31 tests |
+| License activation + delta decryption | v1.15.0 | Feb 2026 | `src/activation.ts` | ✅ LOCKED — E2E verified |
+| BM25 + semantic hybrid search | v1.0.0 | Jan 2026 | `src/search.ts`, `src/embeddings.ts`, `src/index.ts` | ✅ LOCKED — 11 search tests |
+| Learning store + quality gates | v1.19.1 | Feb 2026 | `src/learnings.ts` | ✅ LOCKED — 6 tests |
+| Session persistence + auto-inject | v1.16.0 | Feb 2026 | `src/sessions.ts` | ✅ LOCKED — 16 tests |
+| Lock marker detection in search | v1.21.2 | Mar 2026 | `src/ingest.ts`, `src/code-chunker.ts`, `src/search.ts`, `src/index.ts` | ✅ 8 patterns, 🔒 prefix |
+| Stripe payment integration | v1.19.0 | Feb 2026 | `server/src/stripe.ts`, `server/src/server.ts` | ✅ Webhook + checkout + email |
+| VS Code extension (value meter + terminal watcher) | v0.6.7 | Feb 2026 | `vscode-extension/src/` (10 files) | ✅ Published on marketplace |
+| Pre-commit secret scanner | v1.21.1 | Feb 2026 | `hooks/pre-commit`, `hooks/pre-commit-secrets` | ✅ 15+ patterns, deployed to 20 repos |
+| Cross-window firewall state | v1.21.0 | Feb 2026 | `src/firewall.ts` | ✅ LOCKED — 3 cross-window tests |
+| Auto-import learnings from doc sources | v1.19.1 | Feb 2026 | `src/learnings.ts` | ✅ LOCKED — runs during reindex + end-session |
+| npm metadata + portfolio links | v1.21.1 | Mar 2026 | `package.json`, `README.md` | ✅ Published to npm |
+
 ## Critical Rules
 1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)
 2. **BSL-1.1 license** — non-compete clause: no hosted/SaaS offering using this codebase
