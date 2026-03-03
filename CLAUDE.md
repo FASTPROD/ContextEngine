@@ -19,7 +19,7 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 7. **Learning store is the single source of truth** — `~/.contextengine/learnings.json` is the canonical knowledge base. Never write learnings to markdown files as a substitute for `save_learning`.
 
-8. **AGPL-3.0 is intentional** — forces competitors who fork to open-source their modifications. Commercial licensing available separately.
+8. **BSL-1.1 license** — non-compete clause: no hosted/SaaS offering using this codebase. Commercial licensing available separately.
 
 9. **Test before publish** — `npm run build` must succeed. Run `npx . search "test"` and `npx . score ContextEngine` to smoke-test before `npm publish`.
 

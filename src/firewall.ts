@@ -359,16 +359,18 @@ export class ProtocolFirewall {
 
   /**
    * Estimate minutes saved by ContextEngine this session.
-   * - Each learning recall ≈ 2 min (avoids re-discovery / googling)
-   * - Each nudge ≈ 1 min (prevented forgetting / cleanup later)
+   * Only counts genuine value events — not overhead like nudges or auto-injection.
+   * - Each explicit search recall ≈ 2 min (avoids re-discovery / googling)
    * - Each learning saved ≈ 1 min (future sessions benefit)
    * - Session save ≈ 3 min (avoids cold-start next session)
-   * Note: learningsInjected already counted via searchRecalls bump
+   * Note: nudges removed (they're enforcement overhead, not time saved).
+   * Note: learningsInjected uses its own counter, not searchRecalls.
    */
   private estimateTimeSaved(): number {
+    // Only count explicit search recalls, not auto-injected ones
+    const genuineRecalls = Math.max(0, this.searchRecalls - this.learningsInjected);
     return (
-      this.searchRecalls * 2 +
-      this.nudgesIssued * 1 +
+      genuineRecalls * 2 +
       this.learningsSaved * 1 +
       (this.sessionSaved ? 3 : 0)
     );

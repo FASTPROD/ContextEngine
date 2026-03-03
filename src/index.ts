@@ -50,6 +50,16 @@ import { readFileSync, existsSync, watch, statSync } from "fs";
 import { basename, join, dirname } from "path";
 import { execSync } from "child_process";
 import { scanCodeDir } from "./code-chunker.js";
+import { fileURLToPath } from "url";
+
+// Read version from package.json at startup
+let PKG_VERSION = "1.21.3";
+try {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
+  PKG_VERSION = pkg.version || PKG_VERSION;
+} catch { /* fallback */ }
 import {
   loadAdapters,
   collectFromAdapters,
@@ -327,7 +337,7 @@ function startWatching(): void {
 // ---------------------------------------------------------------------------
 const server = new McpServer({
   name: "ContextEngine",
-  version: "1.16.0",
+  version: PKG_VERSION,
 });
 
 // ---------------------------------------------------------------------------
@@ -480,7 +490,7 @@ server.tool(
       : "⏳ loading...";
 
     const text = [
-      `ContextEngine v1.19.1`,
+      `ContextEngine v${PKG_VERSION}`,
       `Sources: ${sources.length} | Chunks: ${chunks.length} | Embeddings: ${embStatus}`,
       "",
       ...lines,
@@ -1137,6 +1147,7 @@ async function main() {
   const config = loadConfig();
   if (config.collectOps !== false) {
     const projectDirs = loadProjectDirs();
+    activeProjectNames = projectDirs.map((d) => d.name);
     firewall.setProjectDirs(projectDirs);
     let opsChunks = 0;
     for (const dir of projectDirs) {

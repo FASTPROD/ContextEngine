@@ -53,9 +53,9 @@ npx @compr/contextengine-mcp help                      # Show all commands
 
 ContextEngine runs as an **MCP server** via stdio transport. Configure it in your MCP client:
 
-### VS Code (Global)
+### VS Code (Per-Workspace)
 
-Add to `~/.vscode/mcp.json`:
+Add to `.vscode/mcp.json` in your project root:
 
 ```json
 {
@@ -107,7 +107,7 @@ Add to your OpenClaw `openclaw.json` MCP servers section:
 }
 ```
 
-## Available Tools (15)
+## Available Tools (17)
 
 | Tool | Description |
 |------|-------------|
@@ -126,6 +126,8 @@ Add to your OpenClaw `openclaw.json` MCP servers section:
 | `save_learning` | Save a permanent operational rule — auto-surfaces in search results |
 | `list_learnings` | List all permanent learnings, optionally filtered by category |
 | `import_learnings` | Bulk-import learnings from Markdown or JSON files |
+| `activate` | Activate a Pro license on this machine |
+| `activation_status` | Check current license activation status |
 
 ## Core Capabilities
 
@@ -217,7 +219,7 @@ Create `contextengine.json` in your project root (or run `npx @compr/contextengi
 - Requires **Node.js 18+**
 - First run downloads the embedding model (~22MB) — subsequent runs use cache
 - Keyword search is available instantly at startup; semantic search becomes available once the model loads
-- License: AGPL-3.0 (modifications must be shared)
+- License: BSL-1.1 (Business Source License)
 - npm: `@compr/contextengine-mcp`
 
 ## Lock Markers — Do Not Touch Verified Code

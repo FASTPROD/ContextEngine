@@ -215,11 +215,17 @@ function generateMcpJson(): object {
     nodePath = execSync("which node", { encoding: "utf-8" }).trim();
   } catch { /* fallback to bare node */ }
 
+  // Detect npx path for the args
+  let npxPath = "npx";
+  try {
+    npxPath = execSync("which npx", { encoding: "utf-8" }).trim();
+  } catch { /* fallback to bare npx */ }
+
   return {
     servers: {
       contextengine: {
         type: "stdio",
-        command: nodePath,
+        command: npxPath,
         args: ["-y", "@compr/contextengine-mcp"],
       },
     },
