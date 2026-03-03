@@ -150,7 +150,7 @@
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
 - 1,023 learnings across 20 categories in store
 - 14 bundled starter learnings ship with npm (trimmed from 30 to prevent dedup re-merge)
-- 76 vitest tests across 6 files (search 11, activation 8, learnings 6, cli 8, sessions 16, firewall 31)
+- 81 vitest tests across 6 files (search 11, activation 8, learnings 6, cli 8, sessions 16, firewall 36)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
 - Keyword search: instant (BM25 with IDF)
 - Semantic search: ~200ms from cache, ~15s first run
@@ -173,7 +173,7 @@
 | File | Lock Date | What's Verified | Tests |
 |---|---|---|---|
 | `src/activation.ts` | 2026-03-03 | License validation, AES-256-CBC delta decryption, machine fingerprint, daily heartbeat | E2E verified Feb 23 2026, all 4 Pro tools |
-| `src/firewall.ts` | 2026-03-03 | Protocol Firewall: round-based escalation, auto-inject learnings, cross-window state | 31 tests (16 unit + 5 round + 7 injection + 3 cross-window) |
+| `src/firewall.ts` | 2026-03-03 | Protocol Firewall: round-based escalation, auto-inject learnings, cross-window state, 10-min session timer | 36 tests (16 unit + 5 round + 7 injection + 3 cross-window + 5 session timer) |
 | `src/search.ts` | 2026-03-03 | BM25 keyword search with IDF, temporal decay, lock marker detection | 11 search tests |
 | `src/embeddings.ts` | 2026-03-03 | Xenova all-MiniLM-L6-v2 local CPU embeddings, disk cache, non-blocking startup | Stable since v1.0 |
 | `src/learnings.ts` | 2026-03-03 | Learning store: quality gates (min 15 chars), auto-categorize, dedup, project-scoped filtering | 6 learnings tests |
@@ -202,6 +202,7 @@
 | Auto-import learnings from doc sources | v1.19.1 | Feb 2026 | `src/learnings.ts` | ✅ LOCKED — runs during reindex + end-session |
 | npm metadata + portfolio links | v1.21.1 | Mar 2026 | `package.json`, `README.md` | ✅ Published to npm |
 | A-to-Z audit fixes (12 bugs) | v1.22.0 | Mar 2026 | `src/index.ts`, `src/cli.ts`, `src/firewall.ts`, `src/ingest.ts`, `SKILL.md`, `CLAUDE.md` | ✅ Published to npm |
+| 10-min session save timer | v1.22.0 | Mar 2026 | `src/firewall.ts` | ✅ 5 tests, commit/push reminder |
 
 ## Critical Rules
 1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)
