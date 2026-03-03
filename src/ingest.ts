@@ -197,7 +197,6 @@ export function ingestSources(sources: KnowledgeSource[]): Chunk[] {
       if (chunk.contentHash) seenHashes.add(chunk.contentHash);
       allChunks.push(chunk);
     }
-    const accepted = chunks.length - (dupCount > 0 ? dupCount : 0);
     console.error(
       `[ContextEngine] ✅ Indexed: ${source.name} (${chunks.length} chunks)`
     );

@@ -140,7 +140,6 @@ async function reindex(): Promise<void> {
 
   // Scan code files if configured
   if (config.codeDirs && config.codeDirs.length > 0) {
-    const projectDirs = loadProjectDirs();
     let codeChunks = 0;
     for (const dir of projectDirs) {
       for (const codeDir of config.codeDirs) {
@@ -987,6 +986,29 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool: delete_learning (Permanent Learning Store)
+// ---------------------------------------------------------------------------
+server.tool(
+  "delete_learning",
+  "Delete a learning by its ID. Use list_learnings first to find the ID of the learning you want to remove.",
+  {
+    id: z.string().describe("The unique ID of the learning to delete"),
+  },
+  async ({ id }) => {
+    const deleted = deleteLearning(id);
+    if (!deleted) {
+      return respond("delete_learning", `❌ No learning found with ID "${id}". Use \`list_learnings\` to see available IDs.`);
+    }
+    // Re-inject learnings into search index
+    const newChunks = learningsToChunks(activeProjectNames);
+    const nonLearningChunks = chunks.filter((c) => c.source !== "💡 Learnings Store");
+    chunks.length = 0;
+    chunks.push(...nonLearningChunks, ...newChunks);
+    return respond("delete_learning", `✅ Learning "${id}" deleted successfully.`);
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Tool: import_learnings (Bulk Import from Files)
 // ---------------------------------------------------------------------------
 server.tool(
@@ -1145,10 +1167,10 @@ async function main() {
 
   // 1b. Collect operational data (git, deps, env, docker, pm2, etc.)
   const config = loadConfig();
+  const projectDirs = loadProjectDirs();
+  activeProjectNames = projectDirs.map((d) => d.name);
+  firewall.setProjectDirs(projectDirs);
   if (config.collectOps !== false) {
-    const projectDirs = loadProjectDirs();
-    activeProjectNames = projectDirs.map((d) => d.name);
-    firewall.setProjectDirs(projectDirs);
     let opsChunks = 0;
     for (const dir of projectDirs) {
       const ops = collectProjectOps(dir.path, dir.name);
@@ -1173,7 +1195,6 @@ async function main() {
 
   // 1c. Scan code files (TS/JS/Python) if configured
   if (config.codeDirs && config.codeDirs.length > 0) {
-    const projectDirs = loadProjectDirs();
     let codeChunks = 0;
     for (const dir of projectDirs) {
       for (const codeDir of config.codeDirs) {
@@ -1192,7 +1213,17 @@ async function main() {
     }
   }
 
-  // 1d. Inject learnings into search index (project-scoped)
+  // 1d. Auto-import learnings from discovered doc sources
+  const autoImport = autoImportFromSources(
+    sources.map((s) => ({ path: s.path, name: s.name }))
+  );
+  if (autoImport.imported > 0) {
+    console.error(
+      `[ContextEngine] 📥 Auto-imported ${autoImport.imported} new learnings from ${autoImport.total} doc sources (${autoImport.updated} updated)`
+    );
+  }
+
+  // 1e. Inject learnings into search index (project-scoped)
   const learningChunks = learningsToChunks(activeProjectNames);
   if (learningChunks.length > 0) {
     chunks.push(...learningChunks);
@@ -1201,7 +1232,7 @@ async function main() {
     );
   }
 
-  // 1e. Load and collect from plugin adapters
+  // 1f. Load and collect from plugin adapters
   if (config.adapters && config.adapters.length > 0) {
     const adapterCount = await loadAdapters(config.adapters as AdapterEntry[]);
     if (adapterCount > 0) {
