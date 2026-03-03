@@ -413,3 +413,56 @@ describe("ProtocolFirewall — cross-window state", () => {
     expect(state.roundsSinceSessionSave).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Session save timer (10-minute window)
+// ---------------------------------------------------------------------------
+describe("ProtocolFirewall — 10-minute session timer", () => {
+  it("sessionOverdue is false during warmup period (<10 min)", () => {
+    const fw = new ProtocolFirewall({ skipRestore: true });
+    // Brand new session, no time elapsed — not overdue
+    expect(fw.getState().sessionOverdue).toBe(false);
+  });
+
+  it("sessionOverdue is true after 10 min with no save_session", () => {
+    const fw = new ProtocolFirewall({ skipRestore: true });
+    // Simulate 11 minutes passing by manipulating startTime
+    (fw as unknown as { startTime: number }).startTime = Date.now() - 11 * 60_000;
+    expect(fw.getState().sessionOverdue).toBe(true);
+  });
+
+  it("sessionOverdue resets after save_session", () => {
+    const fw = new ProtocolFirewall({ skipRestore: true });
+    // Simulate 11 minutes passed
+    (fw as unknown as { startTime: number }).startTime = Date.now() - 11 * 60_000;
+    expect(fw.getState().sessionOverdue).toBe(true);
+
+    // Save session — should reset timer
+    fw.wrap("save_session", "ok");
+    expect(fw.getState().sessionOverdue).toBe(false);
+  });
+
+  it("sessionOverdue triggers again 10 min after last save", () => {
+    const fw = new ProtocolFirewall({ skipRestore: true });
+    // Simulate 20 min session, saved at 5 min
+    (fw as unknown as { startTime: number }).startTime = Date.now() - 20 * 60_000;
+    fw.wrap("save_session", "ok");
+    // Just saved — not overdue
+    expect(fw.getState().sessionOverdue).toBe(false);
+
+    // Simulate 11 min since that save
+    (fw as unknown as { lastSessionSaveTime: number }).lastSessionSaveTime = Date.now() - 11 * 60_000;
+    expect(fw.getState().sessionOverdue).toBe(true);
+  });
+
+  it("injects urgent block into tool response when overdue", () => {
+    const fw = new ProtocolFirewall({ skipRestore: true });
+    // Simulate overdue session
+    (fw as unknown as { startTime: number }).startTime = Date.now() - 15 * 60_000;
+
+    const result = fw.wrap("search_context", "some results");
+    expect(result).toContain("SESSION SAVE OVERDUE");
+    expect(result).toContain("save_session");
+    expect(result).toContain("git push");
+  });
+});

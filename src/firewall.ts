@@ -1,4 +1,4 @@
-// LOCKED — verified March 3 2026 — Protocol Firewall: round-based escalation + auto-inject learnings + cross-window state
+// LOCKED — verified March 3 2026 — Protocol Firewall: round-based escalation + auto-inject learnings + cross-window state + 10-min session timer
 // DO NOT RE-AUDIT — 31 tests (16 unit + 5 round + 7 injection + 3 cross-window)
 
 // src/firewall.ts — Protocol Compliance Firewall
@@ -73,6 +73,9 @@ const STALE_SESSION_MS = 5 * 60_000; // 5 minutes
 /** Max learnings to auto-inject per tool response */
 const INJECT_MAX = 3;
 
+/** Maximum time between session saves before urgent reminder (10 minutes) */
+const SESSION_SAVE_MAX_MS = 10 * 60_000;
+
 /** Minimum score for a learning to be injected (from searchLearnings scoring) */
 const INJECT_MIN_SCORE_TOKENS = 2; // at least 2 keyword token matches
 
@@ -104,6 +107,7 @@ export class ProtocolFirewall {
   private round = 0;            // current interaction round (1-based)
   private roundAtLastSave = 0;  // round when session was last saved
   private roundsSinceSessionSave = 0; // consecutive rounds without save_session
+  private lastSessionSaveTime = 0; // timestamp of last save_session call (0 = never)
 
   // --- Stats flush (debounce disk writes) ---
   private statsFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -227,20 +231,33 @@ export class ProtocolFirewall {
     // --- Auto-inject relevant learnings ---
     const injection = this.buildLearningInjection(contextHint);
 
+    // --- Check 10-minute session save timer ---
+    const sessionUrgent = this.isSessionOverdue();
+
     // Evaluate obligations
     const obligations = this.evaluate();
     const fails = obligations.filter((o) => o.status === "fail").length;
     const warns = obligations.filter((o) => o.status === "warn").length;
     const score = Math.min(100, fails * 30 + warns * 10);
-    const level = this.computeLevel(score);
+    let level = this.computeLevel(score);
+
+    // Override: if session save is overdue, force at least header level
+    if (sessionUrgent && level === "silent") level = "header";
+    if (sessionUrgent && level === "footer") level = "header";
 
     // Prepend learning injection to response (always, if available)
     let text = injection ? injection + "\n\n" + responseText : responseText;
 
-    if (level === "silent") return text;
+    // Build session urgency block (always prepended when overdue)
+    const urgentBlock = sessionUrgent ? this.buildSessionUrgentBlock() : null;
+
+    if (level === "silent" && !urgentBlock) return text;
 
     const block = this.formatBlock(obligations, score, level);
     this.nudgesIssued++;
+
+    // Prepend urgent session reminder if overdue
+    const prefix = urgentBlock ? urgentBlock + "\n\n" : "";
 
     switch (level) {
       case "degraded": {
@@ -252,15 +269,15 @@ export class ProtocolFirewall {
               `call save_learning or save_session to restore full output]`
             : text;
         this.scheduleStatsFlush();
-        return block + "\n\n" + truncated;
+        return prefix + block + "\n\n" + truncated;
       }
       case "header":
         this.scheduleStatsFlush();
-        return block + "\n\n" + text;
+        return prefix + block + "\n\n" + text;
       case "footer":
       default:
         this.scheduleStatsFlush();
-        return text + "\n\n" + block;
+        return prefix + text + "\n\n" + block;
     }
   }
 
@@ -280,6 +297,7 @@ export class ProtocolFirewall {
       round: this.round,
       roundsSinceSessionSave: this.roundsSinceSessionSave,
       learningsInjected: this.learningsInjected,
+      sessionOverdue: this.isSessionOverdue(),
     };
   }
 
@@ -421,8 +439,57 @@ export class ProtocolFirewall {
       this.sessionSaved = true;
       this.roundAtLastSave = this.round;
       this.roundsSinceSessionSave = 0;
+      this.lastSessionSaveTime = Date.now();
     }
     this.scheduleStatsFlush();
+  }
+
+  // -----------------------------------------------------------------------
+  // Internal: 10-minute session save timer
+  // -----------------------------------------------------------------------
+
+  /**
+   * Check if session save is overdue (>10 minutes since last save,
+   * or >10 minutes of activity without ever saving).
+   * Only triggers after the warmup period (first 10 minutes of session).
+   */
+  private isSessionOverdue(): boolean {
+    const now = Date.now();
+    const sessionAge = now - this.startTime;
+
+    // Grace period: don't trigger in first 10 minutes of a brand new session
+    if (sessionAge < SESSION_SAVE_MAX_MS) return false;
+
+    // If never saved: overdue once session is >10 min old
+    if (this.lastSessionSaveTime === 0) return true;
+
+    // If saved before: overdue if >10 min since last save
+    return (now - this.lastSessionSaveTime) > SESSION_SAVE_MAX_MS;
+  }
+
+  /**
+   * Build an urgent session reminder block.
+   * This is injected at the TOP of every tool response when overdue.
+   */
+  private buildSessionUrgentBlock(): string {
+    const minSinceSave = this.lastSessionSaveTime > 0
+      ? Math.round((Date.now() - this.lastSessionSaveTime) / 60_000)
+      : Math.round((Date.now() - this.startTime) / 60_000);
+
+    const lines = [
+      "🚨🚨🚨 SESSION SAVE OVERDUE 🚨🚨🚨",
+      `⏰ ${minSinceSave} minutes since last session save (max: 10 min)`,
+      "",
+      "**You MUST do ALL of the following NOW:**",
+      "1. 📝 Call `save_session` — update summary, completed_tasks, decisions",
+      "2. 💾 Commit all changes — `git add . && git commit`",
+      "3. 🚀 Push to ALL remotes — `git push origin main && git push gdrive main`",
+      "",
+      "⛔ Do NOT continue working until session is saved and pushed.",
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ];
+
+    return lines.join("\n");
   }
 
   // -----------------------------------------------------------------------
@@ -466,12 +533,25 @@ export class ProtocolFirewall {
       });
     }
 
-    // 2. Session — 3-strike per interaction round
+    // 2. Session — 3-strike per interaction round + 10-min time limit
     //    Round 1: grace period (ok)
     //    Round 2 without save: warn
     //    Round 3+ without save: fail
+    //    10+ min without save: fail (time-based override)
     const rss = this.roundsSinceSessionSave;
-    if (this.sessionSaved && rss <= 1) {
+    const sessionOverdue = this.isSessionOverdue();
+    if (sessionOverdue) {
+      // Time-based override — always fail when >10 min without save
+      const minSince = this.lastSessionSaveTime > 0
+        ? Math.round((Date.now() - this.lastSessionSaveTime) / 60_000)
+        : Math.round((Date.now() - this.startTime) / 60_000);
+      obs.push({
+        id: "session",
+        label: "Session",
+        status: "fail",
+        detail: `${minSince}min without save — SAVE SESSION + COMMIT + PUSH NOW`,
+      });
+    } else if (this.sessionSaved && rss <= 1) {
       obs.push({
         id: "session",
         label: "Session",
