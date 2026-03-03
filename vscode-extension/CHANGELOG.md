@@ -2,6 +2,13 @@
 
 All notable changes to the ContextEngine VS Code Extension.
 
+## [0.7.1] — 2026-03-03
+
+### Added
+- **Session save overdue warning** — status bar shows `⚠️ SAVE SESSION` with warning background when the MCP server's 10-minute session save timer expires. Tooltip shows "OVERDUE — save now!" row.
+- `sessionOverdue` field consumed from `session-stats.json` (written by MCP server v1.22.1+).
+- Fingerprint-based polling includes `sessionOverdue` — fires event on state change.
+
 ## [0.6.7] — 2026-02-25
 
 ### Added

@@ -29,6 +29,7 @@ export interface SessionStats {
   searchRecalls: number;
   truncations: number;
   timeSavedMinutes: number;
+  sessionOverdue: boolean;
 }
 
 const EMPTY_STATS: SessionStats = {
@@ -43,6 +44,7 @@ const EMPTY_STATS: SessionStats = {
   searchRecalls: 0,
   truncations: 0,
   timeSavedMinutes: 0,
+  sessionOverdue: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -115,7 +117,7 @@ export class StatsPoller implements vscode.Disposable {
       this._active = !isNaN(updatedAt) && Date.now() - updatedAt < 5 * 60_000;
 
       // Only fire event when stats actually change
-      const fp = `${this._stats.toolCalls}|${this._stats.searchRecalls}|${this._stats.learningsSaved}|${this._stats.timeSavedMinutes}|${this._active}|${this._stats.nudgesIssued}|${this._stats.truncations}`;
+      const fp = `${this._stats.toolCalls}|${this._stats.searchRecalls}|${this._stats.learningsSaved}|${this._stats.timeSavedMinutes}|${this._active}|${this._stats.nudgesIssued}|${this._stats.truncations}|${this._stats.sessionOverdue}`;
       if (fp !== this._lastFingerprint || this._active !== wasActive) {
         this._lastFingerprint = fp;
         this._onStats.fire(this._stats);

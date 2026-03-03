@@ -114,6 +114,17 @@ export class StatusBarController implements vscode.Disposable {
     const recalls = stats.searchRecalls;
     const saved = stats.learningsSaved;
     const timeSaved = stats.timeSavedMinutes;
+    const overdue = stats.sessionOverdue;
+
+    // Session save overdue — show warning state
+    if (overdue) {
+      this._item.text = `$(warning) CE ⚠️ SAVE SESSION`;
+      this._item.backgroundColor = new vscode.ThemeColor(
+        "statusBarItem.warningBackground"
+      );
+      this._item.tooltip = this._buildValueTooltip(stats);
+      return;
+    }
 
     // Compact status bar text
     if (timeSaved > 0) {
@@ -188,6 +199,9 @@ export class StatusBarController implements vscode.Disposable {
     md.appendMarkdown(`| 🔧 Tool calls | ${stats.toolCalls} |\n`);
     md.appendMarkdown(`| ⏱ Session uptime | ${stats.uptimeMinutes} min |\n`);
     md.appendMarkdown(`| ⏱ **Time saved** | **~${stats.timeSavedMinutes} min** |\n`);
+    if (stats.sessionOverdue) {
+      md.appendMarkdown(`| ⚠️ **Session save** | **OVERDUE — save now!** |\n`);
+    }
     md.appendMarkdown(`\n`);
 
     // Git status as secondary info

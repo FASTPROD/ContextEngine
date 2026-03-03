@@ -2,7 +2,7 @@
   "name": "contextengine",
   "displayName": "ContextEngine — AI Agent Compliance",
   "description": "Protocol Firewall + durable memory for AI coding agents. Your AI sessions end clean, not chaotic — ContextEngine ensures agents save learnings, commit code, and update docs.",
-  "version": "0.6.7",
+  "version": "0.7.1",
   "publisher": "css-llc",
   "license": "BSL-1.1",
   "icon": "media/icon.png",
