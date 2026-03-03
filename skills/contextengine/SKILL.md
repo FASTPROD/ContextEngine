@@ -214,3 +214,31 @@ Create `contextengine.json` in your project root (or run `npx @compr/contextengi
 - Keyword search is available instantly at startup; semantic search becomes available once the model loads
 - License: AGPL-3.0 (modifications must be shared)
 - npm: `@compr/contextengine-mcp`
+
+## Lock Markers — Do Not Touch Verified Code
+
+ContextEngine detects **lock markers** in source files and documentation. When a chunk contains a lock marker, search results display a `🔒 LOCKED` prefix — this means the code has been verified and **must not be modified, deleted, or re-implemented**.
+
+### Recognized patterns
+
+```
+// LOCKED                          // in JS/TS/C/Go
+/* LOCKED */                       // block comment variant
+# LOCKED                           // Python/Shell/YAML
+<!-- LOCKED -->                    // HTML/Markdown
+LOCKED — verified <date>           // prose
+DO NOT RE-AUDIT                    // audit skip signal
+ALREADY IMPLEMENTED                // status marker
+VERIFIED — DO NOT                  // verified block
+```
+
+### Rules for agents
+
+1. **Never delete or rewrite** code that contains a lock marker or sits within a locked section
+2. **Never re-implement** functionality described in an `ALREADY IMPLEMENTED` block
+3. **When you finish implementing a feature**, add a lock marker to signal future sessions:
+   ```ts
+   // LOCKED — verified March 3 2026 — GA4 tag injection
+   ```
+4. **When you see `🔒 LOCKED` in search results**, treat it as read-only context — do not open the file to "fix" or "improve" it
+5. **If you must modify locked code** (user explicitly requests it), remove the lock marker first and add a new one after verification

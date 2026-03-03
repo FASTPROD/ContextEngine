@@ -58,8 +58,6 @@ function computeIDF(
 
 /**
  * Score a chunk against query tokens using BM25.
- * Locked chunks (containing LOCKED / ALREADY IMPLEMENTED markers) get a 1.5x boost
- * so they surface prominently, preventing agents from re-auditing verified work.
  */
 function bm25Score(
   chunk: Chunk,
@@ -87,11 +85,6 @@ function bm25Score(
   const distinctMatches = queryTokens.filter((t) => text.includes(t)).length;
   if (distinctMatches > 1) {
     score *= 1 + distinctMatches * 0.15;
-  }
-
-  // Lock marker boost — verified/audited chunks surface higher
-  if (chunk.locked) {
-    score *= 1.5;
   }
 
   return score;

@@ -266,11 +266,9 @@ function hybridSearch(
   }
 
   // Combined: 40% keyword + 60% semantic, multiplied by temporal decay
-  // Locked chunks (verified / already-implemented) get 1.5× boost
   for (const r of map.values()) {
     const rawScore = r.keywordScore * 0.4 + r.vectorScore * 0.6;
-    const lockBoost = r.chunk.locked ? 1.5 : 1.0;
-    r.combinedScore = rawScore * r.temporalMultiplier * lockBoost;
+    r.combinedScore = rawScore * r.temporalMultiplier;
   }
 
   const results = Array.from(map.values());
