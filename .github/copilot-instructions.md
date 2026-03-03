@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine (PUBLIC repo)
-- **Version**: v1.20.2
+- **Version**: v1.22.0
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
 - **VS Code Extension**: `css-llc.contextengine` — https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
@@ -121,12 +121,13 @@
 | `skills/contextengine/SKILL.md` | Bundled skill file — teaches agents how to use CE |
 | `defaults/` | 30 starter learnings shipped with npm |
 
-## MCP Tools Exposed (17 tools)
+## MCP Tools Exposed (18 tools)
 | Tool | Purpose | Gated? |
 |---|---|---|
-| `search` | BM25 + semantic search across all sources | Free |
+| `search_context` | BM25 + semantic search across all sources | Free |
 | `list_sources` | Show discovered source files + chunk counts | Free |
-| `get_project_context` | Git branch, recent commits, dependencies | Free |
+| `read_source` | Read full content of a discovered source file | Free |
+| `reindex` | Force re-discovery and re-indexing of all sources | Free |
 | `save_learning` | Store a new operational learning | Free |
 | `list_learnings` | Browse learnings by category | Free |
 | `delete_learning` | Remove a learning by ID | Free |
@@ -135,16 +136,16 @@
 | `run_audit` | Beyond-A+ audit (security, perf, DX) | Pro |
 | `check_ports` | Detect port conflicts across projects | Pro |
 | `list_projects` | List all registered projects | Pro |
-| `register_project` | Add a project to contextengine.json | Free |
-| `configure_adapter` | Auto-configure Claude Desktop / VS Code / Cursor | Free |
-| `get_skill` | Retrieve a bundled skill file | Free |
-| `list_skills` | List available skill files | Free |
+| `save_session` | Save key-value entry to a named session | Free |
+| `load_session` | Restore a saved session | Free |
+| `list_sessions` | List all saved sessions | Free |
+| `end_session` | End-of-session protocol enforcer | Free |
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.21.0)
+## Stats (as of v1.22.0)
 - ~12,800 lines of source code (~8,200 src/ + ~1,100 server/ + ~3,500 vscode-extension/)
-- 17 MCP tools (13 free + 4 gated)
+- 18 MCP tools (14 free + 4 gated)
 - 16 CLI subcommands (10 original + 5 new in v1.16.0 + stats in v1.20.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
 - 1,023 learnings across 20 categories in store
@@ -164,7 +165,7 @@
 - Privacy section: README documents local-first architecture, server never receives code/learnings
 - Learning quality gates: min 15 chars, auto-categorize "other", import filters (v1.19.1)
 - Learnings store: 1,023 quality rules (post-dedup + junk purge)
-- GitHub repo: PUBLIC, 9 topics, v1.20.2 release published
+- GitHub repo: PUBLIC, 9 topics, v1.22.0 release published
 - Credentials: extracted to `.copilot-credentials.md` (gitignored, never committed)
 - npm: 1,233 weekly downloads
 
@@ -200,6 +201,7 @@
 | Cross-window firewall state | v1.21.0 | Feb 2026 | `src/firewall.ts` | ✅ LOCKED — 3 cross-window tests |
 | Auto-import learnings from doc sources | v1.19.1 | Feb 2026 | `src/learnings.ts` | ✅ LOCKED — runs during reindex + end-session |
 | npm metadata + portfolio links | v1.21.1 | Mar 2026 | `package.json`, `README.md` | ✅ Published to npm |
+| A-to-Z audit fixes (12 bugs) | v1.22.0 | Mar 2026 | `src/index.ts`, `src/cli.ts`, `src/firewall.ts`, `src/ingest.ts`, `SKILL.md`, `CLAUDE.md` | ✅ Published to npm |
 
 ## Critical Rules
 1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)
@@ -217,6 +219,21 @@
 13. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
 14. **NEVER write secrets in code or docs** — passwords, API keys, tokens, and credentials must ONLY go in `.copilot-credentials.md` or `.env` (both gitignored). Documentation must use `*(see .copilot-credentials.md)*` placeholders. The pre-commit hook scans for 15+ secret patterns and BLOCKS commits containing them. All 20 git repos have the hook installed. To update patterns, edit `hooks/pre-commit-secrets` and redeploy.
 15. **Secret prevention for agents** — when an agent needs to reference a password or key in a command, use environment variables (`SSHPASS='<password>' sshpass -e`) or read from `.copilot-credentials.md`. NEVER hardcode secrets in shell commands that get logged, in markdown docs, or in `copilot-instructions.md`. Use `<VPS_PASSWORD>`, `<STRIPE_KEY>`, `<DB_PASSWORD>` as placeholders. The terminal watcher redacts known patterns but prevention > redaction.
+
+## v1.22.0 — A-to-Z Audit Fixes (Mar 2026)
+### Bugs Fixed (12 total)
+1. **`generateMcpJson()` broken args** — `node -y` is invalid (`-y` is npx flag). Fixed to use `npx` as command.
+2. **McpServer version hardcoded "1.16.0"** — now reads `package.json` at startup via `PKG_VERSION`.
+3. **`list_sources` version hardcoded "v1.19.1"** — now uses `PKG_VERSION`.
+4. **`activeProjectNames` never set in `main()`** — learnings project scoping was defeated (all learnings visible to all projects). Fixed: set outside `collectOps` block.
+5. **`estimateTimeSaved()` always ~6min** — nudges counted as value (3 baseline per session = 3 min inflation). Auto-injected learnings double-counted via `searchRecalls`. Fixed: removed nudge counting, subtract `learningsInjected` from recalls.
+6. **`delete_learning` not registered as MCP tool** — imported but `server.tool()` call missing. Now tool #18.
+7. **`firewall.setProjectDirs()` skipped when `collectOps=false`** — moved outside condition block in `main()`.
+8. **`autoImportFromSources()` not called in `main()`** — only ran during `reindex()`. Now also runs on startup.
+9. **Redundant `loadProjectDirs()` calls** — deduplicated: single call shared across ops + code collection.
+10. **Dead `accepted` variable in `ingest.ts`** — computed but never used. Removed.
+11. **SKILL.md tool count wrong (15→18)** — added `activate`, `activation_status`, `delete_learning`.
+12. **License inconsistency** — SKILL.md and CLAUDE.md said "AGPL-3.0" but actual license is BSL-1.1. Fixed.
 
 ## v1.19.0 — Protocol Firewall (Feb 2026)
 ### Architecture
