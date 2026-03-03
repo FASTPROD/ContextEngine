@@ -29,6 +29,30 @@ export interface Chunk {
   contentHash?: string;
   /** Timestamp when chunk was indexed (ISO string) */
   indexedAt?: string;
+  /** True if chunk contains a lock marker (LOCKED / ALREADY IMPLEMENTED) — signals agents should not re-audit */
+  locked?: boolean;
+}
+
+/**
+ * Lock marker patterns that signal verified/audited content.
+ * Agents should NOT re-audit chunks containing these markers.
+ * Supports code comments (// LOCKED, /* LOCKED, # LOCKED),
+ * HTML comments (<!-- LOCKED -->), and markdown headings (## ALREADY IMPLEMENTED).
+ */
+const LOCK_PATTERNS = [
+  /\/\/\s*LOCKED/i,
+  /\/\*\s*LOCKED/i,
+  /#\s*LOCKED/i,
+  /<!--\s*LOCKED/i,
+  /LOCKED\s*[—–-]\s*verified/i,
+  /DO\s*NOT\s*RE-?AUDIT/i,
+  /ALREADY\s+IMPLEMENTED/i,
+  /VERIFIED\s*[—–-]\s*DO\s*NOT/i,
+];
+
+/** Check if a chunk's content contains a lock marker */
+export function hasLockMarker(text: string): boolean {
+  return LOCK_PATTERNS.some(p => p.test(text));
 }
 
 /**
@@ -131,6 +155,7 @@ function parseMarkdown(filePath: string, sourceName: string): Chunk[] {
 
     const content = finalLines.join("\n").trim();
     if (content.length > 0) {
+      const locked = hasLockMarker(content) || hasLockMarker(raw.section);
       chunks.push({
         source: sourceName,
         section: raw.section,
@@ -139,6 +164,7 @@ function parseMarkdown(filePath: string, sourceName: string): Chunk[] {
         lineEnd: raw.endLine,
         contentHash: hashContent(content),
         indexedAt: mtime,
+        ...(locked && { locked: true }),
       });
     }
   }

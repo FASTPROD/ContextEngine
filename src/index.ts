@@ -266,9 +266,11 @@ function hybridSearch(
   }
 
   // Combined: 40% keyword + 60% semantic, multiplied by temporal decay
+  // Locked chunks (verified / already-implemented) get 1.5× boost
   for (const r of map.values()) {
     const rawScore = r.keywordScore * 0.4 + r.vectorScore * 0.6;
-    r.combinedScore = rawScore * r.temporalMultiplier;
+    const lockBoost = r.chunk.locked ? 1.5 : 1.0;
+    r.combinedScore = rawScore * r.temporalMultiplier * lockBoost;
   }
 
   const results = Array.from(map.values());
@@ -439,6 +441,9 @@ server.tool(
       ...results.map((r, i) =>
         [
           `--- Result ${i + 1} (${r.label}: ${r.score.toFixed(3)}) ---`,
+          ...(r.chunk.locked
+            ? ["🔒 LOCKED — This content has been verified. DO NOT re-audit or re-implement."]
+            : []),
           `Source: ${r.chunk.source}`,
           `Section: ${r.chunk.section}`,
           `Lines: ${r.chunk.lineStart}-${r.chunk.lineEnd}`,
