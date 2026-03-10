@@ -214,6 +214,11 @@ export class TerminalWatcher implements vscode.Disposable {
     // Filter out comment-only lines (shell sends them as commands)
     if (/^#\s/.test(trimmed)) return;
 
+    // Detect --no-verify bypass attempts
+    if (/--no-verify/.test(trimmed)) {
+      this._alertNoVerify(trimmed);
+    }
+
     // Classify the command
     const category = this._classifyCommand(trimmed);
 
@@ -388,6 +393,41 @@ export class TerminalWatcher implements vscode.Disposable {
     }
 
     void vscode.window.showWarningMessage(msg, "Show Output").then((action) => {
+      if (action === "Show Output") {
+        this._outputChannel.show();
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // --no-verify bypass detection
+  // -----------------------------------------------------------------------
+
+  /**
+   * Detect and alert when an agent uses --no-verify to bypass pre-commit hooks.
+   * This is a policy violation — agents should fix the issue the hook identified,
+   * not route around compliance gates.
+   */
+  private _alertNoVerify(cmd: string): void {
+    const redacted = this._redactCredentials(cmd);
+    const shortCmd = redacted.length > 80 ? redacted.substring(0, 77) + "…" : redacted;
+
+    this._outputChannel.appendLine(
+      `\n🚨 POLICY VIOLATION: --no-verify used to bypass pre-commit hook!`
+    );
+    this._outputChannel.appendLine(
+      `   Command: ${shortCmd}`
+    );
+    this._outputChannel.appendLine(
+      `   ⛔ Agents must NEVER bypass hooks. Fix the issue the hook identified, then commit normally.`
+    );
+
+    void vscode.window.showErrorMessage(
+      `🚨 POLICY VIOLATION: Agent used --no-verify to bypass pre-commit hook. ` +
+      `This bypasses secret scanning and doc freshness checks. ` +
+      `Fix the issue and commit normally.`,
+      "Show Output"
+    ).then((action) => {
       if (action === "Show Output") {
         this._outputChannel.show();
       }

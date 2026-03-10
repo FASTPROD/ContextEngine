@@ -1,0 +1,60 @@
+# Doc-freshness gate — server-side enforcement that agents cannot bypass.
+# Even if an agent uses --no-verify locally, this CI check will fail the PR/push.
+name: Doc Freshness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for git log timestamps
+
+      - name: Check CE doc freshness
+        run: |
+          set -euo pipefail
+
+          MAX_AGE_HOURS=8
+          NOW=$(date +%s)
+          STALE=()
+
+          for doc in SKILLS.md SCORE.md; do
+            if [ ! -f "$doc" ]; then
+              echo "⚠️  $doc does not exist — skipping freshness check"
+              continue
+            fi
+
+            # Last commit timestamp for this file
+            LAST_COMMIT=$(git log -1 --format="%ct" -- "$doc" 2>/dev/null || echo "0")
+            if [ "$LAST_COMMIT" = "0" ]; then
+              echo "⚠️  $doc has no git history — skipping"
+              continue
+            fi
+
+            AGE_HOURS=$(( (NOW - LAST_COMMIT) / 3600 ))
+            echo "📄 $doc — last updated ${AGE_HOURS}h ago (threshold: ${MAX_AGE_HOURS}h)"
+
+            if [ "$AGE_HOURS" -gt "$MAX_AGE_HOURS" ]; then
+              STALE+=("$doc (${AGE_HOURS}h stale)")
+            fi
+          done
+
+          if [ ${#STALE[@]} -gt 0 ]; then
+            echo ""
+            echo "❌ STALE DOCS DETECTED:"
+            for s in "${STALE[@]}"; do
+              echo "   - $s"
+            done
+            echo ""
+            echo "Update these files before pushing. The pre-commit hook checks this locally too."
+            echo "Using --no-verify to bypass the local hook does NOT bypass this CI check."
+            exit 1
+          fi
+
+          echo "✅ All docs are fresh"
