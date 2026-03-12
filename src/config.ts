@@ -59,6 +59,7 @@ export interface ContextEngineConfig {
 const DEFAULT_PATTERNS = [
   // GitHub Copilot
   ".github/copilot-instructions.md",
+  ".github/instructions/copilot-instructions.md",
   ".github/SKILLS.md",
   // Claude Code
   "CLAUDE.md",
@@ -67,6 +68,8 @@ const DEFAULT_PATTERNS = [
   ".cursor/rules",
   // Codex / multi-agent
   "AGENTS.md",
+  // Context engineering
+  "CONTEXT_MAP.md",
 ];
 
 /**

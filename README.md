@@ -1,6 +1,6 @@
 # ContextEngine
 
-**An MCP server that turns your project documentation into a queryable knowledge base for AI agents.**
+**The context layer between your codebase and your AI agent — so it reads what matters, not everything.**
 
 [![npm](https://img.shields.io/npm/v/@compr/contextengine-mcp)](https://www.npmjs.com/package/@compr/contextengine-mcp)
 [![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-blue?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTgiPvCfp6A8L3RleHQ+PC9zdmc+)](https://www.npmjs.com/package/@compr/contextengine-mcp)
@@ -274,11 +274,13 @@ For full control, create a `contextengine.json`:
 | Pattern | Description |
 |---------|-------------|
 | `.github/copilot-instructions.md` | GitHub Copilot project instructions |
+| `.github/instructions/copilot-instructions.md` | VS Code instructions folder format |
 | `.github/SKILLS.md` | Team skills inventory |
 | `CLAUDE.md` | Claude Code project instructions |
 | `.cursorrules` | Cursor AI rules |
 | `.cursor/rules` | Cursor AI rules (folder format) |
 | `AGENTS.md` | Multi-agent instructions |
+| `CONTEXT_MAP.md` | File-to-concern mapping for agents |
 
 ### Config resolution order
 
