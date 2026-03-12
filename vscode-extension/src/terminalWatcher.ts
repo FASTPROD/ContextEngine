@@ -219,6 +219,11 @@ export class TerminalWatcher implements vscode.Disposable {
       this._alertNoVerify(trimmed);
     }
 
+    // Detect venv activation (corrupts shared terminal PATH)
+    if (/\bsource\s+.*\bactivate\b/.test(trimmed) || /^\.\s+.*\bactivate\b/.test(trimmed)) {
+      this._alertVenvActivation(trimmed);
+    }
+
     // Classify the command
     const category = this._classifyCommand(trimmed);
 
@@ -426,6 +431,40 @@ export class TerminalWatcher implements vscode.Disposable {
       `🚨 POLICY VIOLATION: Agent used --no-verify to bypass pre-commit hook. ` +
       `This bypasses secret scanning and doc freshness checks. ` +
       `Fix the issue and commit normally.`,
+      "Show Output"
+    ).then((action) => {
+      if (action === "Show Output") {
+        this._outputChannel.show();
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // Venv activation detection
+  // -----------------------------------------------------------------------
+
+  /**
+   * Warn when an agent runs `source .venv/bin/activate` in the shared terminal.
+   * This corrupts $PATH — curl, cat, ls, npx become unfindable for subsequent commands.
+   * Agents should use full paths (e.g. /path/to/venv/bin/python) instead.
+   */
+  private _alertVenvActivation(cmd: string): void {
+    const redacted = this._redactCredentials(cmd);
+    const shortCmd = redacted.length > 80 ? redacted.substring(0, 77) + "…" : redacted;
+
+    this._outputChannel.appendLine(
+      `\n⚠️ PATH RISK: venv activation in shared terminal!`
+    );
+    this._outputChannel.appendLine(
+      `   Command: ${shortCmd}`
+    );
+    this._outputChannel.appendLine(
+      `   💡 This corrupts $PATH — use full venv paths instead (e.g. .venv/bin/python)`
+    );
+
+    void vscode.window.showWarningMessage(
+      `⚠️ venv activation corrupts shared terminal PATH. ` +
+      `Use full paths (.venv/bin/python) or a background shell instead.`,
       "Show Output"
     ).then((action) => {
       if (action === "Show Output") {
