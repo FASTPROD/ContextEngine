@@ -122,29 +122,39 @@ check_freshness() {
   local file="$1"
   local label="$2"
 
-  # Find file in common locations
-  local found=""
+  # Find file in common locations (check ALL candidate paths)
+  local found_paths=()
   for candidate_path in "$file" ".github/$file" ".github/instructions/$file"; do
     if [[ -f "$candidate_path" ]]; then
-      found="$candidate_path"
-      break
+      found_paths+=("$candidate_path")
     fi
   done
 
-  if [[ -z "$found" ]]; then
+  if [[ ${#found_paths[@]} -eq 0 ]]; then
     warn "$label — NOT FOUND (create it!)"
     return
   fi
 
-  # Check if file is in the staged diff (being updated in this commit)
-  if git diff --cached --name-only | grep -q "$found"; then
-    return  # Being updated in this commit — good!
-  fi
+  # If ANY matching path is in the staged diff, the check passes
+  for fp in "${found_paths[@]}"; do
+    if git diff --cached --name-only | grep -q "$fp"; then
+      return  # Being updated in this commit — good!
+    fi
+  done
 
-  # Check staleness
-  local mtime=$(stat -f %m "$found" 2>/dev/null || stat -c %Y "$found" 2>/dev/null)
-  if [[ -n "$mtime" ]]; then
-    local age_hours=$(( (NOW - mtime) / 3600 ))
+  # None staged — check staleness of the MOST RECENTLY modified copy
+  local newest_mtime=0
+  local newest_path=""
+  for fp in "${found_paths[@]}"; do
+    local mtime=$(stat -f %m "$fp" 2>/dev/null || stat -c %Y "$fp" 2>/dev/null)
+    if [[ -n "$mtime" && $mtime -gt $newest_mtime ]]; then
+      newest_mtime=$mtime
+      newest_path="$fp"
+    fi
+  done
+
+  if [[ $newest_mtime -gt 0 ]]; then
+    local age_hours=$(( (NOW - newest_mtime) / 3600 ))
     if [[ $age_hours -gt $STALE_HOURS ]]; then
       warn "$label — last updated ${age_hours}h ago (not in this commit)"
     fi
