@@ -23,6 +23,8 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 9. **Test before publish** — `npm run build` must succeed. Run `npx . search "test"` and `npx . score ContextEngine` to smoke-test before `npm publish`.
 
+10. **AUTOMATIC post-commit checkpoint — DO NOT DEPRIORITIZE** — After every commit+push, run `end_session` automatically. This is not optional session cleanup — it is part of every task. Agents have a known bias: they treat CE protocol as "surrounding discipline" and skip it once the explicit request feels "done." The task is not done until `end_session` verification passes. Do not wait to be reminded.
+
 ## Architecture
 - `src/` — 14 TypeScript source files (~7K lines)
 - `server/` — Activation server (Express + SQLite + AES-256-CBC)

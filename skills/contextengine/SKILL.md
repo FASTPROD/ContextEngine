@@ -222,6 +222,16 @@ Create `contextengine.json` in your project root (or run `npx @compr/contextengi
 - License: BSL-1.1 (Business Source License)
 - npm: `@compr/contextengine-mcp`
 
+### AUTOMATIC Post-Commit Verification
+
+After every `git push`, agents MUST automatically run `end_session` to verify nothing was missed. This is part of the task definition — not optional cleanup. The correct workflow:
+
+```
+commit → push → end_session → verify → fix anything it catches → re-commit if needed
+```
+
+Do NOT treat CE compliance checks as "surrounding discipline" that can be skipped once the explicit request is complete. The task is not done until `end_session` passes.
+
 ## Lock Markers — Do Not Touch Verified Code
 
 ContextEngine detects **lock markers** in source files and documentation. When a chunk contains a lock marker, search results display a `🔒 LOCKED` prefix — this means the code has been verified and **must not be modified, deleted, or re-implemented**.

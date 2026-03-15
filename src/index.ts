@@ -1121,11 +1121,14 @@ server.tool(
 // MCP Resources: expose each source as a browsable resource
 // ---------------------------------------------------------------------------
 function registerResources(): void {
-  // Static resources for each discovered source
+  // Static resources for each discovered source — deduplicate by URI
+  const registered = new Set<string>();
   for (const source of sources) {
     if (!existsSync(source.path)) continue;
 
     const uri = `context://${encodeURIComponent(source.name)}`;
+    if (registered.has(uri)) continue;
+    registered.add(uri);
 
     server.resource(
       source.name,
@@ -1153,7 +1156,7 @@ function registerResources(): void {
   }
 
   console.error(
-    `[ContextEngine] 📚 Registered ${sources.length} MCP resources`
+    `[ContextEngine] 📚 Registered ${registered.size} MCP resources (${sources.length - registered.size} duplicates skipped)`
   );
 }
 

@@ -113,6 +113,14 @@
 - zsh script — NEVER use `path` as a variable name (zsh ties `$path` to `$PATH`)
 - Use `candidate_path`, `file_path`, etc. instead — overwriting `$path` destroys PATH for the rest of the script
 
+### AUTOMATIC Post-Commit Checkpoint — DO NOT SKIP
+- After EVERY `git push`, run `end_session` automatically — this is part of the task, not optional cleanup
+- The correct pattern: `commit → push → end_session → verify → fix anything it catches → re-commit if needed`
+- The WRONG pattern: `commit → push → stop` (skipping verification)
+- **Known agent failure mode**: agents mark todos as "completed" after pushing and mentally treat the task as done, skipping CE checks. This is the #1 compliance gap.
+- `end_session` catches: .gitignore gaps, stale docs, missing learnings, uncommitted files, compliance drift
+- Do NOT wait for the user to ask. Do NOT deprioritize because "the explicit request is done." The request includes verification.
+
 ### Polling & Event Source Dedup (v0.6.5)
 - Polling-based architectures (StatsPoller, GitMonitor) must deduplicate at the event source
 - Pattern: cheap fingerprint string comparison (`${key1}|${key2}|...`) — only fire events/log when fingerprint changes
