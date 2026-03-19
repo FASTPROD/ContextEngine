@@ -2,6 +2,24 @@
 
 All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
+## [1.23.0] — 2026-03-17
+
+### Added
+- **Content-validated scoring** — `.env.example` now checks for 3+ real env var declarations (not just file existence). `.gitignore` validates essential patterns (.env, node_modules, dist). CI/CD workflows verified for real `run:`/`uses:` actions (empty stubs get partial credit). Directly addresses "you can score A+ with phantom env vars" feedback.
+- **"What ContextEngine is NOT" section** in README — honest positioning: not a code quality tool, not required daily, not worth chasing 100%.
+
+### Changed
+- **README tagline** — "Persistent memory and mechanical enforcement for AI coding agents" (was "The context layer between your codebase and your AI agent").
+- **Why section rewritten** — leads with the 3 proven value layers: persistent memory, mechanical enforcement, structural checklist.
+- **Tools table** — 17 → 19 tools (added `delete_session`, `activation_status`).
+- **SKILLS.md** — tool count 17→19, command count 15→16.
+
+## [1.22.0–1.22.1] — 2026-03-03
+
+### Fixed
+- **A-to-Z audit fixes (12 bugs)** — `generateMcpJson()` broken args, hardcoded versions, `activeProjectNames` never set, `estimateTimeSaved()` inflation, `delete_learning` not registered as tool, `firewall.setProjectDirs()` skipped, `autoImportFromSources()` not called at startup, redundant `loadProjectDirs()` calls, dead `accepted` variable, SKILL.md tool count, license inconsistency (AGPL→BSL-1.1).
+- **10-min session save timer** — commit/push reminder with 5 tests.
+
 ## [1.20.2] — 2026-02-26
 
 ### Fixed

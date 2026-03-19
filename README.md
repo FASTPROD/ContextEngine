@@ -1,6 +1,6 @@
 # ContextEngine
 
-**The context layer between your codebase and your AI agent — so it reads what matters, not everything.**
+**Persistent memory and mechanical enforcement for AI coding agents — so they stop repeating your mistakes.**
 
 [![npm](https://img.shields.io/npm/v/@compr/contextengine-mcp)](https://www.npmjs.com/package/@compr/contextengine-mcp)
 [![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-blue?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTgiPvCfp6A8L3RleHQ+PC9zdmc+)](https://www.npmjs.com/package/@compr/contextengine-mcp)
@@ -11,14 +11,13 @@ ContextEngine indexes your `copilot-instructions.md`, `SKILLS.md`, `CLAUDE.md`, 
 
 ## Why
 
-AI coding agents are powerful — but they forget everything between sessions. They skip best practices, leave code uncommitted, create dummy files to satisfy checklists, and ignore their own documentation.
+AI coding agents are powerful — but they forget everything between sessions. They repeat mistakes you've already solved, skip commit discipline, and ignore the docs they wrote yesterday.
 
-**ContextEngine won't make your agents perfect** — nothing will, yet. But it will solve many real pain points and save you time:
+ContextEngine solves this with three layers:
 
-- 🧠 **Persistent memory** — learnings and session state survive across conversations
-- 📋 **Systematic enforcement** — agents get nudged to commit, document, and follow protocol
-- 🏗️ **Best practices by default** — scoring and auditing catch gaps before they become problems
-- ⏱️ **Time saved** — auto-discovery means zero setup, search means no re-explaining context
+1. **Persistent memory** — learnings saved once auto-surface in future sessions. "Never use bare `node` in mcp.json" gets saved once and recalled forever.
+2. **Mechanical enforcement** — pre-commit hooks and Protocol Firewall ensure agents commit, document, and follow protocol. Not by asking nicely — by blocking.
+3. **Structural checklist** — scoring motivates CI, tests, Docker, and docs. It validates content quality (not just file existence) — but treat the score as scaffolding, not a quality metric.
 
 Think of it as guardrails and muscle memory for your AI agents — **practical structure while we wait for these agents to become smarter.**
 
@@ -36,6 +35,12 @@ ContextEngine fixes the biggest gap: **zero-config, fully local, privacy-first.*
 - �️ **Protocol Firewall** — progressive enforcement that ensures agents commit, document, and save learnings
 - �🔌 **Plugin Adapters** — extend with custom data sources (Notion, Jira, RSS, etc.)
 - 🧩 **MCP native** — works with any MCP-compatible client (VS Code, Claude, Cursor, OpenClaw)
+
+### What ContextEngine is NOT
+
+- **Not a code quality tool** — it checks project structure (CI, tests, Docker, docs) and validates content depth, but won't tell you if your code is good. An A+ score means "well-organized for AI agents," not "production-ready."
+- **Not required for day-to-day agent work** — agents read `copilot-instructions.md` natively. CE adds value when you have many projects, hundreds of learnings, or need cross-session memory.
+- **Not worth chasing 100%** — invest time in your PIPELINES.md and SKILLS docs instead of score-chasing. Those prevent costly mistakes; the score keeps you honest.
 
 ## Quick Start
 
@@ -219,7 +224,7 @@ npx @compr/contextengine-mcp help
 
 CLI mode uses keyword search (BM25) which is instant — no model loading required.
 
-## Tools (17)
+## Tools (19)
 
 | Tool | Description | Tier |
 |------|-------------|------|
@@ -230,12 +235,14 @@ CLI mode uses keyword search (BM25) which is instant — no model loading requir
 | `save_session` | Save key-value entry to a named session | Free |
 | `load_session` | Load all entries from a named session | Free |
 | `list_sessions` | List all saved sessions | Free |
+| `delete_session` | Delete a saved session | Free |
 | `end_session` | Pre-flight checklist — uncommitted changes + doc freshness | Free |
 | `save_learning` | Save a permanent operational rule — auto-surfaces in search | Free |
 | `list_learnings` | List all permanent learnings, optionally by category | Free |
 | `delete_learning` | Remove a learning by ID | Free |
 | `import_learnings` | Bulk-import learnings from Markdown or JSON files | Free |
 | `activate` | Activate a PRO license on this machine | Free |
+| `activation_status` | Check current license status | Free |
 | `list_projects` | Discover and analyze all projects (tech stack, git, docker) | PRO |
 | `check_ports` | Scan all projects for port conflicts | PRO |
 | `run_audit` | Compliance agent — git, hooks, .env, Docker, PM2, versions | PRO |

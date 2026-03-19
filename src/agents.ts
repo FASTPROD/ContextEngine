@@ -1,8 +1,17 @@
 import { execSync } from "child_process";
 import { readFileSync, existsSync, readdirSync, statSync, lstatSync } from "fs";
-import { resolve, join, basename } from "path";
+import { resolve, join, basename, dirname } from "path";
 import { homedir } from "os";
+import { fileURLToPath } from "url";
 import type { ProjectDirectory } from "./config.js";
+
+// Read version from package.json at module load
+const __agents_dirname = dirname(fileURLToPath(import.meta.url));
+let AGENTS_VERSION = "1.23.0";
+try {
+  const pkg = JSON.parse(readFileSync(join(__agents_dirname, "..", "package.json"), "utf-8"));
+  AGENTS_VERSION = pkg.version || AGENTS_VERSION;
+} catch { /* fallback */ }
 
 /**
  * Multi-Agent Architecture — Phase 1: Foundation + Compliance Agent
@@ -1139,10 +1148,16 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     checks.push({ name: "SKILLS.md", category: "Documentation", points: 0, maxPoints: 3, status: "fail", detail: "Missing — agents can't discover capabilities" });
   }
 
-  // .env.example (3 pts)
+  // .env.example (3 pts) — validates actual content, not just existence
   const envExamplePath = join(p, ".env.example");
   if (existsSync(envExamplePath)) {
-    checks.push({ name: ".env.example", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: "Present — agents know which env vars to set" });
+    const envContent = readFileSync(envExamplePath, "utf-8");
+    const envVarLines = envContent.split("\n").filter(l => /^[A-Z_]+=/.test(l.trim())).length;
+    if (envVarLines >= 3) {
+      checks.push({ name: ".env.example", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: `${envVarLines} env vars documented` });
+    } else {
+      checks.push({ name: ".env.example", category: "Documentation", points: 1, maxPoints: 3, status: "partial", detail: `Only ${envVarLines} env var(s) — add all required vars` });
+    }
   } else {
     checks.push({ name: ".env.example", category: "Documentation", points: 0, maxPoints: 3, status: "fail", detail: "Missing — agents can't set up env" });
   }
@@ -1156,9 +1171,19 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     checks.push({ name: "Git repository", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "Not a git repo" });
   }
 
-  // .gitignore (3 pts)
-  if (existsSync(join(p, ".gitignore"))) {
-    checks.push({ name: ".gitignore", category: "Infrastructure", points: 3, maxPoints: 3, status: "pass", detail: "Present" });
+  // .gitignore (3 pts) — validates essential patterns, not just existence
+  const gitignoreScorePath = join(p, ".gitignore");
+  if (existsSync(gitignoreScorePath)) {
+    const giContent = readFileSync(gitignoreScorePath, "utf-8");
+    const essentialPatterns = [".env", "node_modules", "dist", "vendor", ".DS_Store", "*.log"];
+    const foundPatterns = essentialPatterns.filter(pat => giContent.includes(pat));
+    if (foundPatterns.length >= 3) {
+      checks.push({ name: ".gitignore", category: "Infrastructure", points: 3, maxPoints: 3, status: "pass", detail: `${foundPatterns.length} essential patterns` });
+    } else if (foundPatterns.length >= 1) {
+      checks.push({ name: ".gitignore", category: "Infrastructure", points: 2, maxPoints: 3, status: "partial", detail: `Only ${foundPatterns.length} essential pattern(s) — add .env, node_modules, dist` });
+    } else {
+      checks.push({ name: ".gitignore", category: "Infrastructure", points: 1, maxPoints: 3, status: "partial", detail: "Exists but missing essential patterns (.env, node_modules)" });
+    }
   } else {
     checks.push({ name: ".gitignore", category: "Infrastructure", points: 0, maxPoints: 3, status: "fail", detail: "Missing" });
   }
@@ -1224,11 +1249,29 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     checks.push({ name: "Docker", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "Not containerized" });
   }
 
-  // CI config (5 pts)
+  // CI config (5 pts) — validates workflows have real actions, not empty stubs
   const ciPaths = [".github/workflows", ".gitlab-ci.yml", "Jenkinsfile", ".circleci", ".travis.yml"];
   const foundCI = ciPaths.filter(ci => existsSync(join(p, ci)));
   if (foundCI.length > 0) {
-    checks.push({ name: "CI/CD", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: foundCI.join(", ") });
+    let ciHasActions = false;
+    const ghWorkflows = join(p, ".github", "workflows");
+    if (existsSync(ghWorkflows)) {
+      try {
+        const wfFiles = readdirSync(ghWorkflows).filter(f => f.endsWith(".yml") || f.endsWith(".yaml"));
+        for (const wf of wfFiles) {
+          const wfContent = readFileSync(join(ghWorkflows, wf), "utf-8");
+          if (wfContent.includes("run:") || wfContent.includes("uses:")) { ciHasActions = true; break; }
+        }
+      } catch { /* ignore read errors */ }
+    } else {
+      // Non-GH CI (gitlab-ci.yml, Jenkinsfile, etc.) — trust existence since formats vary
+      ciHasActions = true;
+    }
+    if (ciHasActions) {
+      checks.push({ name: "CI/CD", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: foundCI.join(", ") });
+    } else {
+      checks.push({ name: "CI/CD", category: "Infrastructure", points: 1, maxPoints: 5, status: "partial", detail: "Workflows exist but no run/uses actions found — may be stubs" });
+    }
   } else {
     checks.push({ name: "CI/CD", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "No CI pipeline" });
   }
@@ -1714,7 +1757,7 @@ export function generateScoreHTML(scores: ProjectScore[]): string {
 </head>
 <body>
 <h1>🎯 AI-Readiness Score Report</h1>
-<p class="subtitle">Generated by ContextEngine v1.14.0 · ${timestamp}</p>
+<p class="subtitle">Generated by ContextEngine v${AGENTS_VERSION} · ${timestamp}</p>
 
 <div class="summary">
   <div class="stat-card">

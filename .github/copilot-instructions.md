@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine (PUBLIC repo)
-- **Version**: v1.22.0
+- **Version**: v1.23.0
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
 - **VS Code Extension**: `css-llc.contextengine` — https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
@@ -143,9 +143,9 @@
 | `activate` | Activate Pro license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 
-## Stats (as of v1.22.0)
+## Stats (as of v1.23.0)
 - ~12,800 lines of source code (~8,200 src/ + ~1,100 server/ + ~3,500 vscode-extension/)
-- 18 MCP tools (14 free + 4 gated)
+- 19 MCP tools (15 free + 4 gated)
 - 16 CLI subcommands (10 original + 5 new in v1.16.0 + stats in v1.20.0)
 - 5 direct deps, 2 dev deps, 0 npm vulnerabilities
 - 1,023 learnings across 20 categories in store
@@ -203,6 +203,8 @@
 | npm metadata + portfolio links | v1.21.1 | Mar 2026 | `package.json`, `README.md` | ✅ Published to npm |
 | A-to-Z audit fixes (12 bugs) | v1.22.0 | Mar 2026 | `src/index.ts`, `src/cli.ts`, `src/firewall.ts`, `src/ingest.ts`, `SKILL.md`, `CLAUDE.md` | ✅ Published to npm |
 | 10-min session save timer | v1.22.0 | Mar 2026 | `src/firewall.ts` | ✅ 5 tests, commit/push reminder |
+| Content-validated scoring (anti-gaming) | v1.23.0 | Mar 2026 | `src/agents.ts` | ✅ .env.example, .gitignore, CI/CD now validate content not just existence |
+| README marketing rewrite | v1.23.0 | Mar 2026 | `README.md`, `SKILLS.md` | ✅ New tagline, Why section, What it's NOT, tool count 19 |
 
 ## Critical Rules
 1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)

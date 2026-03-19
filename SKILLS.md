@@ -4,8 +4,8 @@
 
 ## When to use
 
-- Modifying MCP server tools (17 tools in `src/index.ts`)
-- Updating CLI subcommands (15 commands in `src/cli.ts`)
+- Modifying MCP server tools (19 tools in `src/index.ts`)
+- Updating CLI subcommands (16 commands in `src/cli.ts`)
 - Changing search/ranking logic (`src/search.ts`, `src/embeddings.ts`)
 - Working on the learnings store (`src/learnings.ts`)
 - Modifying the activation server (`server/src/server.ts`, `server/src/stripe.ts`)
