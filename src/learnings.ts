@@ -103,7 +103,9 @@ function mergeDefaults(store: LearningsStore): boolean {
   if (bundled.length === 0) return false;
 
   const existingRules = new Set(
-    store.learnings.map((l) => l.rule.toLowerCase().trim())
+    store.learnings
+      .filter((l) => typeof l.rule === "string")
+      .map((l) => l.rule.toLowerCase().trim())
   );
 
   let added = 0;
@@ -133,6 +135,8 @@ function loadStore(): LearningsStore {
   if (existsSync(LEARNINGS_PATH)) {
     try {
       store = JSON.parse(readFileSync(LEARNINGS_PATH, "utf-8"));
+      // Filter out corrupted entries missing required 'rule' field
+      store.learnings = store.learnings.filter((l) => typeof l.rule === "string" && l.rule.length > 0);
     } catch {
       // Corrupted file — start fresh
       store = { version: 1, count: 0, learnings: [] };
@@ -225,7 +229,7 @@ export function saveLearning(
   const existing = store.learnings.find(
     (l) =>
       l.category === category &&
-      l.rule.toLowerCase().trim() === ruleLower
+      typeof l.rule === "string" && l.rule.toLowerCase().trim() === ruleLower
   );
 
   if (existing) {
@@ -276,7 +280,7 @@ export function searchLearnings(query: string): Learning[] {
       if (text.includes(token)) {
         score += 1;
         // Bonus for matching rule text directly (the important part)
-        if (learning.rule.toLowerCase().includes(token)) score += 2;
+        if (typeof learning.rule === "string" && learning.rule.toLowerCase().includes(token)) score += 2;
         // Bonus for matching category
         if (learning.category.toLowerCase().includes(token)) score += 1;
       }
@@ -405,7 +409,7 @@ function importFromJson(content: string, defaultProject?: string): ImportResult 
       const cat = LEARNING_CATEGORIES.includes(item.category) ? item.category : "other";
       const store = loadStore();
       const existing = store.learnings.find(
-        (l) => l.category === cat && l.rule.toLowerCase().trim() === item.rule.toLowerCase().trim()
+        (l) => l.category === cat && typeof l.rule === "string" && l.rule.toLowerCase().trim() === item.rule.toLowerCase().trim()
       );
       try {
         saveLearning(cat, item.rule, item.context || "", item.project || defaultProject);
@@ -450,7 +454,7 @@ function importFromMarkdown(
     const ctx = currentContext.join(" ").trim() || `Imported from file`;
     const store = loadStore();
     const existing = store.learnings.find(
-      (l) => l.category === cat && l.rule.toLowerCase().trim() === currentRule.toLowerCase().trim()
+      (l) => l.category === cat && typeof l.rule === "string" && l.rule.toLowerCase().trim() === currentRule.toLowerCase().trim()
     );
     try {
       saveLearning(cat, currentRule, ctx, defaultProject);
