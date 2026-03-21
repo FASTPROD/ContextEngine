@@ -244,7 +244,7 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
         <div style="color: var(--vscode-descriptionForeground); font-size: 0.8em;">MIN SAVED</div>
       </div>
       <div>
-        <div style="font-size: 2em; font-weight: 700; color: var(--vscode-textLink-foreground);">${stats.searchRecalls}</div>
+        <div style="font-size: 2em; font-weight: 700; color: var(--vscode-textLink-foreground);">${stats.searchRecalls + (stats.learningsInjected || 0)}</div>
         <div style="color: var(--vscode-descriptionForeground); font-size: 0.8em;">RECALLS</div>
       </div>
       <div>

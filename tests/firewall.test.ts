@@ -289,8 +289,8 @@ describe("ProtocolFirewall — learning auto-injection", () => {
 
     fw.wrap("search_context", "test", "hint");
     expect(fw.getState().learningsInjected).toBe(2);
-    // Also counted as search recalls
-    expect(fw.getState().searchRecalls).toBe(2);
+    // Injected learnings no longer double-counted in searchRecalls
+    expect(fw.getState().searchRecalls).toBe(0);
   });
 
   it("limits injection to INJECT_MAX (3)", () => {

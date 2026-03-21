@@ -111,7 +111,7 @@ export class StatusBarController implements vscode.Disposable {
    * Value meter — shows what CE did for you this session.
    */
   private _renderValueMeter(stats: SessionStats): void {
-    const recalls = stats.searchRecalls;
+    const recalls = stats.searchRecalls + (stats.learningsInjected || 0);
     const saved = stats.learningsSaved;
     const timeSaved = stats.timeSavedMinutes;
     const overdue = stats.sessionOverdue;
@@ -192,7 +192,7 @@ export class StatusBarController implements vscode.Disposable {
 
     md.appendMarkdown(`| Metric | Value |\n`);
     md.appendMarkdown(`|--------|-------|\n`);
-    md.appendMarkdown(`| 🔍 Learnings recalled | ${stats.searchRecalls} |\n`);
+    md.appendMarkdown(`| 🔍 Learnings recalled | ${stats.searchRecalls + (stats.learningsInjected || 0)} |\n`);
     md.appendMarkdown(`| 💾 Learnings saved | ${stats.learningsSaved} |\n`);
     md.appendMarkdown(`| 📋 Compliance nudges | ${stats.nudgesIssued} |\n`);
     md.appendMarkdown(`| ⛔ Truncations | ${stats.truncations} |\n`);

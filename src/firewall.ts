@@ -367,7 +367,6 @@ export class ProtocolFirewall {
     const block = lines.join("\n");
     this.injectionCache.set(key, block);
     this.learningsInjected += top.length;
-    this.searchRecalls += top.length; // counts toward value meter
     return block;
   }
 
@@ -379,16 +378,15 @@ export class ProtocolFirewall {
    * Estimate minutes saved by ContextEngine this session.
    * Only counts genuine value events — not overhead like nudges or auto-injection.
    * - Each explicit search recall ≈ 2 min (avoids re-discovery / googling)
+   * - Each auto-injected learning ≈ 1 min (proactive context, less than explicit)
    * - Each learning saved ≈ 1 min (future sessions benefit)
    * - Session save ≈ 3 min (avoids cold-start next session)
    * Note: nudges removed (they're enforcement overhead, not time saved).
-   * Note: learningsInjected uses its own counter, not searchRecalls.
    */
   private estimateTimeSaved(): number {
-    // Only count explicit search recalls, not auto-injected ones
-    const genuineRecalls = Math.max(0, this.searchRecalls - this.learningsInjected);
     return (
-      genuineRecalls * 2 +
+      this.searchRecalls * 2 +
+      this.learningsInjected * 1 +
       this.learningsSaved * 1 +
       (this.sessionSaved ? 3 : 0)
     );
