@@ -1,5 +1,7 @@
 # CLAUDE.md — ContextEngine
 
+## MODEL POLICY: Opus 4.6 only. Sonnet code requires Opus review before merging.
+
 ## What This Is
 MCP (Model Context Protocol) server that indexes project documentation and source code into a searchable knowledge base for AI coding agents. Published as `@compr/contextengine-mcp` on npm.
 
