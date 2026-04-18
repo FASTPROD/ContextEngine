@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r 'if (.tool_input.command // \"\") | test(\"\\\\bgit\\\\s+push\\\\b\") then \"<system-reminder>CE Rule 10 — MANDATORY CHECKPOINT: You just ran git push on ContextEngine. You MUST now call the end_session MCP tool before finishing your turn or reporting the task complete. end_session is part of every commit+push task, not optional cleanup. Do not skip because the explicit user request feels done — this is the exact bias CLAUDE.md Rule 10 names. If end_session returns FAIL items, resolve them before ending.</system-reminder>\" else empty end'"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r 'if (.tool_input.file_path // \"\") | test(\"ContextEngine/package\\\\.json$\") then \"<system-reminder>CE Rule 3 — IP PROTECTION: You just edited package.json. Verify the files array does NOT include server/, server/**, or any glob that would sweep in server/. server/ contains delta modules (agents.ts, collectors.ts, search.ts, activation server) and MUST NEVER ship to npm. If you added server/ intentionally, STOP and confirm with the user before commit.</system-reminder>\" else empty end'"
+          }
+        ]
+      }
+    ]
+  }
+}
