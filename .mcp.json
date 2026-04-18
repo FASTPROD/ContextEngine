@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "contextengine": {
+      "command": "npx",
+      "args": ["-y", "@compr/contextengine-mcp"]
+    }
+  }
+}

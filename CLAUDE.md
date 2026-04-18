@@ -25,7 +25,7 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 9. **Test before publish** — `npm run build` must succeed. Run `npx . search "test"` and `npx . score ContextEngine` to smoke-test before `npm publish`.
 
-10. **Post-push checkpoint** — after every `git push`, call `end_session`. Enforced by hook (`.claude/settings.json` → PostToolUse Bash). If the hook stops firing, the rule is still binding.
+10. **Post-push checkpoint** — after every `git push`, call `end_session` (MCP) or run `npx @compr/contextengine-mcp end-session` (CLI fallback). Enforced by hook (`.claude/settings.json` → PostToolUse Bash).
 
 ## Architecture
 - `src/` — 14 TypeScript source files (~7K lines)
