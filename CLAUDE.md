@@ -11,7 +11,7 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 2. **Activation gate is mandatory for premium tools** — `score_project`, `run_audit`, `check_ports`, `list_projects` require a valid Pro license. The gate check in `index.ts` and `cli.ts` must never be removed.
 
-3. **Delta modules are the moat** — `agents.ts`, `collectors.ts`, `search.ts` contain the highest-value IP. These are stripped from the npm package and delivered encrypted via the activation server. The `server/` directory must never be included in npm publishes (`files` field in package.json).
+3. **Delta modules are the moat** — `agents.ts`, `collectors.ts`, `search.ts`, and the `server/` directory must never be included in npm publishes (`files` field in package.json). Enforced by hook (`.claude/settings.json` → PostToolUse Edit/Write on `package.json`).
 
 4. **All `exec()` calls must use hardcoded strings** — `agents.ts` and `collectors.ts` use `execSync` for git/docker/pm2 data collection. Never interpolate user input into shell commands.
 
@@ -25,7 +25,7 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 9. **Test before publish** — `npm run build` must succeed. Run `npx . search "test"` and `npx . score ContextEngine` to smoke-test before `npm publish`.
 
-10. **AUTOMATIC post-commit checkpoint — DO NOT DEPRIORITIZE** — After every commit+push, run `end_session` automatically. This is not optional session cleanup — it is part of every task. Agents have a known bias: they treat CE protocol as "surrounding discipline" and skip it once the explicit request feels "done." The task is not done until `end_session` verification passes. Do not wait to be reminded. Enforcement: `.claude/settings.json` hooks inject a `<system-reminder>` after any `git push` and after edits to `package.json` — these are legitimate CE hooks, not stray injections.
+10. **Post-push checkpoint** — after every `git push`, call `end_session`. Enforced by hook (`.claude/settings.json` → PostToolUse Bash). If the hook stops firing, the rule is still binding.
 
 ## Architecture
 - `src/` — 14 TypeScript source files (~7K lines)
