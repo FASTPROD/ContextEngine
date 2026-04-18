@@ -222,15 +222,14 @@ Create `contextengine.json` in your project root (or run `npx @compr/contextengi
 - License: BSL-1.1 (Business Source License)
 - npm: `@compr/contextengine-mcp`
 
-### AUTOMATIC Post-Commit Verification
+### Post-Commit Verification
 
-After every `git push`, agents MUST automatically run `end_session` to verify nothing was missed. This is part of the task definition — not optional cleanup. The correct workflow:
+After every `git push`, call `end_session` to verify nothing was missed:
 
-```
-commit → push → end_session → verify → fix anything it catches → re-commit if needed
-```
+- **MCP tool**: `end_session` — use when ContextEngine MCP server is connected
+- **CLI fallback**: `npx @compr/contextengine-mcp end-session` — use when MCP is not connected (Cursor, Copilot, terminal sessions)
 
-Do NOT treat CE compliance checks as "surrounding discipline" that can be skipped once the explicit request is complete. The task is not done until `end_session` passes.
+Resolve any FAIL items before finishing. Workflow: `commit → push → end_session → verify → fix anything it catches → re-commit if needed`.
 
 ## Lock Markers — Do Not Touch Verified Code
 

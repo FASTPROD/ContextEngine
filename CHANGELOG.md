@@ -2,6 +2,12 @@
 
 All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
+## [1.23.1] — 2026-04-18
+
+### Changed
+- **`end_session` skill doc** — `skills/contextengine/SKILL.md` now documents both invocation paths: MCP tool (primary) and CLI fallback `npx @compr/contextengine-mcp end-session` (for Cursor, Copilot, and terminal sessions where MCP is not connected). Matches the Rule 13 pattern already used for `save_learning`.
+- Removed hardening prose from post-commit verification section — rule is now actionable in any environment.
+
 ## [1.23.0] — 2026-03-17
 
 ### Added
