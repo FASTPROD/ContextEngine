@@ -185,3 +185,12 @@ cat dist/file.js | sshpass -p '<PASSWORD>' ssh -o PubkeyAuthentication=no \
 
 ---
 *Last updated: 2026-02-27 — v1.21.0 auto-inject learnings, cross-window state, 76 tests, round-based 3-strike firewall*
+
+
+## Pre-publish guard (added 2026-06-02)
+
+- **`scripts/check-npm-token-expiry.mjs`** runs from `prepublishOnly` before every `npm publish`.
+- **Source of truth**: `.npm-token-meta.json` at repo root. Update its `expiresAt` field every time the token rotates.
+- **Exit codes**: 0 = ok (silent green or yellow banner if <14d), 1 = expired (publish blocked), 2 = meta file missing/invalid.
+- **Manual run**: `npm run check-token` — useful for cron / pre-flight checks outside publish.
+- **Rotation steps**: documented inline in `.npm-token-meta.json` under `rotationNotes` + in `.copilot-credentials.md` § "npm Publishing".

@@ -497,3 +497,19 @@ npx @vscode/vsce package        # → contextengine-X.Y.Z.vsix
 echo '<PAT>' | npx @vscode/vsce publish  # → marketplace
 code --install-extension contextengine-X.Y.Z.vsix  # local test
 ```
+
+
+## npm Publishing — Pre-publish Token Guard (2026-06-02)
+
+Before every `npm publish`, the `prepublishOnly` script runs `scripts/check-npm-token-expiry.mjs`. It reads `.npm-token-meta.json` and:
+- exits 0 (silent green) when >14 days remain on the token
+- exits 0 (yellow banner) when ≤14 days remain — publish continues
+- exits 1 (red banner) when token has expired — publish is blocked
+
+The token VALUE is NOT stored in `.npm-token-meta.json` — that file contains only metadata (token name, expiresAt date, rotation notes). The actual token lives in `~/.npmrc` + `.copilot-credentials.md` and is backed up via `bash ~/Projects/backup-credentials.sh`.
+
+When rotating the npm publish token, update **all three** locations:
+1. `~/.npmrc` (`_authToken=`)
+2. `.copilot-credentials.md` § "npm Publishing"
+3. `.npm-token-meta.json` `expiresAt` field
+4. Run `bash ~/Projects/backup-credentials.sh` to sync to the Google Drive vault.
