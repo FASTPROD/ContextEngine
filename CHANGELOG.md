@@ -2,7 +2,24 @@
 
 All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
-## [Unreleased] — 2026-06-10 — P0 hygiene + audit log + quick wins
+## [Unreleased] — 2026-06-10 — P0 hygiene + audit log + quick wins + policy foundation
+
+### Added (policy contract foundation — P1 #4 part 1)
+- **`src/policy.ts`** — declarative policy contract for hooks, CC PreToolUse, and future CI templates to consume. Schema v1 with four sections:
+  - `secret_patterns` — id-tagged regex rules (severity `block` | `warn`), optional `paths` glob scoping (e.g. JWT pattern only applied to `docs/sessions/**/*.md` — the Apec-leak shape)
+  - `doc_coverage` — source-subtree → doc-section mappings. Replaces the legacy 4-hour wall-clock staleness gate with diff-aware coverage.
+  - `deploy_verify_hosts` — production hosts requiring a verification probe within N seconds of `git push`. Encodes `CLAUDE.md` "DEPLOY = VERIFY LIVE".
+  - `bypass_tokens` — documented escape hatches with reason + TTL. Beats undocumented `touch foo.md` / `--no-verify` workarounds.
+- **Zod-based validator** — `validatePolicy()` returns either a typed `Policy` or a structured list of `{path, message}` field-level errors. `parsePolicy()` adds the JSON-parse layer.
+- **`loadRepoPolicy(repoRoot)`** — loads `<repo>/.contextengine/policy.json`, returns null when absent (hooks fall back to built-in defaults) or a `ValidationResult` so schema errors surface to the user instead of crashing.
+- **CLI** — `contextengine policy validate <file>` and `contextengine policy show` (loads the active repo policy and pretty-prints all four sections with counts). Validate exit 0/1 for CI use.
+- **`.contextengine/policy.json`** — CE now dogfoods its own policy. Three secret patterns (JWT-in-session-doc, anthropic, openai), four doc-coverage rules (firewall/activation block, audit/policy warn until SKILLS sections are written), one deploy-verify host (`api.compr.ch`), one bypass token (`emergency_hotfix` with 30-char reason minimum).
+- **18 policy tests** (`tests/policy.test.ts`) — minimal-valid + fully-populated acceptance, default severity, default `within_seconds`, version/missing-field rejection, malformed JSON graceful failure, disk integration with `mkdtempSync` isolation, summary formatter.
+- **LOCK [POLICY-CONTRACT]** block at top of `src/policy.ts` — version bumps and required-field additions both require migration paths.
+
+**Status**: Schema + loader + validator + CLI ship in this release. **Hook integration (actually consuming the policy from pre-commit / CC hooks / CI templates) is the next sprint** — this release lets teams author + validate + review policies in PR ahead of the wiring.
+
+
 
 ### Added (quick-wins pass — P0 #4)
 - **`contextengine export-learnings`** CLI — `--project NAME [--category CAT] [--format json|markdown] [--include-universal]`. Filters a project's learnings into a self-contained export. Without `--project`, output carries an explicit "ALL projects (warning: cross-project IP)" banner so the user can't accidentally share a consultant's full cross-client store. Closes the consultant/contractor confidentiality gap from the audit.

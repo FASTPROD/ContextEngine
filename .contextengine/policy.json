@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "secret_patterns": [
+    {
+      "id": "jwt_in_session_doc",
+      "pattern": "eyJ[A-Za-z0-9_=-]{20,}\\.[A-Za-z0-9_=-]{20,}\\.[A-Za-z0-9_=-]{20,}",
+      "paths": ["docs/sessions/**/*.md", "session-notes/**/*.md"],
+      "severity": "block",
+      "description": "JWT-shape leak in a session or plan markdown file. Threat model: the 2026-04-09 Apec incident where a JWT was pasted into a session doc, then panic-commented out at commit time. Hard-block in this exact shape."
+    },
+    {
+      "id": "anthropic_api_key",
+      "pattern": "sk-ant-[A-Za-z0-9_-]{30,}",
+      "severity": "block",
+      "description": "Anthropic API key. Belongs in .env or .copilot-credentials.md."
+    },
+    {
+      "id": "openai_api_key",
+      "pattern": "sk-[A-Za-z0-9]{40,}",
+      "severity": "block",
+      "description": "OpenAI API key (also catches many sibling sk- formats). Belongs in .env."
+    }
+  ],
+  "doc_coverage": [
+    {
+      "paths": ["src/firewall.ts"],
+      "requires_section": "SKILLS.md#protocol-firewall",
+      "severity": "block",
+      "description": "Firewall behavior must stay reflected in SKILLS.md. Replaces the wall-clock 4h staleness gate."
+    },
+    {
+      "paths": ["src/activation.ts"],
+      "requires_section": "SKILLS.md#activation-and-licensing",
+      "severity": "block",
+      "description": "Activation flow + PRO gating documented in SKILLS.md."
+    },
+    {
+      "paths": ["src/audit.ts"],
+      "requires_section": "SKILLS.md#audit-log",
+      "severity": "warn",
+      "description": "Audit log details. Warn-only initially; will move to block after the SKILLS.md section is fleshed out."
+    },
+    {
+      "paths": ["src/policy.ts"],
+      "requires_section": "SKILLS.md#policy-contract",
+      "severity": "warn",
+      "description": "Policy schema. Warn-only initially; SKILLS.md section is a follow-up."
+    }
+  ],
+  "deploy_verify_hosts": [
+    {
+      "host": "api.compr.ch",
+      "require_probe": "curl -sf https://api.compr.ch/contextengine/health",
+      "within_seconds": 60,
+      "description": "Activation server. After any deploy that touches server/, probe within 60s. Maps to CLAUDE.md DEPLOY = VERIFY LIVE rule."
+    }
+  ],
+  "bypass_tokens": [
+    {
+      "id": "emergency_hotfix",
+      "ttl_seconds": 300,
+      "requires_reason_min_length": 30,
+      "description": "Documented escape hatch for production-critical hotfixes. Reason recorded in the audit log; 5-minute TTL. Beats undocumented --no-verify."
+    }
+  ]
+}

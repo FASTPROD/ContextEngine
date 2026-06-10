@@ -589,6 +589,13 @@ import {
   filterByRange,
   toCsv,
 } from "./audit.js";
+import {
+  loadRepoPolicy,
+  parsePolicy,
+  formatPolicySummary,
+  formatValidationErrors,
+  repoPolicyPath,
+} from "./policy.js";
 
 // ---------------------------------------------------------------------------
 // Non-interactive mode: skip prompts when piped or --yes flag
@@ -1046,6 +1053,75 @@ async function cliAuditExport(args: string[]): Promise<void> {
   }
 }
 
+async function cliPolicy(args: string[]): Promise<void> {
+  const sub = args[0];
+
+  if (!sub || sub === "-h" || sub === "--help") {
+    console.log(`Usage: contextengine policy <subcommand>
+
+Subcommands:
+  validate <file>   Validate a policy.json file against the v1 schema.
+                    Exit 0 on valid, exit 1 with field-level errors otherwise.
+  show              Load and pretty-print the active repo policy
+                    (.contextengine/policy.json in the current working tree).
+
+The policy file is the declarative contract that replaces inline-bash hook
+logic. Schema fields:
+  - secret_patterns    Regex rules for the pre-commit secret scanner
+  - doc_coverage       Source-subtree → doc-section coverage requirements
+  - deploy_verify_hosts Hosts that require a verification probe post-push
+  - bypass_tokens      Documented escape hatches with reason + TTL
+
+Enforcement integration is shipping in the next sprint. This release
+ships the schema + loader + validator + CLI so policies can be authored,
+reviewed, and validated in PR ahead of the hook wiring.`);
+    return;
+  }
+
+  if (sub === "validate") {
+    const filePath = args[1];
+    if (!filePath) {
+      console.error("Usage: contextengine policy validate <file>");
+      process.exit(1);
+    }
+    let contents: string;
+    try {
+      contents = readFileSync(filePath, "utf-8");
+    } catch (e) {
+      console.error(`Cannot read ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+    const result = parsePolicy(contents);
+    if (!result.ok) {
+      console.error(formatValidationErrors(result.errors));
+      process.exit(1);
+    }
+    console.log(`✅ Policy valid (v${result.policy.version}).`);
+    console.log(formatPolicySummary(result.policy));
+    return;
+  }
+
+  if (sub === "show") {
+    const cwd = process.cwd();
+    const result = loadRepoPolicy(cwd);
+    if (result === null) {
+      console.error(`No policy found at ${repoPolicyPath(cwd)}.`);
+      console.error(`To create one, write a JSON file with at minimum:`);
+      console.error(`  { "version": 1 }`);
+      process.exit(1);
+    }
+    if (!result.ok) {
+      console.error(formatValidationErrors(result.errors));
+      process.exit(1);
+    }
+    console.log(formatPolicySummary(result.policy));
+    return;
+  }
+
+  console.error(`Unknown subcommand: ${sub}. Try 'contextengine policy --help'.`);
+  process.exit(1);
+}
+
 async function cliAuditVerify(): Promise<void> {
   const report = verifyChain();
   if (report.ok) {
@@ -1376,6 +1452,8 @@ Usage:
   contextengine audit-export [--since DATE] [--until DATE] [--format jsonl|csv]
                                        Export hash-chained audit log (SOC2/ISO27001 evidence)
   contextengine audit-verify           Verify audit log chain integrity (tamper detection)
+  contextengine policy <validate|show> [args]
+                                       Author + validate the declarative .contextengine/policy.json
   contextengine score [project] [--html] [--no-save] AI-readiness score (Pro, writes SCORE.md)
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
@@ -1489,6 +1567,11 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
   });
 } else if (command === "audit-export") {
   cliAuditExport(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "policy") {
+  cliPolicy(process.argv.slice(3)).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });
