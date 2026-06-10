@@ -2,7 +2,30 @@
 
 All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
-## [Unreleased] — 2026-06-10 — P0 hygiene + audit log + quick wins + policy foundation
+## [1.24.0] — 2026-06-10 — P0 hygiene + audit log + quick wins + policy foundation + hook migration
+
+> **Publish status: pending.** `npm publish` is currently blocked — the granular token `ContextEngine-Publish-GranularApr2026` returns a 404 PUT (npm's misleading code for "this token lacks publish permission on @compr/contextengine-mcp"). To unblock: log into npmjs.com → Settings → Access Tokens → reissue a granular token with **publish** scope on `@compr/contextengine-mcp`, update `~/.npmrc` + `.copilot-credentials.md` + `.npm-token-meta.json`, then `npm publish --access public`. All code in this release is ready; only the registry push is blocked.
+
+**The pre-pivot release.** Last meaningful release under the `@compr/contextengine-mcp` name; the next major release will ship under the `@compr/opscontext-mcp` name as part of the strategic pivot to "OpsContext for AI Agents" (the ops/compliance layer Claude Code can't grow natively). All features in this release carry forward — only the package name and headline positioning change.
+
+Highlights, in dependency order:
+
+### Added (Ed25519 license signature — P0 #3 part 2)
+- **`src/license-sig.ts`** (LOCK `[LICENSE-SIG]`) — Ed25519 verifier on the client. Embeds the production public key (fingerprint `12d0c34c917a47fbed99945d2b7fb439`); self-hosters override via `CE_LICENSE_PUBLIC_KEY` env var.
+- **`server/src/license-sig.ts`** (LOCK `[LICENSE-SIG-SERVER]`) — Ed25519 signer on the server. Loads private key from `ED25519_PRIVATE_KEY_PEM` env, `ED25519_PRIVATE_KEY_PATH` env, or `server/.secrets/ed25519-license-private.pem` (default dev path, gitignored). **Refuses to start if the key is missing** — never silently degrades to no-signature mode.
+- **`src/activation.ts` `loadLicense()`** — now calls `verifyLicenseSignature()`. Three outcomes:
+  - `ed25519` → cryptographically verified, full trust.
+  - `legacy-grandfathered` → pre-Ed25519 SHA-256 hash; allowed with a one-line warning so existing licensees don't lose access immediately. Audit event `activation.legacy_signature` recorded.
+  - reject → forged / tampered / wrong keypair / missing. License rejected, `activation.signature_reject` audit event recorded with reason.
+- **`server/src/server.ts`** — the activate handler now signs the canonical license payload with Ed25519 instead of an HMAC-shaped SHA-256 hash. Signature shape changes from 64-char hex to 88-char base64; the client distinguishes the two.
+- **Canonical payload is byte-pinned** — `canonicalPayload()` is duplicated identically in both `src/license-sig.ts` and `server/src/license-sig.ts`. A test on each side asserts a known-input → known-output reference string to catch drift. Without this pin, any drift breaks every license issued after the divergence.
+- **14 new license-sig tests** (`tests/license-sig.test.ts`) — canonical payload reference + key-order independence; public-key constant shape + fingerprint; verify ok / wrong-keypair-rejection / payload-tampering / empty-signature / garbage-signature / legacy-grandfathering / env-var override for self-hosters; plus **three adversarial "audit attack" tests** pinning the exact privilege-escalation scenarios the audit named — forged enterprise license without signature, guessed-zero signature, plan field rewritten after signing.
+- **End-to-end roundtrip verified** with the actual production keypair: production private signs a payload, production public verifies, tampering with the `plan` field correctly fails verification.
+- **`docs/deploy/ED25519_MIGRATION.md`** — full deploy runbook: pre-deploy checklist, private-key transfer, server deploy, live verification, rollback plan, flag-day plan for retiring legacy-signature acceptance.
+
+**Status**: Server code, client code, tests, and migration doc all merged to `main`. **Production server NOT yet deployed.** Awaiting explicit authorization to deploy to `api.compr.ch` per the runbook in `docs/deploy/ED25519_MIGRATION.md`. Existing customers are unaffected until the server is updated; after the server deploys, new activations will be Ed25519-signed and existing pre-Ed25519 licenses will continue to work via the grandfather path until the documented flag day.
+
+
 
 ### Changed (hook migration — P1 #4 part 3)
 - **`hooks/pre-commit`** now invokes the TypeScript policy-driven checkers from part 2 when both a CLI and a `.contextengine/policy.json` are present in the repo. Additive integration — gitleaks + policy scan + inline 17 CE patterns all run as complementary layers, first-to-block wins. For doc coverage, the policy-driven check is **authoritative** when a policy exists; the legacy 4-hour wall-clock check is suppressed (it was the workaround pattern that taught `touch SKILLS.md SCORE.md` as the rational answer).

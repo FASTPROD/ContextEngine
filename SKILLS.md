@@ -107,6 +107,36 @@
 - Always test redaction with real-world Output panel samples — `api_key=` is too narrow, need `WORD_API_KEY=` format
 - `.git/hooks/` path operations classified as [git] not [other]
 
+### Activation and licensing (`src/activation.ts` + `src/license-sig.ts` + `server/src/license-sig.ts`)
+- **Three free tiers** unlock paid tools: PREMIUM_TOOLS = `score_project`, `run_audit`, `check_ports`, `list_projects`. Everything else is free.
+- **PREMIUM_MODULES = `agents` + `search-adv`** only. Collectors deliberately ship to free users (the docstring at the top of `src/activation.ts` documents this — alignment with reality landed in the 2026-06 hygiene pass).
+- **Activation flow** (`activate(key, email)`):
+  1. POSTs `{key, email, machineId, version, platform, arch}` to `api.compr.ch/contextengine/activate`.
+  2. Server validates the license against `licenses.db`, increments activation count, returns `{license, delta}` with the delta modules encrypted (AES-256-CBC; key = SHA-256(licenseKey + machineId), IV per-activation).
+  3. Server signs the canonical license payload with **Ed25519** (LOCK `[LICENSE-SIG-SERVER]`); signature is 88-char base64.
+  4. Client decrypts + installs delta modules under `~/.contextengine/delta/`, saves the license to `~/.contextengine/license.json`.
+- **`loadLicense()` verification** has three outcomes via `verifyLicenseSignature()` in `src/license-sig.ts` (LOCK `[LICENSE-SIG]`):
+  - `ed25519` → cryptographically verified, full trust.
+  - `legacy-grandfathered` → pre-Ed25519 SHA-256 hash (64-char hex). Allowed with a one-line warning + `activation.legacy_signature` audit event so existing licensees keep access; rejected after the documented flag day.
+  - reject → forged / tampered / wrong keypair / missing. License dropped, `activation.signature_reject` audit event with reason.
+- **Public key** is embedded at top of `src/license-sig.ts` (fingerprint `12d0c34c917a47fbed99945d2b7fb439`). Self-hosters override via `CE_LICENSE_PUBLIC_KEY` env var.
+- **Private key** lives at `server/.secrets/ed25519-license-private.pem` on dev (gitignored, mode 0600). In production, mounted via `ED25519_PRIVATE_KEY_PATH` or `ED25519_PRIVATE_KEY_PEM` env var.
+- **Canonical payload is byte-pinned** — `canonicalPayload()` is duplicated identically in client + server license-sig.ts. Each side has a test asserting a known-input → known-output reference string. Drift between the two is the one thing that silently breaks every license.
+- **Deploy runbook**: `docs/deploy/ED25519_MIGRATION.md` covers private-key transfer to VPS, server deploy, live verification, rollback, and flag-day plan for retiring legacy-signature acceptance.
+- **Adversarial test coverage** in `tests/license-sig.test.ts` pins the exact privilege-escalation scenarios the 2026-06 audit named: forged enterprise license without signature → rejected; guessed-zero signature → rejected; pro license with plan field rewritten after signing → rejected.
+
+### Audit log (`src/audit.ts`)
+- **Hash-chained JSONL** at `~/.contextengine/audit.log`. Each record `{ts, event, actor, payload, prev_hash, hash}`. Genesis hash is 64 zeros.
+- **SHA-256 over canonical serialization** `{prev_hash, ts, event, actor, payload}` in that fixed key order. Any historical mutation breaks verification at the mutated index.
+- **Compliance basis**: SOC2 CC7.2 (audit logging), ISO 27001 A.12.4.1 (event logs). The audit log is the bedrock for the compliance-report PDF/A export that's coming in P1 #5.
+- **Privacy by construction**: records carry metadata only — IDs, categories, projects, lengths. Never the rule text, session value content, or license signature.
+- **Wired at boundaries** of LOCKED files (didn't touch the locked algorithms): `learnings.ts` save/delete/import, `sessions.ts` save/delete, `activation.ts` activate/deactivate, `loadLicense()` signature_reject + legacy_signature.
+- **`safeAppend()` isolates** audit failures from production hot paths — a failed append logs to stderr only, never throws upward.
+- **Env-var injectable path** — `CONTEXTENGINE_HOME` overrides `homedir()/.contextengine`. Tests run in `mkdtempSync()` and never pollute the real `~/.contextengine`.
+- **CLI** — `contextengine audit-export [--since DATE] [--until DATE] [--format jsonl|csv]` and `audit-verify` (exit code 2 on broken chain — CI/cron monitoring).
+- **MCP tool** — `audit_verify` so agents can self-check.
+- **LOCK `[AUDIT-CHAIN]`** protects: canonical serialization, SHA-256 chain, appendAudit-must-throw contract.
+
 ### Policy contract & hook checkers (`src/policy.ts` + `src/hooks.ts`)
 - **`.contextengine/policy.json`** at repo root is the declarative contract that the policy-driven pre-commit checkers consume. Four sections:
   - `secret_patterns` — id-tagged regex rules (severity `block` | `warn`), optional `paths` glob scoping (e.g. JWT pattern scoped only to `docs/sessions/**/*.md`)

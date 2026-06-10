@@ -35,6 +35,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { createHash, createDecipheriv } from "crypto";
 import { safeAppend } from "./audit.js";
+import { verifyLicenseSignature } from "./license-sig.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -120,19 +121,44 @@ export function loadLicense(): LicenseInfo | null {
   try {
     if (!existsSync(LICENSE_FILE)) return null;
     const data = JSON.parse(readFileSync(LICENSE_FILE, "utf-8"));
-    
+
     // Check expiry
     if (new Date(data.expiresAt) < new Date()) {
       console.error("[ContextEngine] ⚠ License expired — premium features disabled");
       return null;
     }
-    
+
     // Verify machine binding
     if (data.machineId !== getMachineId()) {
       console.error("[ContextEngine] ⚠ License bound to different machine");
       return null;
     }
-    
+
+    // Verify Ed25519 signature. Three outcomes:
+    //   ed25519              → cryptographically verified, full trust
+    //   legacy-grandfathered → pre-Ed25519 SHA-256 hash, allowed until flag day
+    //   reject               → tampered / wrong keypair / missing signature
+    const verify = verifyLicenseSignature(data);
+    if (!verify.ok) {
+      console.error(
+        `[ContextEngine] ⛔ License signature rejected — ${verify.reason}. Premium features disabled. ` +
+        `Reactivate at https://compr.ch/contextengine/pricing if this surprises you.`,
+      );
+      safeAppend("activation.signature_reject", {
+        plan: data.plan,
+        machine_id: data.machineId,
+        reason: verify.reason,
+      });
+      return null;
+    }
+    if (verify.mode === "legacy-grandfathered") {
+      console.error(`[ContextEngine] ⚠ ${verify.warning}`);
+      safeAppend("activation.legacy_signature", {
+        plan: data.plan,
+        machine_id: data.machineId,
+      });
+    }
+
     return data as LicenseInfo;
   } catch {
     return null;

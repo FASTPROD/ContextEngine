@@ -47,6 +47,8 @@ export type AuditEvent =
   | "activation.activate"
   | "activation.deactivate"
   | "activation.heartbeat"
+  | "activation.signature_reject"
+  | "activation.legacy_signature"
   | "firewall.escalate"
   | "hook.block"
   | "hook.bypass";

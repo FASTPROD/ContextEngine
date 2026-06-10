@@ -29,6 +29,12 @@ import {
   deactivateLicenseByStripe,
   sendLicenseEmail,
 } from "./stripe.js";
+import { loadPrivateKey, signLicensePayload } from "./license-sig.js";
+
+// Load the Ed25519 private key once at startup. Fail loud if missing —
+// never silently degrade to "no signature" mode.
+const PRIVATE_KEY = loadPrivateKey();
+console.log("✅ Ed25519 license-signing key loaded");
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -412,10 +418,21 @@ app.post("/contextengine/activate", (req, res) => {
       deltaVersion = manifest.version || deltaVersion;
     }
 
-    // 7. Generate signature (HMAC of key+machineId+version for integrity)
-    const signature = createHash("sha256")
-      .update(`${key}:${machineId}:${deltaVersion}:${license.expires_at}`)
-      .digest("hex");
+    // 7. Generate Ed25519 signature over the canonical license payload.
+    //    The client's verifyLicenseSignature() in src/license-sig.ts checks
+    //    this with the bundled public key. Pre-Ed25519 SHA-256 hashes are
+    //    grandfathered on the client until the documented flag day.
+    const signature = signLicensePayload(
+      {
+        key,
+        email: license.email,
+        plan: license.plan,
+        machineId,
+        expiresAt: license.expires_at,
+        deltaVersion,
+      },
+      PRIVATE_KEY,
+    );
 
     // 8. Return activation response
     const response = {

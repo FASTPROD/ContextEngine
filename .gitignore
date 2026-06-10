@@ -6,3 +6,6 @@ dist/
 .DS_Store
 *.vsix
 .copilot-credentials.md
+
+# Ed25519 license signing — private key NEVER committed
+server/.secrets/
