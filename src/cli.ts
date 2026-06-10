@@ -596,6 +596,16 @@ import {
   formatValidationErrors,
   repoPolicyPath,
 } from "./policy.js";
+import {
+  getStagedFiles,
+  runSecretScan,
+  runDocCoverage,
+  formatSecretViolations,
+  formatDocCoverageViolations,
+  formatSecretViolationsJson,
+  formatDocCoverageViolationsJson,
+} from "./hooks.js";
+import { safeAppend } from "./audit.js";
 
 // ---------------------------------------------------------------------------
 // Non-interactive mode: skip prompts when piped or --yes flag
@@ -1053,6 +1063,116 @@ async function cliAuditExport(args: string[]): Promise<void> {
   }
 }
 
+async function cliHook(args: string[]): Promise<void> {
+  const sub = args[0];
+  const jsonMode = process.env.CE_JSON === "1";
+
+  if (!sub || sub === "-h" || sub === "--help") {
+    console.log(`Usage: contextengine hook <kind>
+
+Run policy-driven pre-commit checks against the staged git diff.
+
+Subcommands:
+  secret-scan    Apply policy.secret_patterns to added lines. Exit 1 on
+                 any blocking violation, 0 otherwise. Warnings print but
+                 don't fail.
+  doc-coverage   For each policy.doc_coverage rule, check whether the
+                 commit touches matching source paths AND the required
+                 doc section is staged. Exit 1 on blocking violations.
+
+Env:
+  CE_JSON=1      Emit one-line JSON per check instead of human-readable
+                 output (for CI logs). Exit codes unchanged.
+
+Reads .contextengine/policy.json from the current git toplevel. If no
+policy file exists, both checks exit 0 (no-op — the legacy hook layer
+runs anyway).
+
+Every blocking violation also appends a hook.block record to the
+tamper-evident audit log at ~/.contextengine/audit.log.`);
+    return;
+  }
+
+  // Find repo root via git
+  let repoRoot: string;
+  try {
+    repoRoot = execSync("git rev-parse --show-toplevel", {
+      encoding: "utf-8",
+    }).trim();
+  } catch {
+    console.error("Error: not inside a git repository.");
+    process.exit(1);
+  }
+
+  const policyResult = loadRepoPolicy(repoRoot);
+  if (policyResult === null) {
+    // No policy file — no-op (legacy hooks still run inline patterns).
+    if (jsonMode) {
+      process.stdout.write(JSON.stringify({ check: sub, skipped: "no_policy_file" }) + "\n");
+    }
+    return;
+  }
+  if (!policyResult.ok) {
+    console.error(formatValidationErrors(policyResult.errors));
+    console.error(`\nFix .contextengine/policy.json before commits will pass.`);
+    process.exit(1);
+  }
+  const policy = policyResult.policy;
+
+  let stagedFiles;
+  try {
+    stagedFiles = getStagedFiles(repoRoot);
+  } catch (e) {
+    console.error(`Error reading staged diff: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
+  if (stagedFiles.length === 0) return; // nothing to scan
+
+  if (sub === "secret-scan") {
+    const violations = runSecretScan(policy, stagedFiles);
+    if (jsonMode) {
+      process.stdout.write(formatSecretViolationsJson(violations) + "\n");
+    } else {
+      console.log(formatSecretViolations(violations));
+    }
+    const blocking = violations.filter((v) => v.severity === "block");
+    for (const v of blocking) {
+      safeAppend("hook.block", {
+        check: "secret-scan",
+        pattern_id: v.patternId,
+        file: v.file,
+        line: v.lineNumber,
+      });
+    }
+    if (blocking.length > 0) process.exit(1);
+    return;
+  }
+
+  if (sub === "doc-coverage") {
+    const violations = runDocCoverage(policy, stagedFiles, repoRoot);
+    if (jsonMode) {
+      process.stdout.write(formatDocCoverageViolationsJson(violations) + "\n");
+    } else {
+      console.log(formatDocCoverageViolations(violations));
+    }
+    const blocking = violations.filter((v) => v.severity === "block");
+    for (const v of blocking) {
+      safeAppend("hook.block", {
+        check: "doc-coverage",
+        source_paths: v.sourcePaths,
+        matched_files: v.matchedFiles,
+        requires_section: v.requiresSection,
+        reason: v.reason,
+      });
+    }
+    if (blocking.length > 0) process.exit(1);
+    return;
+  }
+
+  console.error(`Unknown hook subcommand: ${sub}. Try 'contextengine hook --help'.`);
+  process.exit(1);
+}
+
 async function cliPolicy(args: string[]): Promise<void> {
   const sub = args[0];
 
@@ -1454,6 +1574,9 @@ Usage:
   contextengine audit-verify           Verify audit log chain integrity (tamper detection)
   contextengine policy <validate|show> [args]
                                        Author + validate the declarative .contextengine/policy.json
+  contextengine hook <secret-scan|doc-coverage>
+                                       Run policy-driven pre-commit checks against staged diff
+                                       (exit 1 on blocking violation; CE_JSON=1 for CI output)
   contextengine score [project] [--html] [--no-save] AI-readiness score (Pro, writes SCORE.md)
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
@@ -1572,6 +1695,11 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
   });
 } else if (command === "policy") {
   cliPolicy(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "hook") {
+  cliHook(process.argv.slice(3)).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });

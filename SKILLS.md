@@ -5,7 +5,7 @@
 ## When to use
 
 - Modifying MCP server tools (20 tools in `src/index.ts` — `delete_session` + `audit_verify` added in 2026-06)
-- Updating CLI subcommands (19 commands in `src/cli.ts` — `delete-session`, `audit-export`, `audit-verify` added 2026-06)
+- Updating CLI subcommands (21 commands in `src/cli.ts` — `delete-session`, `audit-export`, `audit-verify`, `export-learnings`, `policy validate|show`, `hook secret-scan|doc-coverage` added 2026-06)
 - Changing search/ranking logic (`src/search.ts`, `src/embeddings.ts`)
 - Working on the learnings store (`src/learnings.ts`)
 - Modifying the activation server (`server/src/server.ts`, `server/src/stripe.ts`)
@@ -106,6 +106,19 @@
 - 10 patterns: WORD_API_KEY=, WORD_SECRET_KEY=, WORD_SECRET=, WORD_ACCESS_TOKEN=, WORD_API_SECRET=, vendor prefixes (gsk_, sk-live_, sk-test_, ghp_, glpat-, xoxb-, xoxp-), Bearer tokens, connection strings
 - Always test redaction with real-world Output panel samples — `api_key=` is too narrow, need `WORD_API_KEY=` format
 - `.git/hooks/` path operations classified as [git] not [other]
+
+### Policy contract & hook checkers (`src/policy.ts` + `src/hooks.ts`)
+- **`.contextengine/policy.json`** at repo root is the declarative contract that the policy-driven pre-commit checkers consume. Four sections:
+  - `secret_patterns` — id-tagged regex rules (severity `block` | `warn`), optional `paths` glob scoping (e.g. JWT pattern scoped only to `docs/sessions/**/*.md`)
+  - `doc_coverage` — source-subtree → doc-section mappings. Replaces the legacy 4-hour wall-clock staleness gate with diff-aware coverage.
+  - `deploy_verify_hosts` — production hosts requiring a verification probe within N seconds of `git push`
+  - `bypass_tokens` — documented escape hatches with reason + TTL (alternative to undocumented `--no-verify`)
+- **CLI**: `contextengine policy validate <file>` (CI-friendly, exit 0/1), `contextengine policy show` (loads the active repo policy and pretty-prints it).
+- **CLI hook checkers**: `contextengine hook secret-scan` and `contextengine hook doc-coverage` apply the policy against the staged git diff. Exit 0 clean / 1 on blocking violations. `CE_JSON=1` switches to one-line JSON for CI logs.
+- **Redaction contract** (LOCKED in `src/hooks.ts`): `SecretViolation` records carry pattern_id + file + line ONLY. The matched value is NEVER serialized into output. Verified by a grep-the-serialized-output test.
+- **Audit integration**: every blocking violation appends a `hook.block` record to `~/.contextengine/audit.log`. Field shape differs per check.
+- **No policy file → no-op (exit 0)**. Repos without `.contextengine/policy.json` keep working unchanged; the legacy inline hook still runs its 17 patterns + gitleaks (if installed).
+- **Status**: TypeScript path is shippable + dogfoodable now. The bash hook in `hooks/pre-commit` still uses the inline pattern list — replacing it with `contextengine hook secret-scan` is the next sprint's migration step (separate commit + CI verification).
 
 ### Secret Scanner — two layers
 - **gitleaks** (optional, recommended): if `command -v gitleaks` resolves, the pre-commit hook runs `gitleaks protect --staged --redact` first. ~150 audited patterns covering Azure, GCP, OpenAI, Anthropic, JWT, SSH keys, npm tokens, etc. Install: `brew install gitleaks` or https://github.com/gitleaks/gitleaks

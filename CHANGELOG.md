@@ -4,6 +4,18 @@ All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
 ## [Unreleased] — 2026-06-10 — P0 hygiene + audit log + quick wins + policy foundation
 
+### Added (hook checkers — P1 #4 part 2)
+- **`src/hooks.ts`** — TypeScript implementations of the policy-driven gates. Exports `getStagedFiles()` (parses `git diff --cached --unified=0` into structured `{path, addedLines:[{lineNumber, content}]}` records), `runSecretScan(policy, files)` (applies `policy.secret_patterns` with `paths` glob scoping), `runDocCoverage(policy, files, repoRoot)` (diff-aware doc-section coverage), plus a tiny in-house `globToRegExp()` and `hashDocSection()` foundation for the next-iteration anchor-hash check.
+- **CLI `contextengine hook <secret-scan|doc-coverage>`** — reads `.contextengine/policy.json` from `git rev-parse --show-toplevel`, applies the relevant checker, exits 0 (clean) or 1 (blocking violations found). `CE_JSON=1` switches to one-line JSON for CI logs. No policy file → no-op (exit 0).
+- **`hook.block` audit events** — every blocking violation appends a record to the tamper-evident audit log. Field shape differs per check (secret-scan: pattern_id + file + line; doc-coverage: source_paths + matched_files + requires_section + reason).
+- **Redaction contract**: `SecretViolation` records carry the pattern id + file + line only. The matched secret value is NEVER serialized into the violation object, the human-readable output, or the JSON output. Verified by a test that grep-checks the serialized output for the matched substring.
+- **25 hook tests** (`tests/hooks.test.ts`) — `globToRegExp` exact matching, `**` directory recursion, `?` single-char, regex meta escaping, anchoring; `runSecretScan` global + scoped patterns + line number reporting + the redaction-contract test; `runDocCoverage` for all four reasons (no rule fires, doc missing, doc staged → pass, doc unstaged → block, multi-rule collection); `hashDocSection` with anchor matching + mutation detection + missing anchor; formatter clean-state lines + JSON parseability; live `getStagedFiles` against an ephemeral git repo built with `mkdtempSync`.
+- **LOCK [HOOK-CHECKERS]** block on `src/hooks.ts` — protects the redaction contract and the loud-failure-over-silent-skip principle.
+
+**Smoke-tested end-to-end against CE's own policy** in an ephemeral repo: stage `docs/sessions/SESSION_99.md` with a JWT-shape token → `hook secret-scan` exits 1 with `[block] jwt_in_session_doc at docs/sessions/SESSION_99.md:1` (pattern scoped only to `docs/sessions/**`); stage `src/firewall.ts` without `SKILLS.md` → `hook doc-coverage` exits 1 with "doc file does not exist"; stage `SKILLS.md` alongside → both exit 0.
+
+**Not in this commit** (next sprint): replacing the inline secret patterns in `hooks/pre-commit` with `contextengine hook secret-scan`. The TypeScript path is shippable + dogfoodable now; the bash hook stays as-is so existing installations keep working unchanged. Migration is a separate, fully-tested step.
+
 ### Added (policy contract foundation — P1 #4 part 1)
 - **`src/policy.ts`** — declarative policy contract for hooks, CC PreToolUse, and future CI templates to consume. Schema v1 with four sections:
   - `secret_patterns` — id-tagged regex rules (severity `block` | `warn`), optional `paths` glob scoping (e.g. JWT pattern only applied to `docs/sessions/**/*.md` — the Apec-leak shape)

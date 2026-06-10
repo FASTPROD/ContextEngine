@@ -160,7 +160,10 @@
 - Pricing page: https://api.compr.ch/contextengine/pricing (live, static HTML)
 - E2E activation test: ✅ All 4 Pro tools verified, heartbeat confirmed (Feb 23, 2026)
 - Protocol Firewall: round-based 3-strike enforcement + auto-inject learnings + cross-window state
-- Delta obfuscation: terser mangle+compress, 46-72% size reduction
+- Delta obfuscation: REMOVED 2026-06 — sourcemaps defeated it, BSL-1.1 carries the legal weight, build is plain `tsc`
+- Policy contract: `.contextengine/policy.json` v1 — secret_patterns, doc_coverage, deploy_verify_hosts, bypass_tokens
+- Hook checkers: `contextengine hook secret-scan` + `hook doc-coverage` apply the policy against staged diff (TS path; bash hook migration is the next sprint)
+- Audit log: `~/.contextengine/audit.log` hash-chained JSONL — every state-changing op + every hook.block recorded. `audit-verify` walks the chain.
 - Auto-import: learnings extracted from doc sources during reindex + end-session
 - Privacy section: README documents local-first architecture, server never receives code/learnings
 - Learning quality gates: min 15 chars, auto-categorize "other", import filters (v1.19.1)
@@ -177,6 +180,9 @@
 | `src/search.ts` | 2026-03-03 | BM25 keyword search with IDF, temporal decay, lock marker detection | 11 search tests |
 | `src/embeddings.ts` | 2026-03-03 | Xenova all-MiniLM-L6-v2 local CPU embeddings, disk cache, non-blocking startup | Stable since v1.0 |
 | `src/learnings.ts` | 2026-03-03 | Learning store: quality gates (min 15 chars), auto-categorize, dedup, project-scoped filtering | 6 learnings tests |
+| `src/audit.ts` | 2026-06-10 | Hash-chained JSONL audit log, SHA-256 canonical serialization, genesis hash, tamper detection (`[AUDIT-CHAIN]` LOCK) | 19 audit tests (tamper, splicing, forgery, range, CSV) |
+| `src/policy.ts` | 2026-06-10 | Declarative policy v1 schema + zod validator + disk loader (`[POLICY-CONTRACT]` LOCK) | 18 policy tests (acceptance, defaults, rejection, malformed JSON, disk) |
+| `src/hooks.ts` | 2026-06-10 | Policy-driven secret-scan + doc-coverage + redaction contract + git diff parser (`[HOOK-CHECKERS]` LOCK) | 25 hook tests (glob, scan, coverage, hashDocSection, formatters, live git) |
 | `src/sessions.ts` | 2026-03-03 | Session persistence: save/load/list/delete, auto-session inject on MCP startup | 16 session tests |
 
 ## AI Agent Rework Prevention Protocol
