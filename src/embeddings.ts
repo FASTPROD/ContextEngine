@@ -12,6 +12,11 @@ const MODEL_NAME = "Xenova/all-MiniLM-L6-v2";
 /**
  * Initialize the embedding pipeline (downloads model on first run, ~22MB).
  * Subsequent calls use cached model.
+ *
+ * @huggingface/transformers is an optional dependency (~250MB transitive,
+ * native onnxruntime binaries). If it's absent (npm install --no-optional,
+ * air-gapped network at install time, or locked-down corp proxy), we silently
+ * fall back to BM25 keyword search — `search_context` still works.
  */
 export async function initEmbeddings(): Promise<boolean> {
   try {
@@ -23,10 +28,24 @@ export async function initEmbeddings(): Promise<boolean> {
     console.error(`[ContextEngine] ✅ Embedding model loaded`);
     return true;
   } catch (err) {
-    console.error(
-      `[ContextEngine] ⚠ Embeddings unavailable (keyword search only):`,
-      (err as Error).message
-    );
+    const msg = (err as Error).message;
+    const isMissingDep =
+      msg.includes("Cannot find package") ||
+      msg.includes("ERR_MODULE_NOT_FOUND") ||
+      msg.includes("@huggingface/transformers");
+    if (isMissingDep) {
+      console.error(
+        `[ContextEngine] ⚠ Semantic search disabled — @huggingface/transformers not installed.\n` +
+        `   BM25 keyword search still works. To enable semantic search:\n` +
+        `     npm install @huggingface/transformers\n` +
+        `   (~250MB download; CPU-only embeddings via Xenova/all-MiniLM-L6-v2, no data leaves the machine).`,
+      );
+    } else {
+      console.error(
+        `[ContextEngine] ⚠ Embeddings unavailable (keyword search only):`,
+        msg,
+      );
+    }
     return false;
   }
 }

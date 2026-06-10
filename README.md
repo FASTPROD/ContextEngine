@@ -23,8 +23,8 @@ Think of it as guardrails and muscle memory for your AI agents — **practical s
 
 ContextEngine fixes the biggest gap: **zero-config, fully local, privacy-first.**
 
-- 🔍 **Hybrid Search** — keyword + semantic (vector embeddings) across all your docs
-- 🧠 **Semantic Search** — `all-MiniLM-L6-v2` runs locally on CPU (no API keys)
+- 🔍 **Hybrid Search** — keyword (BM25) ships always; semantic re-ranking is opt-in
+- 🧠 **Semantic Search (optional)** — `all-MiniLM-L6-v2` runs locally on CPU, no API keys. Install with `npm install @huggingface/transformers` (~250MB, native onnxruntime). BM25 alone is plenty for most workspaces; turn semantic on when you have many similar projects and want fuzzy matches.
 - 📁 **Auto-discover** — finds `copilot-instructions.md`, `CLAUDE.md`, `.cursorrules`, `AGENTS.md` across all projects
 - 💻 **Code Parsing** — extracts functions, classes, interfaces from TS/JS/Python source files
 - ⚙️ **Operational Intelligence** — collects git, Docker, PM2, nginx, cron, package.json data

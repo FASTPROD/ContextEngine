@@ -2,7 +2,14 @@
 
 All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
-## [Unreleased] — 2026-06-10 — P0 hygiene + tamper-evident audit log
+## [Unreleased] — 2026-06-10 — P0 hygiene + audit log + quick wins
+
+### Changed (quick-wins pass — P0 #4)
+- **`@huggingface/transformers` moved to `optionalDependencies`**. Cold install drops by ~427 MB (134 MB transformers + 201 MB onnxruntime-node + 91 MB onnxruntime-web + 1 MB onnxruntime-common). Locked-down npm proxies, air-gapped CI, and free-tier GitHub Actions runners no longer fail at install. BM25 keyword search ships always and is sufficient for most workspaces.
+  - When the dep is absent at runtime, `initEmbeddings()` emits an actionable one-shot message pointing to `npm install @huggingface/transformers` and the MCP server keeps serving keyword-only search.
+  - Verified end-to-end in a sandboxed install with `--omit=optional`: `npm install` succeeds without HF, MCP server boots cleanly, fallback message renders, BM25 search returns results.
+
+
 
 ### Added (audit log workstream — P0 #3, part 1 of 2)
 - **`src/audit.ts`** — hash-chained JSONL audit log at `~/.contextengine/audit.log`. Every state-changing operation appends one canonically-serialized record with `{ts, event, actor, payload, prev_hash, hash}`. The chain is rooted at a 64-zero genesis hash; each record's hash covers the canonical bytes of itself plus its `prev_hash`, so any historical mutation breaks chain verification at the mutated index.
