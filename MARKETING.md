@@ -182,17 +182,18 @@ GitHub: https://github.com/FASTPROD/ContextEngine
 
 ### Post 5: r/MCP
 
-**Title**: ContextEngine — MCP server with Protocol Firewall, 19 tools, hybrid search, persistent memory
+**Title**: ContextEngine — MCP server with Protocol Firewall, 20 tools, hybrid search, hash-chained audit log
 
 **Body**:
 
 Sharing my MCP server that's focused on agent compliance and knowledge persistence.
 
-**19 tools exposed:**
-- `search_context` — hybrid BM25 + semantic search with mode selector
+**20 tools exposed:**
+- `search_context` — hybrid BM25 + optional semantic search with mode selector
 - `list_sources` / `read_source` / `reindex` — knowledge-base inspection
 - `save_session` / `load_session` / `list_sessions` / `delete_session` / `end_session` — session continuity + pre-flight checklist
 - `save_learning` / `list_learnings` / `delete_learning` / `import_learnings` — persistent operational rules
+- `audit_verify` — tamper-evident hash-chained audit log (SOC2 CC7.2, ISO 27001 A.12.4.1)
 - `list_projects` — cross-project tech-stack discovery (PRO)
 - `check_ports` — port conflict detection across projects (PRO)
 - `run_audit` — compliance audit (security, perf, DX, architecture) (PRO)

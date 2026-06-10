@@ -1,3 +1,19 @@
+// 🔒 LOCKED [AUDIT-CHAIN] — 2026-06-10
+// ⛔ NEVER change the canonical serialization in computeHash() — key order,
+//    field names, JSON.stringify behavior, or genesis hash value. Any change
+//    breaks verification of every audit log written by an older client.
+// ⛔ NEVER swap SHA-256 for a different hash without a migration path.
+// ⛔ NEVER catch errors inside appendAudit() — silent failures defeat the
+//    entire compliance story. Use safeAppend() at call sites if you need
+//    failure isolation; appendAudit() must surface problems loudly.
+// WHY: This is the SOC2 CC7.2 / ISO 27001 A.12.4.1 compliance bedrock. The
+//    audit log is the foundation that licence-signature verification,
+//    compliance reporting, and enforcement telemetry all build on. Any
+//    silent break here destroys evidence value across years of records.
+// FIX: If you need to evolve the record format, version the chain
+//    (add a "v":2 field) and keep verifyChain() backward-compatible by
+//    dispatching on the v field. Don't mutate the v=1 contract.
+//
 // Tamper-evident audit log — hash-chained JSONL at ~/.contextengine/audit.log.
 //
 // Compliance basis: SOC2 CC7.2 (audit logging), ISO 27001 A.12.4.1 (event logs).

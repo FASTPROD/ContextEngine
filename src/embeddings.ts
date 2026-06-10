@@ -1,5 +1,19 @@
 // LOCKED — verified March 3 2026 — Xenova all-MiniLM-L6-v2 local CPU embeddings + disk cache
 // DO NOT RE-AUDIT — stable since v1.0, no API keys, no data leaves machine
+//
+// 🔒 LOCKED [OPTIONAL-HF] — 2026-06-10
+// ⛔ NEVER convert `await import("@huggingface/transformers")` to a static
+//    import. HF is in optionalDependencies — a static import breaks installs
+//    that ran with --omit=optional (locked-down npm proxies, air-gapped CI).
+// ⛔ NEVER remove the try/catch around the dynamic import or the
+//    isMissingDep detection branch — both keep the MCP server alive on
+//    fresh installs where HF didn't download.
+// WHY: The package was failing to install on enterprise environments because
+//    HF transitively pulls 427 MB of onnxruntime native binaries. Making
+//    HF optional dropped cold install from 547 MB to 120 MB and unblocked
+//    a whole class of buyers. A static import would silently re-break this.
+// FIX: If you need to take a dependency on a transformer feature, add it
+//    behind the same dynamic-import + isEmbeddingsReady() check pattern.
 
 import type { Chunk } from "./ingest.js";
 
