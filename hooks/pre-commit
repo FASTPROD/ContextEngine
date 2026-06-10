@@ -101,7 +101,7 @@ SECRET_PATTERNS=(
   'password.*=.*[A-Za-z0-9!@#$%^&*]{8,}|Possible hardcoded password in assignment'
 )
 
-SKIP_FILES='(\.copilot-credentials\.md|\.env$|\.env\.local|\.env\.example|pre-commit-secrets|pre-commit$)'
+SKIP_FILES='(\.copilot-credentials\.md|\.env$|\.env\.local|\.env\.example|pre-commit$)'
 STAGED_DIFF=$(git diff --cached --diff-filter=ACMR -U0 2>/dev/null)
 STAGED_FILE_LIST=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)
 

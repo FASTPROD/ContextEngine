@@ -203,7 +203,7 @@
 | Lock marker detection in search | v1.21.2 | Mar 2026 | `src/ingest.ts`, `src/code-chunker.ts`, `src/search.ts`, `src/index.ts` | ✅ 8 patterns, 🔒 prefix |
 | Stripe payment integration | v1.19.0 | Feb 2026 | `server/src/stripe.ts`, `server/src/server.ts` | ✅ Webhook + checkout + email |
 | VS Code extension (value meter + terminal watcher) | v0.6.7 | Feb 2026 | `vscode-extension/src/` (10 files) | ✅ Published on marketplace |
-| Pre-commit secret scanner | v1.21.1 | Feb 2026 | `hooks/pre-commit`, `hooks/pre-commit-secrets` | ✅ 15+ patterns, deployed to 20 repos |
+| Pre-commit secret scanner | v1.21.1 | Feb 2026 | `hooks/pre-commit` (consolidated 2026-06; pre-commit-secrets removed) | ✅ 17 inline patterns + optional gitleaks (~150) + policy-driven scan when `.contextengine/policy.json` present |
 | Cross-window firewall state | v1.21.0 | Feb 2026 | `src/firewall.ts` | ✅ LOCKED — 3 cross-window tests |
 | Auto-import learnings from doc sources | v1.19.1 | Feb 2026 | `src/learnings.ts` | ✅ LOCKED — runs during reindex + end-session |
 | npm metadata + portfolio links | v1.21.1 | Mar 2026 | `package.json`, `README.md` | ✅ Published to npm |
@@ -226,7 +226,7 @@
 11. **Post-push checkpoint** — after every `git push`, call `end_session` (MCP tool) or run `npx @compr/contextengine-mcp end-session` (CLI fallback if MCP not connected). Resolve any FAIL items before finishing. The full protocol before push: (a) update `copilot-instructions.md`, (b) update `SKILLS.md`, (c) `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit, (f) push, (g) `end_session`.
 12. **Every project workspace needs `.vscode/mcp.json`** — MCP servers are NOT configured globally in VS Code user settings (deprecated). Each workspace must have its own `.vscode/mcp.json` with the ContextEngine stdio config. Without it, agents in that project have zero access to the knowledge base. **MUST use absolute node path** (not bare `node`) to avoid shell-env resolution failures. See admin.CROWLR, FASTPROD, PLANK.io, CROWLR.io, FC_project, COMPR-app, EXO, GOOGLE Analytics, shop.invoc.io for examples.
 13. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
-14. **NEVER write secrets in code or docs** — passwords, API keys, tokens, and credentials must ONLY go in `.copilot-credentials.md` or `.env` (both gitignored). Documentation must use `*(see .copilot-credentials.md)*` placeholders. The pre-commit hook scans for 15+ secret patterns and BLOCKS commits containing them. All 20 git repos have the hook installed. To update patterns, edit `hooks/pre-commit-secrets` and redeploy.
+14. **NEVER write secrets in code or docs** — passwords, API keys, tokens, and credentials must ONLY go in `.copilot-credentials.md` or `.env` (both gitignored). Documentation must use `*(see .copilot-credentials.md)*` placeholders. The pre-commit hook scans for 17 inline patterns + optional gitleaks (~150 patterns) + policy-driven patterns from `.contextengine/policy.json` and BLOCKS commits containing them. To update inline patterns, edit `hooks/pre-commit` and redeploy. To add project-specific patterns without touching the shared hook, author them in `.contextengine/policy.json`.
 15. **Secret prevention for agents** — when an agent needs to reference a password or key in a command, use environment variables (`SSHPASS='<password>' sshpass -e`) or read from `.copilot-credentials.md`. NEVER hardcode secrets in shell commands that get logged, in markdown docs, or in `copilot-instructions.md`. Use `<VPS_PASSWORD>`, `<STRIPE_KEY>`, `<DB_PASSWORD>` as placeholders. The terminal watcher redacts known patterns but prevention > redaction.
 16. **`--no-verify` is FORBIDDEN** — agents must NEVER use `git commit --no-verify` or `git push --no-verify` to bypass pre-commit hooks. If a hook blocks a commit, **fix the issue the hook identified** (update stale docs, remove secrets, etc.), then commit normally. The terminal watcher detects `--no-verify` usage and fires a red alert. GitHub Actions CI also checks doc freshness server-side — `--no-verify` bypasses local hooks but NOT CI. Treating compliance gates as obstacles to route around is a policy violation.
 17. **NEVER skip CE checks because "the task is done"** — Completing the user's explicit request is NOT the end of the task. Agents have a documented bias: they mark todos as "completed" after pushing code and mentally treat the work as finished, skipping `end_session`, `score_project`, and doc updates. This is the #1 compliance failure mode. The pattern "commit → push → stop" is ALWAYS wrong. The correct pattern is "commit → push → `end_session` → verify → fix anything it catches → re-commit if needed." Treat `end_session` as automatic as `git push` itself — not something the user has to ask for.
@@ -484,17 +484,15 @@
 - **History**: Pre-v1.18.1 the hook was synchronous (3-10s blocking), causing VS Code terminal tool "cancelled" reports. Fixed by backgrounding.
 - **STRIPE-BACKEND project**: Stripe products/prices/webhook management lives in a separate `~/Projects/STRIPE backend/` project, not in this repo
 
-### Pre-Commit Hook (v0.4.0, upgraded v1.20.0, secret scanner v1.21.1)
-- **File**: `hooks/pre-commit` — CE doc freshness + secret scanning. Combined hook for ContextEngine.
-- **File**: `hooks/pre-commit-secrets` — standalone secret scanner for non-CE repos
-- **Secret patterns**: 15+ regex patterns — Stripe keys, Google API keys, Groq, GitHub PATs, GitLab, Slack, AWS, SendGrid, sshpass, DB passwords
-- **Behavior**: **BLOCKS** (exit 1) when staged files contain secrets. Also blocks if `.copilot-credentials.md` is staged.
+### Pre-Commit Hook (v0.4.0, upgraded v1.20.0, secret scanner v1.21.1, consolidated 2026-06)
+- **File**: `hooks/pre-commit` — single canonical hook. CE doc freshness + secret scanning + (when present) policy-driven gates from `.contextengine/policy.json`. The legacy `hooks/pre-commit-secrets` near-duplicate was removed 2026-06; everything it did is now in the canonical hook.
+- **Three-layer secret scan**: gitleaks (optional, ~150 patterns) → CE policy-driven scan (when CLI + `.contextengine/policy.json` present, applies `secret_patterns` with `paths` glob scoping) → CE inline 17 patterns (always). First layer to block wins.
+- **Doc-coverage**: when `.contextengine/policy.json` is present, `contextengine hook doc-coverage` is **authoritative** (diff-aware). When no policy, the legacy 4h wall-clock check runs unchanged.
+- **Behavior**: **BLOCKS** (exit 1) on any blocking violation. Also blocks if `.copilot-credentials.md` is staged.
 - **Skip list**: `.copilot-credentials.md`, `.env`, `.env.local`, `.env.example`, `pre-commit` itself
-- **Deployed**: All 20 git repos have the secret scanner installed in `.git/hooks/pre-commit`
-- **Redeploy**: Update `hooks/pre-commit-secrets`, then run deploy script to copy to all repos
+- **Deployed**: All 20 git repos have the secret scanner installed in `.git/hooks/pre-commit`. Re-deploy by `cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit` (per repo).
 - **git filter-repo**: Feb 28, 2026 — purged `#Crowlr@2023` (23 instances) and `#GandiVps@2026#` from entire ContextEngine history (PUBLIC repo). All commit hashes rewritten. Force-pushed to origin.
-- **Validated**: v1.21.1 test commit blocked successfully (sk_live_ pattern matched)
-- **Override**: `git commit --no-verify` (requires explicit human decision)
+- **Validated**: v1.21.1 test commit blocked successfully (sk_live_ pattern matched). 2026-06 migration smoke-tested in three ephemeral repos (no policy → legacy fires; policy + JWT in session → policy fires; clean → passes).
 
 ### Publishing Workflow
 ```bash
