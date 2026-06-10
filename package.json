@@ -1,12 +1,14 @@
 {
-  "name": "@compr/contextengine-mcp",
-  "version": "1.24.0",
-  "description": "MCP server that turns your project documentation into a queryable knowledge base for AI coding agents",
+  "name": "@compr/opscontext-mcp",
+  "version": "2.0.0",
+  "description": "OpsContext for AI Agents — read-only fleet visibility (PM2/nginx/Docker/git/cron) + tamper-evident audit log + policy-as-code hooks. The ops + compliance layer Claude Code can't grow natively.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "contextengine-mcp": "dist/cli.js",
-    "contextengine": "dist/cli.js"
+    "opscontext": "dist/cli.js",
+    "opscontext-mcp": "dist/cli.js",
+    "contextengine": "dist/cli.js",
+    "contextengine-mcp": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -21,15 +23,24 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
-    "copilot",
+    "claude-code",
     "claude",
     "cursor",
-    "ai",
-    "knowledge-base",
-    "documentation",
+    "copilot",
+    "ai-agents",
+    "ops",
+    "observability",
+    "audit-log",
+    "compliance",
+    "soc2",
+    "iso27001",
+    "policy-as-code",
+    "git-hooks",
+    "pre-commit",
+    "secret-scanning",
+    "fleet",
     "context",
-    "rag",
-    "search",
+    "knowledge-base",
     "developer-tools"
   ],
   "author": {

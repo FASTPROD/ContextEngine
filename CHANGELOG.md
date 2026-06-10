@@ -1,6 +1,35 @@
 # Changelog
 
-All notable changes to ContextEngine (MCP server + CLI) are documented here.
+All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
+
+## [2.0.0] — 2026-06-10 — Strategic pivot to "OpsContext for AI Agents"
+
+**This is a positioning + package-name change. All features carry forward unchanged. No code behavior changes.**
+
+> **Publish status: pending.** Same npm-token blocker as 1.24.0 — token needs to be reissued with publish scope. Once unblocked, publish under the new name as the 2.0.0 release. The old `@compr/contextengine-mcp@1.x.y` line should be `npm deprecate`'d with a one-line pointer at the new package.
+
+### Renamed
+- **npm package**: `@compr/contextengine-mcp` → `@compr/opscontext-mcp`. Description updated to reflect ops + compliance positioning. Keywords reordered to lead with `claude-code`, `audit-log`, `compliance`, `soc2`, `iso27001`, `policy-as-code` instead of the generic context/RAG vocabulary.
+- **bin entries**: primary binary is `opscontext`; aliases `opscontext-mcp`, `contextengine`, `contextengine-mcp` ship too so existing `.vscode/mcp.json` configs pointing at the old binary names keep working.
+
+### Repositioned (no code change)
+- **README headline** rewritten: "OpsContext for AI Agents — the ops + compliance layer Claude Code can't grow natively." The "Why" section now leads with the honest gap (Claude Code reads your code; it cannot see what's running on your servers). All `npx @compr/contextengine-mcp` install commands updated to `@compr/opscontext-mcp`. A migration note at the top of README links the old name.
+- **MARKETING.md** header rewritten with the new positioning + the "ContextEngine 1.x → OpsContext 2.0" migration story called out as part of the launch narrative. Install commands swapped. **Reddit post copy not yet rewritten** — those posts framed v1 around "persistent memory + Protocol Firewall"; rewriting the copy for the v2 launch is content-marketing work that benefits from a human voice pass.
+
+### Deliberately NOT changed (scope discipline — preserves user data)
+- **Storage paths** stay at `~/.contextengine/` — existing users' learnings, sessions, audit log, embedding cache, license remain accessible without migration.
+- **`.contextengine/policy.json` repo path** stays — repos that already authored a policy.json under the contextengine name keep working.
+- **`CONTEXTENGINE_HOME` env var** stays — migration to a new env var name is a separate follow-up commit with proper deprecation period.
+- **`contextengine.json` config name** stays — same reasoning.
+- **TypeScript code identifiers, class names, module names** stay — the rename is external identity only. Internal naming refactor is a separate commit.
+
+### Migration story for users (what to put in npm deprecation notice + README)
+- `npm install @compr/opscontext-mcp` is the new install. The 2.0.0 line is functionally identical to 1.24.0 — only the package name and headline change.
+- For automated installs (CI configs, MCP client configs), update `@compr/contextengine-mcp` → `@compr/opscontext-mcp` everywhere.
+- The bin aliases mean the old `contextengine` / `contextengine-mcp` commands still work if you already have them in scripts.
+- Storage paths and policy locations are unchanged, so no data migration is needed.
+
+
 
 ## [1.24.0] — 2026-06-10 — P0 hygiene + audit log + quick wins + policy foundation + hook migration
 

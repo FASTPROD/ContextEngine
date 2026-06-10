@@ -1,6 +1,10 @@
-# ContextEngine — Marketing Materials
+# OpsContext for AI Agents — Marketing Materials
 
-> Created: 2026-02-27 | For Reddit launch + ClawHub + HeyGen video
+> Created: 2026-02-27 (as ContextEngine) | Repositioned 2026-06-10 as OpsContext for AI Agents
+>
+> Positioning: **"Claude Code sees the code. OpsContext sees the infra that runs it."** Read-only fleet visibility (PM2/nginx/Docker/git/cron) + tamper-evident audit log (SOC2 CC7.2 / ISO 27001 A.12.4.1) + policy-as-code git hooks. The ops + compliance layer Claude Code can't grow natively.
+>
+> Old npm package `@compr/contextengine-mcp` is the 1.x line; new identity `@compr/opscontext-mcp` ships at 2.0.0. The historical "ContextEngine" name is retained in this doc where it captures the v1 framing — not because it's authoritative, but because the migration story is itself part of the positioning.
 
 ---
 
@@ -28,7 +32,7 @@
 
 ### Screenshot 5: Score Report (HTML)
 **Where**: Browser
-**How**: Run `npx @compr/contextengine-mcp score --html` from a project, open the generated `score-report.html`. Screenshot the visual report showing 95% A+.
+**How**: Run `npx @compr/opscontext-mcp score --html` from a project, open the generated `score-report.html`. Screenshot the visual report showing 95% A+.
 **File**: `marketing/screenshots/05-score-report.png`
 
 ### Screenshot 6: Terminal Watcher Notification
@@ -38,7 +42,7 @@
 
 ### Screenshot 7: CLI Help / Tool List
 **Where**: Terminal (iTerm or VS Code terminal)
-**How**: Run `npx @compr/contextengine-mcp help` — screenshot showing all 16 subcommands.
+**How**: Run `npx @compr/opscontext-mcp help` — screenshot showing all 16 subcommands.
 **File**: `marketing/screenshots/07-cli-help.png`
 
 ### How to take screenshots on macOS:
@@ -81,8 +85,8 @@ Works with VS Code Copilot, Claude Desktop, Cursor, Windsurf, and OpenClaw.
 
 ```bash
 # Try it in 30 seconds:
-npx @compr/contextengine-mcp init
-npx @compr/contextengine-mcp search "your query"
+npx @compr/opscontext-mcp init
+npx @compr/opscontext-mcp search "your query"
 ```
 
 - npm: https://www.npmjs.com/package/@compr/contextengine-mcp
@@ -229,7 +233,7 @@ GitHub: https://github.com/FASTPROD/ContextEngine
 ### Scene 3 (30-45s) — CTA
 **Avatar says**: "Set up in thirty seconds with npx. Free VS Code extension included. ContextEngine — guardrails for your AI agents. Link in the description."
 
-**Screen**: Show `npx @compr/contextengine-mcp init` → npm page + VS Code marketplace + GitHub repo
+**Screen**: Show `npx @compr/opscontext-mcp init` → npm page + VS Code marketplace + GitHub repo
 
 ---
 
@@ -243,4 +247,4 @@ but requires a Python wrapper or mcpo bridge since ContextEngine is a Node.js MC
 
 ## 🐳 Docker — CANCELLED
 
-**Decision**: No Docker for ContextEngine. Users install via `npx @compr/contextengine-mcp`. The activation server runs PM2 on VPS. The 5 score points are not worth the maintenance overhead. Score stays at 95% A+.
+**Decision**: No Docker for ContextEngine. Users install via `npx @compr/opscontext-mcp`. The activation server runs PM2 on VPS. The 5 score points are not worth the maintenance overhead. Score stays at 95% A+.

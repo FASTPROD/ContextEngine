@@ -1,27 +1,26 @@
-# ContextEngine
+# OpsContext for AI Agents
 
-**Persistent memory and mechanical enforcement for AI coding agents — so they stop repeating your mistakes.**
+**The ops + compliance layer Claude Code can't grow natively.** Read-only visibility into PM2 / nginx / Docker / git / cron — plus a tamper-evident audit log and policy-as-code git hooks.
 
-[![npm](https://img.shields.io/npm/v/@compr/contextengine-mcp)](https://www.npmjs.com/package/@compr/contextengine-mcp)
-[![OpenClaw Skill](https://img.shields.io/badge/OpenClaw-Skill-blue?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHRleHQgeT0iMTgiIGZvbnQtc2l6ZT0iMTgiPvCfp6A8L3RleHQ+PC9zdmc+)](https://www.npmjs.com/package/@compr/contextengine-mcp)
-[![License: BSL-1.1](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](https://www.npmjs.com/package/@compr/contextengine-mcp)
+> Previously published as `@compr/contextengine-mcp`. The 2.0 rename reflects what the project actually does: Claude Code sees the **code**, OpsContext sees the **infra that runs it**.
+
+[![npm](https://img.shields.io/npm/v/@compr/opscontext-mcp)](https://www.npmjs.com/package/@compr/opscontext-mcp)
+[![License: BSL-1.1](https://img.shields.io/badge/License-BSL--1.1-blue.svg)](https://www.npmjs.com/package/@compr/opscontext-mcp)
 [![VS Code](https://img.shields.io/badge/VS%20Code-Extension-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine)
 
-ContextEngine indexes your `copilot-instructions.md`, `SKILLS.md`, `CLAUDE.md`, runbooks, and source code — then exposes it via the [Model Context Protocol](https://modelcontextprotocol.io) so AI coding assistants (GitHub Copilot, Claude, Cursor, Windsurf, OpenClaw) can search your accumulated knowledge in real time.
+OpsContext is an [MCP](https://modelcontextprotocol.io) server. It runs locally, snapshots your live infra (PM2 processes, nginx config, Docker containers, git status, cron jobs, redacted env), and exposes it via tools your AI coding agents (Claude Code, Cursor, Copilot, Windsurf, OpenClaw) can call in real time. Everything stays on your machine — no telemetry, no code uploads.
 
 ## Why
 
-AI coding agents are powerful — but they forget everything between sessions. They repeat mistakes you've already solved, skip commit discipline, and ignore the docs they wrote yesterday.
+Claude Code already reads your `CLAUDE.md`, `copilot-instructions.md`, and source files. It has hooks, skills, and native memory. It does not — and structurally cannot — see what's running on your servers. Live process state, nginx routes, port conflicts across fleets, git working-tree drift across 30+ repos — that's the operational context AI agents lack.
 
-ContextEngine solves this with three layers:
+OpsContext fills that gap, plus two compliance layers regulated industries demand from any agent stack:
 
-1. **Persistent memory** — learnings saved once auto-surface in future sessions. "Never use bare `node` in mcp.json" gets saved once and recalled forever.
-2. **Mechanical enforcement** — pre-commit hooks and Protocol Firewall ensure agents commit, document, and follow protocol. Not by asking nicely — by blocking.
-3. **Structural checklist** — scoring motivates CI, tests, Docker, and docs. It validates content quality (not just file existence) — but treat the score as scaffolding, not a quality metric.
+1. **Operational visibility (the moat)** — collectors for PM2 / nginx / Docker / git / cron / .env (redacted) / composer / systemd. Cross-project + check_ports + fleet HTML scoring. Claude Code can't see this; we feed it cleanly.
+2. **Tamper-evident audit log (compliance)** — hash-chained JSONL at `~/.contextengine/audit.log`. Every state change recorded with `prev_hash`/`hash`. SOC2 CC7.2 and ISO 27001 A.12.4.1 evidence out of the box.
+3. **Policy-as-code hooks (enforcement)** — declarative `.contextengine/policy.json` for secret patterns (with `paths` scoping), diff-aware doc coverage (replaces the workaround-y 4-hour staleness gate), deploy-verify hosts, and signed bypass tokens. Runs as a pre-commit hook layer alongside gitleaks.
 
-Think of it as guardrails and muscle memory for your AI agents — **practical structure while we wait for these agents to become smarter.**
-
-ContextEngine fixes the biggest gap: **zero-config, fully local, privacy-first.**
+Plus the persistent-memory + search features carried forward from the contextengine era:
 
 - 🔍 **Hybrid Search** — keyword (BM25) ships always; semantic re-ranking is opt-in
 - 🧠 **Semantic Search (optional)** — `all-MiniLM-L6-v2` runs locally on CPU, no API keys. Install with `npm install @huggingface/transformers` (~250MB, native onnxruntime). BM25 alone is plenty for most workspaces; turn semantic on when you have many similar projects and want fuzzy matches.
@@ -36,18 +35,19 @@ ContextEngine fixes the biggest gap: **zero-config, fully local, privacy-first.*
 - �🔌 **Plugin Adapters** — extend with custom data sources (Notion, Jira, RSS, etc.)
 - 🧩 **MCP native** — works with any MCP-compatible client (VS Code, Claude, Cursor, OpenClaw)
 
-### What ContextEngine is NOT
+### What OpsContext is NOT
 
+- **Not a replacement for Claude Code, Cursor, or your IDE assistant.** It runs *alongside* them as their ops/compliance backend. Code context = their job. Infra context + audit + policy = ours.
 - **Not a code quality tool** — it checks project structure (CI, tests, Docker, docs) and validates content depth, but won't tell you if your code is good. An A+ score means "well-organized for AI agents," not "production-ready."
-- **Not required for day-to-day agent work** — agents read `copilot-instructions.md` natively. CE adds value when you have many projects, hundreds of learnings, or need cross-session memory.
-- **Not worth chasing 100%** — invest time in your PIPELINES.md and SKILLS docs instead of score-chasing. Those prevent costly mistakes; the score keeps you honest.
+- **Not required for tiny / solo projects** — agents read `copilot-instructions.md` natively, and the audit log + policy gates earn their keep when there's more than one developer to coordinate or a compliance officer to answer to.
+- **Not worth chasing 100% score** — invest in your PIPELINES.md and SKILLS docs instead of score-chasing. Those prevent costly mistakes; the score keeps you honest.
 
 ## Quick Start
 
 ### 1. Scaffold config (optional)
 
 ```bash
-npx @compr/contextengine-mcp init
+npx @compr/opscontext-mcp init
 ```
 
 Detects your project type, creates `contextengine.json` + `.github/copilot-instructions.md` template.
@@ -64,7 +64,7 @@ Create `.vscode/mcp.json` in your project root:
     "contextengine": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@compr/contextengine-mcp"]
+      "args": ["-y", "@compr/opscontext-mcp"]
     }
   }
 }
@@ -81,7 +81,7 @@ This activates ContextEngine when the workspace is open. Add this file to each p
   "mcpServers": {
     "ContextEngine": {
       "command": "npx",
-      "args": ["-y", "@compr/contextengine-mcp"]
+      "args": ["-y", "@compr/opscontext-mcp"]
     }
   }
 }
@@ -94,7 +94,7 @@ This activates ContextEngine when the workspace is open. Add this file to each p
   "mcpServers": {
     "ContextEngine": {
       "command": "npx",
-      "args": ["-y", "@compr/contextengine-mcp"]
+      "args": ["-y", "@compr/opscontext-mcp"]
     }
   }
 }
@@ -104,7 +104,7 @@ This activates ContextEngine when the workspace is open. Add this file to each p
 
 ```bash
 # Option 1: Copy the skill to your OpenClaw workspace
-cp -r node_modules/@compr/contextengine-mcp/skills/contextengine ~/.openclaw/workspace/skills/
+cp -r node_modules/@compr/opscontext-mcp/skills/contextengine ~/.openclaw/workspace/skills/
 
 # Option 2: Add as MCP server in openclaw.json
 ```
@@ -114,7 +114,7 @@ cp -r node_modules/@compr/contextengine-mcp/skills/contextengine ~/.openclaw/wor
   "mcpServers": {
     "contextengine": {
       "command": "npx",
-      "args": ["-y", "@compr/contextengine-mcp"],
+      "args": ["-y", "@compr/opscontext-mcp"],
       "env": { "CONTEXTENGINE_WORKSPACES": "~/Projects" }
     }
   }
@@ -146,7 +146,7 @@ ContextEngine has a **free VS Code extension** that provides proactive enforceme
 - **Terminal watcher** — monitors commands with smart classification (git, deploy, database, python, build, test), credential redaction in logs, and stuck-pattern detection (alerts after 3+ consecutive failures)
 - **One-click commit** — commit all changes across all repos
 
-The extension reads live metrics from the MCP server (via `~/.contextengine/session-stats.json`). For search, learnings, sessions, and scoring — it uses the MCP server (`npx @compr/contextengine-mcp`).
+The extension reads live metrics from the MCP server (via `~/.contextengine/session-stats.json`). For search, learnings, sessions, and scoring — it uses the MCP server (`npx @compr/opscontext-mcp`).
 
 ## ⭐ PRO Features
 
@@ -179,7 +179,7 @@ ContextEngine is **free and open-core**. The free tier covers everything agents 
 
 ```bash
 # Activate after purchase
-npx @compr/contextengine-mcp activate
+npx @compr/opscontext-mcp activate
 ```
 
 ## CLI Usage (no MCP required)
@@ -188,38 +188,38 @@ ContextEngine also works as a **standalone CLI tool** — no MCP client setup ne
 
 ```bash
 # Search across all your project knowledge
-npx @compr/contextengine-mcp search "docker nginx"
-npx @compr/contextengine-mcp search "rate limiting" -n 10
+npx @compr/opscontext-mcp search "docker nginx"
+npx @compr/opscontext-mcp search "rate limiting" -n 10
 
 # List all indexed sources
-npx @compr/contextengine-mcp list-sources
+npx @compr/opscontext-mcp list-sources
 
 # Discover and analyze all projects
-npx @compr/contextengine-mcp list-projects
+npx @compr/opscontext-mcp list-projects
 
 # AI-readiness score (one or all projects)
-npx @compr/contextengine-mcp score
-npx @compr/contextengine-mcp score ContextEngine
+npx @compr/opscontext-mcp score
+npx @compr/opscontext-mcp score ContextEngine
 
 # Visual HTML report (opens in browser)
-npx @compr/contextengine-mcp score --html
-npx @compr/contextengine-mcp score ContextEngine --html
+npx @compr/opscontext-mcp score --html
+npx @compr/opscontext-mcp score ContextEngine --html
 
 # List permanent learnings (optionally by category)
-npx @compr/contextengine-mcp list-learnings
-npx @compr/contextengine-mcp list-learnings security
+npx @compr/opscontext-mcp list-learnings
+npx @compr/opscontext-mcp list-learnings security
 
 # Show live MCP session stats (value meter)
-npx @compr/contextengine-mcp stats
+npx @compr/opscontext-mcp stats
 
 # Run compliance audit across all projects
-npx @compr/contextengine-mcp audit
+npx @compr/opscontext-mcp audit
 
 # Scaffold config for a new project
-npx @compr/contextengine-mcp init
+npx @compr/opscontext-mcp init
 
 # Show all commands
-npx @compr/contextengine-mcp help
+npx @compr/opscontext-mcp help
 ```
 
 CLI mode uses keyword search (BM25) which is instant — no model loading required.
@@ -399,13 +399,13 @@ Each subdirectory is treated as a separate project. For best results:
 
 TypeScript monorepo — MCP server + CLI + search engine + operational collectors.
 
-See the [npm package](https://www.npmjs.com/package/@compr/contextengine-mcp) for installation and usage.
+See the [npm package](https://www.npmjs.com/package/@compr/opscontext-mcp) for installation and usage.
 
 ## Development
 
 ```bash
-npm install @compr/contextengine-mcp
-npx @compr/contextengine-mcp help
+npm install @compr/opscontext-mcp
+npx @compr/opscontext-mcp help
 ```
 
 ## Requirements
