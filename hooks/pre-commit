@@ -13,23 +13,48 @@
 export PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$PATH"
 
 # ===================================================================
-# PHASE 0: Secret Scanner (runs on ALL commits, not just code commits)
+# Helper: locate the ContextEngine CLI
 # ===================================================================
-#
-# Two-layer scan:
-#   1. gitleaks (if installed) — wraps the industry-standard ~150-pattern
-#      ruleset. Audited, maintained, covers Azure / GCP / OpenAI / Anthropic /
-#      JWT / SSH keys / etc. — categories CE's 17 in-house patterns don't.
-#      Install: brew install gitleaks  (or https://github.com/gitleaks/gitleaks)
-#   2. CE patterns (always) — project-specific shapes gitleaks doesn't know
-#      about (Cr0wlr_Pr0d_, C0ldEm@il_) and the .copilot-credentials.md guard.
-#
-# Either layer can block. Running both is the right default: gitleaks gives
-# the breadth, CE gives the project-specific depth.
+# Order: project-local node_modules → global which → none (skip policy).
+# We intentionally do NOT fall back to `npx @compr/contextengine-mcp` —
+# cold npx is ~2-3s on every commit; too painful for a hot path. Teams
+# that want policy-driven gates should install CE in node_modules or
+# globally.
+find_ce_cli() {
+  if [[ -x "node_modules/.bin/contextengine" ]]; then
+    echo "node_modules/.bin/contextengine"
+    return 0
+  fi
+  if command -v contextengine >/dev/null 2>&1; then
+    command -v contextengine
+    return 0
+  fi
+  echo ""
+}
 
+CE_CLI=$(find_ce_cli)
+HAS_POLICY=false
+[[ -f .contextengine/policy.json ]] && HAS_POLICY=true
+
+# ===================================================================
+# PHASE 0: Secret Scanner — three complementary layers
+# ===================================================================
+#   1. gitleaks (if installed) — industry-standard ~150-pattern ruleset.
+#      Audited, maintained. Install: brew install gitleaks
+#   2. CE policy-driven scan (if CLI + policy.json present) — applies
+#      .contextengine/policy.json secret_patterns with paths-glob scoping
+#      and severity (block | warn). Project-specific shapes that gitleaks
+#      doesn't know (e.g. jwt_in_session_doc scoped to docs/sessions/**).
+#   3. CE inline patterns (always) — 17 in-house regexes covering
+#      Stripe/GitHub/AWS/Slack/etc + project-specific DB-password shapes
+#      + the .copilot-credentials.md staging guard. Defense in depth:
+#      catches whatever the first two layers missed.
+#
+# Each layer can block independently. First one to fail wins; later
+# layers do not run.
+
+# Layer 1: gitleaks
 if command -v gitleaks >/dev/null 2>&1; then
-  # gitleaks protect scans staged content. --redact suppresses the secret value
-  # in the output (we never want secret literals echoed to a terminal or CI log).
   GITLEAKS_OUTPUT=$(gitleaks protect --staged --redact --no-banner --verbose 2>&1)
   GITLEAKS_EXIT=$?
   if [[ $GITLEAKS_EXIT -ne 0 ]]; then
@@ -37,7 +62,6 @@ if command -v gitleaks >/dev/null 2>&1; then
     echo "╔═══════════════════════════════════════════════════════════╗"
     echo "║  🔒 GITLEAKS: secret(s) detected                          ║"
     echo "╠═══════════════════════════════════════════════════════════╣"
-    # Print at most the first 25 lines of gitleaks output (redacted values only)
     echo "$GITLEAKS_OUTPUT" | head -25
     echo "║  Secrets belong in .env or .copilot-credentials.md       ║"
     echo "║  ❌ COMMIT BLOCKED — remove secrets first                 ║"
@@ -47,6 +71,17 @@ if command -v gitleaks >/dev/null 2>&1; then
   fi
 fi
 
+# Layer 2: CE policy-driven scan (added 2026-06 — P1 #4 part 3)
+# The CLI exits 0 cleanly when no policy file exists, so the HAS_POLICY
+# gate is a perf optimization, not a correctness requirement.
+if [[ -n "$CE_CLI" && "$HAS_POLICY" == "true" ]]; then
+  if ! "$CE_CLI" hook secret-scan; then
+    # CLI already printed the violation list + wrote hook.block to audit log
+    exit 1
+  fi
+fi
+
+# Layer 3: CE inline patterns (always)
 SECRET_PATTERNS=(
   'sshpass -p [^*"$]|Hardcoded sshpass password (use SSHPASS env var)'
   'whsec_[A-Za-z0-9]{20,}|Stripe webhook secret (use .env)'
@@ -121,13 +156,32 @@ if [[ $SECRET_VIOLATIONS -gt 0 ]]; then
   exit 1
 fi
 
-# =================================================================== 
-# PHASE 1: CE Doc Freshness Check (only for code file commits)
 # ===================================================================
+# PHASE 1: Doc Freshness
+# ===================================================================
+# Two paths:
+#   - Policy-driven (preferred): when policy.json is present, the
+#     diff-aware doc_coverage rules ARE the source of truth. The
+#     legacy 4h wall-clock check is suppressed — it was the workaround
+#     pattern (touching SKILLS.md to reset the clock).
+#   - Legacy fallback: when no policy is authored, the original 4h
+#     wall-clock check on copilot-instructions.md / SKILLS.md / SCORE.md
+#     runs unchanged. Repos without a policy keep working exactly as
+#     before. Migration is opt-in by adding .contextengine/policy.json.
 
-# ---------------------------------------------------------------------------
-# 2. Check if code files are in the staged diff
-# ---------------------------------------------------------------------------
+if [[ -n "$CE_CLI" && "$HAS_POLICY" == "true" ]]; then
+  if ! "$CE_CLI" hook doc-coverage; then
+    # CLI already printed violations + wrote hook.block to audit log
+    exit 1
+  fi
+  # Policy path is authoritative. Skip the legacy check.
+  exit 0
+fi
+
+# Legacy path: 4-hour wall-clock check (only when no policy authored).
+# This logic is being retired — author .contextengine/policy.json to
+# replace it with diff-aware coverage.
+
 CODE_EXTS="ts|tsx|js|jsx|py|rs|go|java|rb|php|vue|svelte|css|scss|html"
 STAGED_CODE=$(git diff --cached --name-only | grep -E "\.($CODE_EXTS)$" | head -1)
 
@@ -136,12 +190,9 @@ if [[ -z "$STAGED_CODE" ]]; then
   exit 0
 fi
 
-# ---------------------------------------------------------------------------
-# 3. Check CE doc freshness
-# ---------------------------------------------------------------------------
 WARNINGS=0
 NOW=$(date +%s)
-STALE_HOURS=4  # warn if CE doc is older than 4 hours
+STALE_HOURS=4
 
 warn() {
   echo "⚠️  CE: $1"
@@ -152,7 +203,6 @@ check_freshness() {
   local file="$1"
   local label="$2"
 
-  # Find file in common locations (check ALL candidate paths)
   local found_paths=()
   for candidate_path in "$file" ".github/$file" ".github/instructions/$file"; do
     if [[ -f "$candidate_path" ]]; then
@@ -165,21 +215,17 @@ check_freshness() {
     return
   fi
 
-  # If ANY matching path is in the staged diff, the check passes
   for fp in "${found_paths[@]}"; do
     if git diff --cached --name-only | grep -q "$fp"; then
-      return  # Being updated in this commit — good!
+      return
     fi
   done
 
-  # None staged — check staleness of the MOST RECENTLY modified copy
   local newest_mtime=0
-  local newest_path=""
   for fp in "${found_paths[@]}"; do
     local mtime=$(stat -f %m "$fp" 2>/dev/null || stat -c %Y "$fp" 2>/dev/null)
     if [[ -n "$mtime" && $mtime -gt $newest_mtime ]]; then
       newest_mtime=$mtime
-      newest_path="$fp"
     fi
   done
 
@@ -195,9 +241,6 @@ check_freshness "copilot-instructions.md" "copilot-instructions.md"
 check_freshness "SKILLS.md" "SKILLS.md"
 check_freshness "SCORE.md" "SCORE.md"
 
-# ---------------------------------------------------------------------------
-# 4. Check if learnings were saved recently (optional — check file mtime)
-# ---------------------------------------------------------------------------
 LEARNINGS_FILE="$HOME/.contextengine/learnings.json"
 if [[ -f "$LEARNINGS_FILE" ]]; then
   LEARN_MTIME=$(stat -f %m "$LEARNINGS_FILE" 2>/dev/null || stat -c %Y "$LEARNINGS_FILE" 2>/dev/null)
@@ -209,9 +252,6 @@ if [[ -f "$LEARNINGS_FILE" ]]; then
   fi
 fi
 
-# ---------------------------------------------------------------------------
-# 5. Summary
-# ---------------------------------------------------------------------------
 if [[ $WARNINGS -gt 0 ]]; then
   echo ""
   echo "╔═══════════════════════════════════════════════════════╗"
@@ -220,10 +260,11 @@ if [[ $WARNINGS -gt 0 ]]; then
   echo "║  Update: copilot-instructions, SKILLS, SCORE         ║"
   echo "║                                                       ║"
   echo "║  ❌ COMMIT BLOCKED — update docs first                ║"
+  echo "║  💡 Author .contextengine/policy.json for diff-aware  ║"
+  echo "║     coverage instead of wall-clock staleness.        ║"
   echo "╚═══════════════════════════════════════════════════════╝"
   echo ""
-  exit 1  # BLOCK the commit
+  exit 1
 fi
 
-# All checks passed
 exit 0

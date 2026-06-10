@@ -4,6 +4,17 @@ All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
 ## [Unreleased] — 2026-06-10 — P0 hygiene + audit log + quick wins + policy foundation
 
+### Changed (hook migration — P1 #4 part 3)
+- **`hooks/pre-commit`** now invokes the TypeScript policy-driven checkers from part 2 when both a CLI and a `.contextengine/policy.json` are present in the repo. Additive integration — gitleaks + policy scan + inline 17 CE patterns all run as complementary layers, first-to-block wins. For doc coverage, the policy-driven check is **authoritative** when a policy exists; the legacy 4-hour wall-clock check is suppressed (it was the workaround pattern that taught `touch SKILLS.md SCORE.md` as the rational answer).
+- **`find_ce_cli()` helper** locates the CLI via `node_modules/.bin/contextengine` (project-local install, preferred) → `command -v contextengine` (global / npm-link). Does NOT fall back to `npx @compr/contextengine-mcp` — cold npx on every commit is ~2-3 s, too expensive for the hot path. Teams that want policy enforcement install CE in node_modules.
+- **Repos without `.contextengine/policy.json` keep the legacy path unchanged** — same 17 inline patterns, same 4-hour wall-clock check. Migration is opt-in by authoring a policy file.
+- **Legacy error banner gains a one-line migration nudge**: "💡 Author `.contextengine/policy.json` for diff-aware coverage instead of wall-clock staleness." Documents the upgrade path without forcing it.
+- **End-to-end smoke-tested three scenarios** in ephemeral repos:
+  1. No policy + missing CE docs → legacy 4 h gate blocks. ✓
+  2. Policy + JWT-shape token in `docs/sessions/SESSION_99.md` → policy-driven secret-scan blocks (`[block] jwt_in_session_doc at docs/sessions/SESSION_99.md:1`), pattern correctly scoped only to `docs/sessions/**/*.md`. ✓
+  3. Policy + clean code → both policy layers print `✅` and commit proceeds. ✓
+- **Dogfooded**: `cp hooks/pre-commit .git/hooks/pre-commit` in CE itself; this very commit travels through the new hook end-to-end.
+
 ### Added (hook checkers — P1 #4 part 2)
 - **`src/hooks.ts`** — TypeScript implementations of the policy-driven gates. Exports `getStagedFiles()` (parses `git diff --cached --unified=0` into structured `{path, addedLines:[{lineNumber, content}]}` records), `runSecretScan(policy, files)` (applies `policy.secret_patterns` with `paths` glob scoping), `runDocCoverage(policy, files, repoRoot)` (diff-aware doc-section coverage), plus a tiny in-house `globToRegExp()` and `hashDocSection()` foundation for the next-iteration anchor-hash check.
 - **CLI `contextengine hook <secret-scan|doc-coverage>`** — reads `.contextengine/policy.json` from `git rev-parse --show-toplevel`, applies the relevant checker, exits 0 (clean) or 1 (blocking violations found). `CE_JSON=1` switches to one-line JSON for CI logs. No policy file → no-op (exit 0).
