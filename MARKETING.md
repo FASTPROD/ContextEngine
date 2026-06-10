@@ -182,22 +182,21 @@ GitHub: https://github.com/FASTPROD/ContextEngine
 
 ### Post 5: r/MCP
 
-**Title**: ContextEngine — MCP server with Protocol Firewall, 17 tools, hybrid search, persistent memory
+**Title**: ContextEngine — MCP server with Protocol Firewall, 19 tools, hybrid search, persistent memory
 
 **Body**:
 
 Sharing my MCP server that's focused on agent compliance and knowledge persistence.
 
-**17 tools exposed:**
-- `search` — hybrid BM25 + semantic search
-- `save_learning` / `list_learnings` / `delete_learning` — persistent operational rules
-- `save_session` / `load_session` / `list_sessions` / `end_session` — session continuity
-- `score_project` — AI-readiness score (12 checks, A+ to F)
-- `run_audit` — compliance audit (security, perf, DX, architecture)
-- `check_ports` — port conflict detection across projects
-- `list_sources` / `list_projects` / `get_project_context` / `register_project`
-- `configure_adapter` — auto-configure Claude Desktop / VS Code / Cursor
-- `get_skill` / `list_skills` — bundled skill files
+**19 tools exposed:**
+- `search_context` — hybrid BM25 + semantic search with mode selector
+- `list_sources` / `read_source` / `reindex` — knowledge-base inspection
+- `save_session` / `load_session` / `list_sessions` / `delete_session` / `end_session` — session continuity + pre-flight checklist
+- `save_learning` / `list_learnings` / `delete_learning` / `import_learnings` — persistent operational rules
+- `list_projects` — cross-project tech-stack discovery (PRO)
+- `check_ports` — port conflict detection across projects (PRO)
+- `run_audit` — compliance audit (security, perf, DX, architecture) (PRO)
+- `score_project` — AI-readiness score, 12 checks, A+ to F + HTML report (PRO)
 - `activate` / `activation_status` — PRO license management
 
 **Key architectural decisions:**

@@ -573,6 +573,7 @@ import {
   saveSession,
   loadSession,
   listSessions,
+  deleteSession,
   formatSession,
   formatSessionList,
 } from "./sessions.js";
@@ -890,6 +891,26 @@ async function cliListSessions(): Promise<void> {
   console.log(`\n${formatSessionList(sessions)}`);
 }
 
+async function cliDeleteSession(name: string): Promise<void> {
+  if (!name) {
+    console.error("Usage: contextengine delete-session <name>");
+    process.exit(1);
+  }
+
+  const ok = deleteSession(name);
+  if (ok) {
+    console.log(`✅ Deleted session "${name}".`);
+    return;
+  }
+
+  console.error(`❌ Session not found: "${name}"`);
+  const available = listSessions();
+  if (available.length > 0) {
+    console.error(`\nAvailable sessions: ${available.map((s) => s.name).join(", ")}`);
+  }
+  process.exit(1);
+}
+
 async function cliEndSession(): Promise<void> {
   const projectDirs = loadProjectDirs();
   const checks: string[] = [];
@@ -1199,6 +1220,7 @@ Usage:
   contextengine save-session <name> <key> <value>   Save session context
   contextengine load-session <name>    Restore session context
   contextengine list-sessions          List all saved sessions
+  contextengine delete-session <name>  Delete a saved session
   contextengine end-session            Pre-flight checklist (uncommitted changes, doc freshness)
   contextengine score [project] [--html] [--no-save] AI-readiness score (Pro, writes SCORE.md)
   contextengine audit                  Run compliance audit (Pro)
@@ -1298,6 +1320,11 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
   });
 } else if (command === "list-sessions") {
   cliListSessions().catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "delete-session") {
+  cliDeleteSession(process.argv[3] || "").catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });

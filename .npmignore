@@ -9,3 +9,4 @@ contextengine.json
 README.old.md
 dist/test.*
 dist/test-*
+dist/**/*.map

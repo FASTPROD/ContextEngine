@@ -3,19 +3,31 @@
 
 /**
  * Activation & Delta Module System
- * 
- * The npm package ships with core functionality (search, sessions, learnings).
- * Premium features (scoring, audit, collectors, HTML reports) require activation.
- * 
+ *
+ * The npm package ships with core functionality (search, sessions, learnings,
+ * operational collectors). PRO unlocks the four high-value tools that consume
+ * collector + multi-project data.
+ *
+ * Free (no activation required):
+ *   - search_context, list_sources, read_source, reindex
+ *   - save/load/list/delete/end_session
+ *   - save/list/delete/import_learning
+ *   - Operational collectors run during reindex (PM2, nginx, Docker, git,
+ *     cron, .env redacted, composer, systemd) — collected data is searchable
+ *     via search_context
+ *
+ * Activation unlocks the four PRO tools that consume collected/multi-project
+ * data and the HTML report generators:
+ *   - list_projects (cross-project tech-stack analysis)
+ *   - check_ports   (cross-project port conflict scan)
+ *   - run_audit     (compliance audit with HTML report)
+ *   - score_project (AI-readiness score + SCORE.md + score-report.html)
+ *
  * On activation:
- * 1. License key is validated against the ContextEngine API
- * 2. Server returns a signed delta bundle (encrypted JS modules)
- * 3. Delta is cached locally at ~/.contextengine/delta/
- * 4. Premium tools become available
- * 
- * Without activation: basic search, list-sources, sessions, learnings work.
- * With activation: score_project, run_audit, check_ports, list_projects,
- *                  HTML reports, 11 operational collectors, advanced BM25.
+ *   1. License key is validated against the ContextEngine API
+ *   2. Server returns a signed delta bundle (encrypted JS modules)
+ *   3. Delta is cached locally at ~/.contextengine/delta/
+ *   4. Premium tools become available
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync } from "fs";
@@ -33,10 +45,13 @@ const ACTIVATION_API_BASE = process.env.CONTEXTENGINE_API || "https://api.compr.
 const ACTIVATION_API = `${ACTIVATION_API_BASE}/activate`;
 const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily check
 
-// Premium modules that require activation
+// Premium modules that require activation.
+// NOTE: collectors.ts runs unconditionally during reindex for all users
+// (operational data feeds search_context for everyone). The PRO tools below
+// in PREMIUM_TOOLS are what consume that data for scoring/audit/cross-project
+// reports. Keep the gate at the tool layer, not the data-collection layer.
 export const PREMIUM_MODULES = [
-  "agents",      // scorer, auditor, port checker, formatters (1653 lines)
-  "collectors",  // 11 operational data collectors (705 lines) 
+  "agents",      // scorer, auditor, port checker, HTML report formatters
   "search-adv",  // advanced BM25 with tuned parameters
 ] as const;
 

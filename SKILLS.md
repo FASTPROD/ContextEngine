@@ -4,8 +4,8 @@
 
 ## When to use
 
-- Modifying MCP server tools (19 tools in `src/index.ts`)
-- Updating CLI subcommands (16 commands in `src/cli.ts`)
+- Modifying MCP server tools (19 tools in `src/index.ts` — `delete_session` registered in 2026-06 hygiene pass; previously declared in README but never wired)
+- Updating CLI subcommands (17 commands in `src/cli.ts` — `delete-session` added 2026-06)
 - Changing search/ranking logic (`src/search.ts`, `src/embeddings.ts`)
 - Working on the learnings store (`src/learnings.ts`)
 - Modifying the activation server (`server/src/server.ts`, `server/src/stripe.ts`)
@@ -69,6 +69,8 @@
 - Package: `@compr/contextengine-mcp`
 - `npm publish --access public` (prepublishOnly runs `npm run build`)
 - `files` field restricts to: `dist/`, `defaults/`, `skills/`, `examples/`
+- **Sourcemaps EXCLUDED** from tarball (`!dist/**/*.map` in `files[]` + `dist/**/*.map` in `.npmignore`) — keeps tarball ~28% smaller and removes the de-obfuscation vector
+- **No obfuscation step** — `scripts/obfuscate-firewall.mjs` removed in 2026-06 hygiene pass. Sourcemaps shipped alongside used to defeat it instantly; BSL-1.1 is the legal protection. Build is plain `tsc`.
 - `server/` is NEVER published to npm
 
 ### VPS Deployment
@@ -88,7 +90,7 @@
 - Extension delegates to CLI — benefits from CLI fixes automatically
 - Chat commands: `/status`, `/commit`, `/search`, `/remind`, `/sync`
 - Doc freshness: `checkCEDocFreshness()` in contextEngineClient.ts — checks copilot-instructions, SKILLS.md, SCORE.md staleness
-- Pre-commit hook: `hooks/pre-commit` — **BLOCKS** (exit 1) when CE docs stale >4h. Override: `git commit --no-verify`
+- Pre-commit hook: `hooks/pre-commit` — **BLOCKS** (exit 1) when CE docs stale >4h. Bypass exists at git level but is intentionally not advertised in hook output (anti-marketing).
 - Terminal watcher: `terminalWatcher.ts` — 9 categories (git, npm, build, deploy, test, database, python, ssh, other), 10 credential redaction patterns, stuck-pattern detection
 - Multi-window output.log: `outputLogger.ts` tags lines with `[wsTag]` (workspace name) to disambiguate shared log across windows
 
@@ -106,10 +108,10 @@
 - `.git/hooks/` path operations classified as [git] not [other]
 
 ### Git Hooks & Terminal Patterns
-- **Post-commit hook** (`hooks/post-commit`): Auto-pushes to origin + gdrive after every commit
+- **Post-commit auto-push to gdrive**: lives in the global git template (`~/.git-template/hooks/post-commit`), NOT in this repo. The CE repo previously carried a 0-byte `hooks/post-commit` file that claimed to do this — removed in the 2026-06 hygiene pass. Don't add it back without making it actually do something.
 - Push takes 3-10s → VS Code terminal tool reports "cancelled" — but commit AND push succeed
 - **MANDATORY**: After ANY "cancelled" git commit, run `git log --oneline -1` to verify — NEVER re-attempt
-- **Pre-commit hook** (`hooks/pre-commit`): **BLOCKS** (exit 1) when code staged but CE docs stale (>4h) or missing
+- **Pre-commit hook** (`hooks/pre-commit`): **BLOCKS** (exit 1) when code staged but CE docs stale (>4h) or missing. Banner no longer advertises `--no-verify` (anti-marketing — every block teaching its bypass is negative product value).
 - zsh script — NEVER use `path` as a variable name (zsh ties `$path` to `$PATH`)
 - Use `candidate_path`, `file_path`, etc. instead — overwriting `$path` destroys PATH for the rest of the script
 

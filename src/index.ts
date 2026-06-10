@@ -720,6 +720,28 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool: delete_session (Session Persistence)
+// ---------------------------------------------------------------------------
+server.tool(
+  "delete_session",
+  "Delete a saved session by name. Returns success/not-found. Use for cleanup of stale or obsolete session context.",
+  {
+    name: z.string().describe("Session name to delete"),
+  },
+  async ({ name }) => {
+    const ok = deleteSession(name);
+    if (ok) {
+      return respond("delete_session", `✅ Deleted session "${name}".`);
+    }
+    const available = listSessions().map((s) => s.name);
+    const hint = available.length
+      ? `\n\nAvailable sessions: ${available.join(", ")}`
+      : "";
+    return respond("delete_session", `Session "${name}" not found.${hint}`);
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Tool: end_session (End-of-Session Protocol Enforcer)
 // ---------------------------------------------------------------------------
 server.tool(

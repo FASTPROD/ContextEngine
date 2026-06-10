@@ -167,7 +167,7 @@
 - Learnings store: 1,023 quality rules (post-dedup + junk purge)
 - GitHub repo: PUBLIC, 9 topics, v1.22.0 release published
 - Credentials: extracted to `.copilot-credentials.md` (gitignored, never committed)
-- npm: 1,233 weekly downloads
+- npm: 95 weekly downloads (live npm registry value as of 2026-06; track growth, do not inflate)
 
 ## 🔒 Locked Files — DO NOT Modify Without Explicit User Request
 | File | Lock Date | What's Verified | Tests |

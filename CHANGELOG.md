@@ -2,6 +2,31 @@
 
 All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
+## [Unreleased] — 2026-06-10 — P0 hygiene pass
+
+### Added
+- **`delete_session` MCP tool** — registered in `src/index.ts` (was exported but never wired). README claimed 19 tools while only 18 were registered; the tool table is now truthful.
+- **`delete-session` CLI command** — `npx @compr/contextengine-mcp delete-session <name>`.
+
+### Changed
+- **`src/activation.ts` docstring + `PREMIUM_MODULES`** — removed `"collectors"` from the premium-module list. Reality: operational collectors run during reindex for all users (data feeds `search_context` for everyone). PRO gates only the four tools that consume that data (`list_projects`, `check_ports`, `run_audit`, `score_project`). Docstring + COMPETITIVE_ANALYSIS/MARKETING claims now match the code path.
+- **MARKETING.md Reddit Post #5** — rewritten to list the actual 19 tools. Dropped 5 fictitious tools (`register_project`, `get_project_context`, `configure_adapter`, `get_skill`, `list_skills`) that were never implemented.
+- **`.github/copilot-instructions.md`** — replaced inflated "1,233 weekly downloads" claim with the live npm registry value (95/week as of 2026-06).
+- **Hook error banners** (`hooks/pre-commit`, `hooks/pre-commit-secrets`) — removed `Override: git commit --no-verify` line. Hooks should not advertise their bypass.
+
+### Removed
+- **Obfuscation pipeline** — `scripts/obfuscate-firewall.mjs`, the `terser` devDependency, and the `&& node scripts/obfuscate-firewall.mjs` build step. The shipped sourcemaps defeated the obfuscation (`firewall.js.map` mapped straight back to `../src/firewall.ts`). BSL-1.1 provides the legal protection layer; obfuscation theater was a build-complexity tax for zero security benefit.
+- **Sourcemaps from npm tarball** — added `!dist/**/*.map` to `package.json` `files[]` and `dist/**/*.map` to `.npmignore`. Drops ~50% of published tarball bytes.
+- **Stale artifacts**:
+  - `src/test.ts` — orphaned dev harness (had previously leaked once in v1.17).
+  - `dist/test.{js,d.ts}`, `dist/test-sessions.d.ts` — build leftovers.
+  - `score-report.html` — tracked snapshot at a path the code does not write.
+  - `hooks/post-commit` — 0-byte file (claimed gdrive auto-push but was empty).
+  - `VSCODE_EXTENSION_STEPS.md` — done-status runbook from Feb 2026.
+
+### Notes
+- **Not in this pass** (separate workstream): activation `LicenseInfo.signature` validation in `loadLicense()` is still missing (security bug + revenue leak). Requires Ed25519 keypair + server-side issuance flow.
+
 ## [1.23.1] — 2026-04-18
 
 ### Changed

@@ -51,3 +51,10 @@
 - Source of truth for token expiry is `.npm-token-meta.json` (commit-safe; metadata only, no secret).
 - Warn 14d before expiry; block at expiry.
 - Current token expires 2026-07-17 (45d left as of this commit).
+
+## 2026-06-10 — P0 hygiene pass changes affecting score
+
+- **Git hooks row**: previous +5 came from the existence of a 0-byte `hooks/post-commit` — the scorer was gaming itself (file existed, did nothing, scored). The empty file is now deleted. Real post-commit gdrive auto-push lives in the global git template, not in-repo. Expect `Git hooks` row to drop unless the scoring rubric is fixed to check that the hook actually contains executable content.
+- **delete_session tool now registered**: was claimed by README (19 tools) but only 18 wired. Now actually 19 — no scoring impact, just truth alignment.
+- **Sourcemaps removed from tarball + obfuscation script deleted**: no scoring impact, but tarball is ~28% smaller and the "obfuscation defeated by shipped sourcemap" enterprise red flag is gone.
+- **PRO module list corrected**: `collectors` removed from `PREMIUM_MODULES` because collectors.ts runs for all users unconditionally. The 4 PRO tools that consume the data remain gated. No scoring impact; closes the freemium-theater gap.

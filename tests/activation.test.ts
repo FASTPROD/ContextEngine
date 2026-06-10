@@ -8,9 +8,12 @@ import {
 
 describe("PREMIUM_MODULES", () => {
   it("contains expected premium modules", () => {
+    // NOTE: 'collectors' is intentionally NOT premium — collectors run for all
+    // users during reindex (data feeds search_context for free tier too).
+    // PRO gates the four tools in PREMIUM_TOOLS that consume that data.
     expect(PREMIUM_MODULES).toContain("agents");
-    expect(PREMIUM_MODULES).toContain("collectors");
     expect(PREMIUM_MODULES).toContain("search-adv");
+    expect(PREMIUM_MODULES).not.toContain("collectors");
   });
 
   it("has no duplicates", () => {
