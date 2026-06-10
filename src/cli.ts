@@ -917,6 +917,95 @@ async function cliDeleteSession(name: string): Promise<void> {
   process.exit(1);
 }
 
+async function cliExportLearnings(args: string[]): Promise<void> {
+  let project: string | undefined;
+  let category: string | undefined;
+  let format: "json" | "markdown" = "json";
+  let universalToo = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if ((a === "--project" || a === "-p") && args[i + 1]) { project = args[++i]; continue; }
+    if ((a === "--category" || a === "-c") && args[i + 1]) { category = args[++i]; continue; }
+    if (a === "--format" && args[i + 1]) {
+      const f = args[++i];
+      if (f !== "json" && f !== "markdown") {
+        console.error(`Unknown format: ${f}. Supported: json, markdown.`);
+        process.exit(1);
+      }
+      format = f;
+      continue;
+    }
+    if (a === "--include-universal") { universalToo = true; continue; }
+    if (a === "-h" || a === "--help") {
+      console.log(`Usage: contextengine export-learnings [--project NAME] [--category CAT] [--format json|markdown] [--include-universal]
+
+Exports learnings as JSON or Markdown. Use --project to scope to a single
+project's learnings (essential for consultants who share artifacts with
+clients — the universal store mixes all projects together by default).
+
+  --project NAME         Only learnings tagged with this project (case-insensitive)
+  --category CAT         Only this category (deployment, security, etc.)
+  --format json|markdown Output format (default: json)
+  --include-universal    Also include unscoped learnings (project=undefined)
+                         alongside the project-filtered ones
+
+Cross-client confidentiality: without --project, this exports the FULL store.
+Always use --project NAME when sharing exported learnings with anyone outside
+the owning project's team.`);
+      return;
+    }
+  }
+
+  let all = listLearnings(category);
+
+  if (project) {
+    const lower = project.toLowerCase();
+    all = all.filter((l) => {
+      const matchProject = l.project && l.project.toLowerCase() === lower;
+      const matchUniversal = universalToo && !l.project;
+      return matchProject || matchUniversal;
+    });
+  }
+
+  if (format === "markdown") {
+    if (all.length === 0) {
+      process.stdout.write(`# Learnings export\n\n_No learnings matched the filter._\n`);
+      return;
+    }
+    const grouped: Record<string, typeof all> = {};
+    for (const l of all) {
+      (grouped[l.category] ||= []).push(l);
+    }
+    const scope = project
+      ? `project ${project}${universalToo ? " + universal" : ""}`
+      : "ALL projects (warning: cross-project IP)";
+    process.stdout.write(`# Learnings export — ${scope}\n\n`);
+    process.stdout.write(`_Exported ${all.length} learning(s) on ${new Date().toISOString()}_\n\n`);
+    for (const cat of Object.keys(grouped).sort()) {
+      process.stdout.write(`## ${cat}\n\n`);
+      for (const l of grouped[cat]) {
+        process.stdout.write(`### ${l.rule}\n\n`);
+        if (l.context) process.stdout.write(`${l.context}\n\n`);
+        if (l.project) process.stdout.write(`_Project: ${l.project} · Updated: ${l.updated}_\n\n`);
+      }
+    }
+    return;
+  }
+
+  // JSON format
+  const payload = {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    scope: project
+      ? { project, include_universal: universalToo }
+      : { project: null, include_universal: true },
+    count: all.length,
+    learnings: all,
+  };
+  process.stdout.write(JSON.stringify(payload, null, 2) + "\n");
+}
+
 async function cliAuditExport(args: string[]): Promise<void> {
   let since: string | undefined;
   let until: string | undefined;
@@ -1277,6 +1366,8 @@ Usage:
   contextengine save-learning <text> -c <category>  Save a learning
   contextengine delete-learning <id>   Delete a learning by ID
   contextengine import-learnings <file> [-c cat] [-p project]  Bulk-import learnings
+  contextengine export-learnings [--project NAME] [--category CAT] [--format json|markdown] [--include-universal]
+                                       Export learnings (scope to one project for safe sharing)
   contextengine save-session <name> <key> <value>   Save session context
   contextengine load-session <name>    Restore session context
   contextengine list-sessions          List all saved sessions
@@ -1388,6 +1479,11 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
   });
 } else if (command === "delete-session") {
   cliDeleteSession(process.argv[3] || "").catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "export-learnings") {
+  cliExportLearnings(process.argv.slice(3)).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });

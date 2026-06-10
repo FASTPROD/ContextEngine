@@ -107,6 +107,11 @@
 - Always test redaction with real-world Output panel samples — `api_key=` is too narrow, need `WORD_API_KEY=` format
 - `.git/hooks/` path operations classified as [git] not [other]
 
+### Secret Scanner — two layers
+- **gitleaks** (optional, recommended): if `command -v gitleaks` resolves, the pre-commit hook runs `gitleaks protect --staged --redact` first. ~150 audited patterns covering Azure, GCP, OpenAI, Anthropic, JWT, SSH keys, npm tokens, etc. Install: `brew install gitleaks` or https://github.com/gitleaks/gitleaks
+- **CE in-house patterns** (always): 17 patterns covering Stripe, GitHub, GitLab, Slack, AWS, SendGrid, Square, Google API, Groq + project-specific shapes (`Cr0wlr_Pr0d_`, `C0ldEm@il_`) + the `.copilot-credentials.md` staging guard. Catches the project-shaped secrets gitleaks doesn't know about.
+- Both layers can block. Order: gitleaks first (broad), CE patterns second (project-specific). The two are complementary, not redundant.
+
 ### Git Hooks & Terminal Patterns
 - **Post-commit auto-push to gdrive**: lives in the global git template (`~/.git-template/hooks/post-commit`), NOT in this repo. The CE repo previously carried a 0-byte `hooks/post-commit` file that claimed to do this — removed in the 2026-06 hygiene pass. Don't add it back without making it actually do something.
 - Push takes 3-10s → VS Code terminal tool reports "cancelled" — but commit AND push succeed

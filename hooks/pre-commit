@@ -15,6 +15,38 @@ export PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$PATH"
 # ===================================================================
 # PHASE 0: Secret Scanner (runs on ALL commits, not just code commits)
 # ===================================================================
+#
+# Two-layer scan:
+#   1. gitleaks (if installed) — wraps the industry-standard ~150-pattern
+#      ruleset. Audited, maintained, covers Azure / GCP / OpenAI / Anthropic /
+#      JWT / SSH keys / etc. — categories CE's 17 in-house patterns don't.
+#      Install: brew install gitleaks  (or https://github.com/gitleaks/gitleaks)
+#   2. CE patterns (always) — project-specific shapes gitleaks doesn't know
+#      about (Cr0wlr_Pr0d_, C0ldEm@il_) and the .copilot-credentials.md guard.
+#
+# Either layer can block. Running both is the right default: gitleaks gives
+# the breadth, CE gives the project-specific depth.
+
+if command -v gitleaks >/dev/null 2>&1; then
+  # gitleaks protect scans staged content. --redact suppresses the secret value
+  # in the output (we never want secret literals echoed to a terminal or CI log).
+  GITLEAKS_OUTPUT=$(gitleaks protect --staged --redact --no-banner --verbose 2>&1)
+  GITLEAKS_EXIT=$?
+  if [[ $GITLEAKS_EXIT -ne 0 ]]; then
+    echo ""
+    echo "╔═══════════════════════════════════════════════════════════╗"
+    echo "║  🔒 GITLEAKS: secret(s) detected                          ║"
+    echo "╠═══════════════════════════════════════════════════════════╣"
+    # Print at most the first 25 lines of gitleaks output (redacted values only)
+    echo "$GITLEAKS_OUTPUT" | head -25
+    echo "║  Secrets belong in .env or .copilot-credentials.md       ║"
+    echo "║  ❌ COMMIT BLOCKED — remove secrets first                 ║"
+    echo "╚═══════════════════════════════════════════════════════════╝"
+    echo ""
+    exit 1
+  fi
+fi
+
 SECRET_PATTERNS=(
   'sshpass -p [^*"$]|Hardcoded sshpass password (use SSHPASS env var)'
   'whsec_[A-Za-z0-9]{20,}|Stripe webhook secret (use .env)'

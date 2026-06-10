@@ -4,6 +4,11 @@ All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
 ## [Unreleased] — 2026-06-10 — P0 hygiene + audit log + quick wins
 
+### Added (quick-wins pass — P0 #4)
+- **`contextengine export-learnings`** CLI — `--project NAME [--category CAT] [--format json|markdown] [--include-universal]`. Filters a project's learnings into a self-contained export. Without `--project`, output carries an explicit "ALL projects (warning: cross-project IP)" banner so the user can't accidentally share a consultant's full cross-client store. Closes the consultant/contractor confidentiality gap from the audit.
+- **`gitleaks` wrapper** in `hooks/pre-commit` — if the `gitleaks` binary is on `$PATH`, the hook runs `gitleaks protect --staged --redact --no-banner --verbose` first (`~150` industry-standard patterns: Azure, GCP, OpenAI, Anthropic, JWT, SSH keys, npm tokens, etc.). CE's 17 in-house patterns + project-specific shapes (`Cr0wlr_Pr0d_`, `C0ldEm@il_`) and the `.copilot-credentials.md` guard still run after. Two-layer defense; the two are complementary, not redundant. End-to-end tested both branches: gitleaks present → blocks with gitleaks banner; absent → falls through to CE patterns (existing behavior preserved).
+- **3 CLI tests** for `export-learnings`: `--help` carries the cross-client warning; `--project <nonexistent>` returns valid empty JSON with the right scope envelope; markdown export without `--project` carries the ALL-projects warning header.
+
 ### Changed (quick-wins pass — P0 #4)
 - **`@huggingface/transformers` moved to `optionalDependencies`**. Cold install drops by ~427 MB (134 MB transformers + 201 MB onnxruntime-node + 91 MB onnxruntime-web + 1 MB onnxruntime-common). Locked-down npm proxies, air-gapped CI, and free-tier GitHub Actions runners no longer fail at install. BM25 keyword search ships always and is sufficient for most workspaces.
   - When the dep is absent at runtime, `initEmbeddings()` emits an actionable one-shot message pointing to `npm install @huggingface/transformers` and the MCP server keeps serving keyword-only search.
