@@ -34,6 +34,7 @@ import {
   formatSession,
   formatSessionList,
 } from "./sessions.js";
+import { verifyChain, readAuditLog, filterByRange } from "./audit.js";
 import {
   saveLearning,
   searchLearnings,
@@ -738,6 +739,40 @@ server.tool(
       ? `\n\nAvailable sessions: ${available.join(", ")}`
       : "";
     return respond("delete_session", `Session "${name}" not found.${hint}`);
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: audit_verify (Compliance — tamper-evident audit log)
+// ---------------------------------------------------------------------------
+server.tool(
+  "audit_verify",
+  "Verify the integrity of the local audit log chain. Returns OK + record count, or BROKEN + break index when a record has been edited or the chain otherwise diverges. Compliance basis: SOC2 CC7.2, ISO 27001 A.12.4.1. The audit log lives at ~/.contextengine/audit.log and records every state-changing operation (learning save/delete/import, session save/delete, activation activate/deactivate) as a hash-chained JSONL line.",
+  {
+    since: z.string().optional().describe("ISO date — restrict integrity report counters to records on/after this timestamp (chain still verified end-to-end)"),
+    until: z.string().optional().describe("ISO date — restrict counters to records on/before this timestamp"),
+  },
+  async ({ since, until }) => {
+    const report = verifyChain();
+    const records = (() => {
+      try { return readAuditLog(); } catch { return []; }
+    })();
+    const filtered = filterByRange(records, since, until);
+    const summary: string[] = [];
+    summary.push(`Audit chain: ${report.ok ? "✅ INTACT" : "❌ BROKEN"}`);
+    summary.push(`Total records: ${report.total}`);
+    if (since || until) {
+      summary.push(`Range filter: ${since ?? "start"} → ${until ?? "now"}  (${filtered.length} record(s) in range)`);
+    }
+    if (!report.ok) {
+      summary.push(`Break at index: ${report.breakAtIndex}`);
+      summary.push(`Reason: ${report.breakReason}`);
+      summary.push("");
+      summary.push("A broken chain means the log was either edited after the fact or partially");
+      summary.push("written during a crash. For compliance evidence, treat all records from the");
+      summary.push("break onward as unverified.");
+    }
+    return respond("audit_verify", summary.join("\n"));
   }
 );
 

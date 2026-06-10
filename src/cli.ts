@@ -583,6 +583,12 @@ import {
   getActivationStatus,
   gateCheck,
 } from "./activation.js";
+import {
+  readAuditLog,
+  verifyChain,
+  filterByRange,
+  toCsv,
+} from "./audit.js";
 
 // ---------------------------------------------------------------------------
 // Non-interactive mode: skip prompts when piped or --yes flag
@@ -911,6 +917,60 @@ async function cliDeleteSession(name: string): Promise<void> {
   process.exit(1);
 }
 
+async function cliAuditExport(args: string[]): Promise<void> {
+  let since: string | undefined;
+  let until: string | undefined;
+  let format: "jsonl" | "csv" = "jsonl";
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--since" && args[i + 1]) { since = args[++i]; continue; }
+    if (a === "--until" && args[i + 1]) { until = args[++i]; continue; }
+    if (a === "--format" && args[i + 1]) {
+      const f = args[++i];
+      if (f !== "jsonl" && f !== "csv") {
+        console.error(`Unknown format: ${f}. Supported: jsonl, csv.`);
+        process.exit(1);
+      }
+      format = f;
+      continue;
+    }
+    if (a === "-h" || a === "--help") {
+      console.log(`Usage: contextengine audit-export [--since ISO_DATE] [--until ISO_DATE] [--format jsonl|csv]\n\nExports the hash-chained audit log from ~/.contextengine/audit.log.\nCompliance use: SOC2 CC7.2, ISO 27001 A.12.4.1.`);
+      return;
+    }
+  }
+
+  let records;
+  try {
+    records = readAuditLog();
+  } catch (e) {
+    console.error(`Audit log unreadable: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
+  const filtered = filterByRange(records, since, until);
+
+  if (format === "csv") {
+    process.stdout.write(toCsv(filtered) + "\n");
+  } else {
+    for (const r of filtered) process.stdout.write(JSON.stringify(r) + "\n");
+  }
+}
+
+async function cliAuditVerify(): Promise<void> {
+  const report = verifyChain();
+  if (report.ok) {
+    console.log(`✅ Audit chain verified — ${report.total} record(s), hash chain intact.`);
+    return;
+  }
+  console.error(`❌ Audit chain BROKEN at index ${report.breakAtIndex} (of ${report.total}).`);
+  console.error(`   Reason: ${report.breakReason}`);
+  console.error(`\nA broken chain means the log was either edited after the fact, or a record was`);
+  console.error(`partially written during a crash. For compliance-graded evidence, treat all`);
+  console.error(`records from the break onward as unverified.`);
+  process.exit(2);
+}
+
 async function cliEndSession(): Promise<void> {
   const projectDirs = loadProjectDirs();
   const checks: string[] = [];
@@ -1222,6 +1282,9 @@ Usage:
   contextengine list-sessions          List all saved sessions
   contextengine delete-session <name>  Delete a saved session
   contextengine end-session            Pre-flight checklist (uncommitted changes, doc freshness)
+  contextengine audit-export [--since DATE] [--until DATE] [--format jsonl|csv]
+                                       Export hash-chained audit log (SOC2/ISO27001 evidence)
+  contextengine audit-verify           Verify audit log chain integrity (tamper detection)
   contextengine score [project] [--html] [--no-save] AI-readiness score (Pro, writes SCORE.md)
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
@@ -1325,6 +1388,16 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
   });
 } else if (command === "delete-session") {
   cliDeleteSession(process.argv[3] || "").catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "audit-export") {
+  cliAuditExport(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "audit-verify") {
+  cliAuditVerify().catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });

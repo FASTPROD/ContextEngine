@@ -4,8 +4,8 @@
 
 ## When to use
 
-- Modifying MCP server tools (19 tools in `src/index.ts` — `delete_session` registered in 2026-06 hygiene pass; previously declared in README but never wired)
-- Updating CLI subcommands (17 commands in `src/cli.ts` — `delete-session` added 2026-06)
+- Modifying MCP server tools (20 tools in `src/index.ts` — `delete_session` + `audit_verify` added in 2026-06)
+- Updating CLI subcommands (19 commands in `src/cli.ts` — `delete-session`, `audit-export`, `audit-verify` added 2026-06)
 - Changing search/ranking logic (`src/search.ts`, `src/embeddings.ts`)
 - Working on the learnings store (`src/learnings.ts`)
 - Modifying the activation server (`server/src/server.ts`, `server/src/stripe.ts`)

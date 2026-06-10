@@ -6,6 +6,7 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
 import { Chunk } from "./ingest.js";
+import { safeAppend } from "./audit.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -239,6 +240,13 @@ export function saveLearning(
     if (project) existing.project = project;
     existing.tags = extractTags(existing.rule, context, category);
     saveStore(store);
+    safeAppend("learning.save", {
+      id: existing.id,
+      category: existing.category,
+      project: existing.project,
+      rule_length: existing.rule.length,
+      mode: "update",
+    });
     return existing;
   }
 
@@ -255,6 +263,13 @@ export function saveLearning(
 
   store.learnings.push(learning);
   saveStore(store);
+  safeAppend("learning.save", {
+    id: learning.id,
+    category: learning.category,
+    project: learning.project,
+    rule_length: learning.rule.length,
+    mode: "create",
+  });
   return learning;
 }
 
@@ -336,8 +351,15 @@ export function deleteLearning(id: string): boolean {
   const store = loadStore();
   const index = store.learnings.findIndex((l) => l.id === id);
   if (index === -1) return false;
+  const removed = store.learnings[index];
   store.learnings.splice(index, 1);
   saveStore(store);
+  safeAppend("learning.delete", {
+    id: removed.id,
+    category: removed.category,
+    project: removed.project,
+    rule_length: typeof removed.rule === "string" ? removed.rule.length : 0,
+  });
   return true;
 }
 
@@ -379,10 +401,24 @@ export function importLearningsFromFile(
   const content = readFileSync(filePath, "utf-8");
   const ext = filePath.split(".").pop()?.toLowerCase();
 
-  if (ext === "json") {
-    return importFromJson(content, defaultProject);
-  }
-  return importFromMarkdown(content, defaultCategory, defaultProject);
+  const result = ext === "json"
+    ? importFromJson(content, defaultProject)
+    : importFromMarkdown(content, defaultCategory, defaultProject);
+
+  // Aggregate event correlating the individual learning.save records emitted
+  // inside the loop. Useful for compliance attribution: "this batch came from
+  // file X".
+  safeAppend("learning.import", {
+    source: filePath,
+    format: ext === "json" ? "json" : "markdown",
+    project: defaultProject,
+    imported: result.imported,
+    updated: result.updated,
+    skipped: result.skipped,
+    errors: result.errors.length,
+  });
+
+  return result;
 }
 
 function importFromJson(content: string, defaultProject?: string): ImportResult {

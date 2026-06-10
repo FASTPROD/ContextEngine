@@ -34,6 +34,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlink
 import { join } from "path";
 import { homedir } from "os";
 import { createHash, createDecipheriv } from "crypto";
+import { safeAppend } from "./audit.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -186,6 +187,14 @@ export async function activate(licenseKey: string, email: string): Promise<{
     // Decrypt and store delta modules
     await installDelta(data.delta, data.license.key);
 
+    safeAppend("activation.activate", {
+      plan: data.license.plan,
+      email: data.license.email,
+      machine_id: data.license.machineId,
+      expires_at: data.license.expiresAt,
+      delta_version: data.license.deltaVersion,
+    });
+
     return {
       success: true,
       message: `✅ Activated! Plan: ${data.license.plan}, expires: ${data.license.expiresAt}`,
@@ -337,16 +346,24 @@ export async function heartbeat(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 export function deactivate(): void {
+  const prior = loadLicense();
+
   // Remove license
   if (existsSync(LICENSE_FILE)) unlinkSync(LICENSE_FILE);
-  
+
   // Remove delta modules
   if (existsSync(DELTA_DIR)) {
     for (const file of readdirSync(DELTA_DIR)) {
       unlinkSync(join(DELTA_DIR, file));
     }
   }
-  
+
+  safeAppend("activation.deactivate", {
+    prior_plan: prior?.plan ?? null,
+    prior_email: prior?.email ?? null,
+    machine_id: prior?.machineId ?? null,
+  });
+
   console.error("[ContextEngine] 🔒 Deactivated — premium features removed");
 }
 

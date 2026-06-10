@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { safeAppend } from "./audit.js";
 
 /**
  * Session Persistence — save/restore conversation context between sessions.
@@ -70,6 +71,12 @@ export function saveSession(name: string, key: string, value: string): Session {
   }
 
   writeFileSync(path, JSON.stringify(session, null, 2));
+  safeAppend("session.save", {
+    name: session.name,
+    key,
+    value_length: value.length,
+    entries: session.entries.length,
+  });
   return session;
 }
 
@@ -124,6 +131,7 @@ export function deleteSession(name: string): boolean {
   const path = sessionPath(name);
   if (existsSync(path)) {
     unlinkSync(path);
+    safeAppend("session.delete", { name });
     return true;
   }
   return false;

@@ -2,10 +2,21 @@
 
 All notable changes to ContextEngine (MCP server + CLI) are documented here.
 
-## [Unreleased] — 2026-06-10 — P0 hygiene pass
+## [Unreleased] — 2026-06-10 — P0 hygiene + tamper-evident audit log
 
-### Added
-- **`delete_session` MCP tool** — registered in `src/index.ts` (was exported but never wired). README claimed 19 tools while only 18 were registered; the tool table is now truthful.
+### Added (audit log workstream — P0 #3, part 1 of 2)
+- **`src/audit.ts`** — hash-chained JSONL audit log at `~/.contextengine/audit.log`. Every state-changing operation appends one canonically-serialized record with `{ts, event, actor, payload, prev_hash, hash}`. The chain is rooted at a 64-zero genesis hash; each record's hash covers the canonical bytes of itself plus its `prev_hash`, so any historical mutation breaks chain verification at the mutated index.
+  - Compliance basis: SOC2 CC7.2 (audit logging), ISO 27001 A.12.4.1 (event logs).
+  - Privacy: records carry **metadata only** — IDs, categories, projects, lengths. Never the rule text, session value content, or license signature.
+  - `safeAppend()` wrapper isolates audit failures from production hot paths (failed appends log to stderr only — they cannot break a learning save or session write).
+  - Paths injectable via `CONTEXTENGINE_HOME` env var so tests run against `mkdtempSync` without touching real `~/.contextengine`.
+- **Wired into** `saveLearning`, `deleteLearning`, `importLearningsFromFile` (+ per-entry events from the inner save loop), `saveSession`, `deleteSession`, `activate`, `deactivate`. Aggregate `learning.import` event correlates the batch with its individual `learning.save` records.
+- **`audit_verify` MCP tool** — agents can self-check the chain (returns OK + count, or BROKEN + break index + reason).
+- **CLI commands** — `contextengine audit-export [--since DATE] [--until DATE] [--format jsonl|csv]` and `contextengine audit-verify` (exit code 2 on broken chain so CI/cron can monitor).
+- **19 audit tests** (`tests/audit.test.ts`) — append/genesis hash, multi-record chain linking, payload tampering detection, prev_hash splicing detection, appended-forgery detection, graceful failure on corrupt JSON, range filtering, RFC 4180 CSV escaping. All tests run in isolated `tmpdir()` directories.
+
+### Added (P0 hygiene pass)
+- **`delete_session` MCP tool** — registered in `src/index.ts` (was exported but never wired). README claimed 19 tools while only 18 were registered; the tool table is now truthful (20 with `audit_verify`).
 - **`delete-session` CLI command** — `npx @compr/contextengine-mcp delete-session <name>`.
 
 ### Changed
@@ -25,7 +36,8 @@ All notable changes to ContextEngine (MCP server + CLI) are documented here.
   - `VSCODE_EXTENSION_STEPS.md` — done-status runbook from Feb 2026.
 
 ### Notes
-- **Not in this pass** (separate workstream): activation `LicenseInfo.signature` validation in `loadLicense()` is still missing (security bug + revenue leak). Requires Ed25519 keypair + server-side issuance flow.
+- **Audit log = part 1 of P0 #3**. Part 2 (activation `LicenseInfo.signature` Ed25519 verification in `loadLicense()`) is the security/revenue leak fix and remains a separate workstream — requires keypair generation, server-side issuance, and migration of existing licenses.
+- **README tool count is now 20** (added `audit_verify`). MARKETING Reddit Post #5 should be re-synced in the next hygiene sweep.
 
 ## [1.23.1] — 2026-04-18
 

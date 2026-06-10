@@ -224,7 +224,7 @@ npx @compr/contextengine-mcp help
 
 CLI mode uses keyword search (BM25) which is instant — no model loading required.
 
-## Tools (19)
+## Tools (20)
 
 | Tool | Description | Tier |
 |------|-------------|------|
@@ -241,6 +241,7 @@ CLI mode uses keyword search (BM25) which is instant — no model loading requir
 | `list_learnings` | List all permanent learnings, optionally by category | Free |
 | `delete_learning` | Remove a learning by ID | Free |
 | `import_learnings` | Bulk-import learnings from Markdown or JSON files | Free |
+| `audit_verify` | Verify tamper-evident audit log chain (SOC2 CC7.2, ISO 27001 A.12.4.1) | Free |
 | `activate` | Activate a PRO license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 | `list_projects` | Discover and analyze all projects (tech stack, git, docker) | PRO |
