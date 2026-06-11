@@ -142,7 +142,7 @@ export function loadLicense(): LicenseInfo | null {
     if (!verify.ok) {
       console.error(
         `[ContextEngine] ⛔ License signature rejected — ${verify.reason}. Premium features disabled. ` +
-        `Reactivate at https://compr.ch/contextengine/pricing if this surprises you.`,
+        `Reactivate at https://api.compr.ch/contextengine/pricing if this surprises you.`,
       );
       safeAppend("activation.signature_reject", {
         plan: data.plan,
@@ -151,6 +151,10 @@ export function loadLicense(): LicenseInfo | null {
       });
       return null;
     }
+    // The legacy-grandfathered branch is no longer reachable since the
+    // 2026-06-11 flag day — legacy SHA-256 signatures now return ok:false
+    // and are rejected above. Branch kept defensively in case the type
+    // union ever changes (zero cost; dead in 2.0.1+).
     if (verify.mode === "legacy-grandfathered") {
       console.error(`[ContextEngine] ⚠ ${verify.warning}`);
       safeAppend("activation.legacy_signature", {
@@ -447,7 +451,7 @@ export function gateCheck(toolName: string): string | null {
   if (!license) {
     return `🔒 "${toolName}" requires a ContextEngine Pro license.\n\n` +
       `Activate with: npx contextengine activate <license-key> <email>\n` +
-      `Get a license: https://compr.ch/contextengine/pricing\n\n` +
+      `Get a license: https://api.compr.ch/contextengine/pricing\n\n` +
       `Free tools available: search_context, list_sources, read_source, reindex, ` +
       `save_session, load_session, list_sessions, end_session, save_learning, ` +
       `list_learnings, import_learnings`;

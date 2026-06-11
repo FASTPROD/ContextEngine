@@ -1879,7 +1879,7 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
   const email = process.argv[4];
   if (!key || !email) {
     console.error("Usage: contextengine activate <license-key> <email>");
-    console.error("Get a license: https://compr.ch/contextengine/pricing");
+    console.error("Get a license: https://api.compr.ch/contextengine/pricing");
     process.exit(1);
   }
   activate(key, email).then((result) => {

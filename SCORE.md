@@ -58,3 +58,16 @@
 - **delete_session tool now registered**: was claimed by README (19 tools) but only 18 wired. Now actually 19 — no scoring impact, just truth alignment.
 - **Sourcemaps removed from tarball + obfuscation script deleted**: no scoring impact, but tarball is ~28% smaller and the "obfuscation defeated by shipped sourcemap" enterprise red flag is gone.
 - **PRO module list corrected**: `collectors` removed from `PREMIUM_MODULES` because collectors.ts runs for all users unconditionally. The 4 PRO tools that consume the data remain gated. No scoring impact; closes the freemium-theater gap.
+
+## 2026-06-11 — OpsContext launch + Ed25519 deploy + 2.0.1 flag-day-early
+
+- **Project name**: still "ContextEngine" internally — storage paths, env vars, config name, CLI bin alias, VS Code extension status bar all still say "CE". Marketing identity is "OpsContext for AI Agents" (the package on npm + README headline). Compliance instructions to AI agents can keep using "comply with the CE" — unambiguous, no need to retrain.
+- **Two npm releases this day**:
+  - `2.0.0` — the rename + the full audit-log / policy / hooks / Claude-integration arc.
+  - `2.0.1` — flag-day-reached release. Legacy SHA-256 license signatures now rejected (originally scheduled for 2026-08-15; moved forward because the customer base is effectively empty). Plus the pricing-href fix.
+- **Ed25519 production deploy** — `api.compr.ch` activation server now signs licenses with Ed25519. Caught a real prod bug during deploy (path bug: `join(__dirname, "..", "..", ...)` walked one level too high on compiled `dist/`), 502 for ~3 minutes, fixed and verified. Tests for the verifier added.
+- **`server/deploy.sh` hardened** — pre-flight builds locally, post-deploy `/health` smoke test, full PM2 path. `--dry-run` supported.
+- **CLAUDE.md auto-managed section** — `opscontext sync-claude-md` keeps a managed block in CLAUDE.md with top learnings + active policy + recent hook blocks. Loaded into every Claude Code session at start with zero MCP calls.
+- **`opscontext install-skill`** — bundles a Claude Code skill that Claude Code surfaces via its native skills loading. Installed globally on the maintainer's machine (visible in the available-skills list).
+- **No real scoring impact** from any of the above; project structure unchanged. The score is now stale at 95/100 (A+) — last computed Feb 27. Re-running `score --html` would be the next legitimate update.
+- **Tarball trajectory across the session**: 141 kB pre-audit → 101 kB post-hygiene → 122 kB after audit+policy+hooks → 136 kB at 2.0.1 (adds Claude integration). Still smaller than pre-audit despite three substantive new modules and Claude integration.

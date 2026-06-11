@@ -2,6 +2,27 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
+## [2.0.1] — 2026-06-11 — Flag day reached early + pricing href fix
+
+### Changed
+- **Legacy SHA-256 license signatures are now REJECTED** (the "flag day" originally scheduled for 2026-08-15). Brought forward to today because the production licence DB analysis showed the customer base is effectively empty — the only real active license belongs to the maintainer, who has already re-activated to Ed25519. Three other "active" rows in the DB are licenses that expired 2026-04-27 and are already failing the expiry check on every load. Bringing the flag day forward by ~10 weeks costs nothing real and removes the half-open security loophole sooner.
+  - `src/license-sig.ts` `verifyLicenseSignature()` — the 64-char hex branch now returns `{ ok: false, reason: "Legacy SHA-256 ... reactivate at ..." }` instead of `{ ok: true, mode: "legacy-grandfathered" }`.
+  - LOCK comment on the file updated: the flag-day-reached marker replaces the warning-about-grandfathering text.
+  - `src/activation.ts` `loadLicense()` — the `if (verify.mode === "legacy-grandfathered")` branch is now defensive dead code (kept since the union type still carries the variant for backward compat with audit-log records).
+  - `tests/license-sig.test.ts` — the test that previously asserted `mode: "legacy-grandfathered"` now asserts `ok: false` with a reactivation pointer in the reason. Test renamed `REJECTS legacy SHA-256 hex signature (flag day reached 2026-06-11)`.
+- **Pricing URL href fix** in 5 source files. The user-facing strings referenced `https://compr.ch/contextengine/pricing` which returns 404; only `https://api.compr.ch/contextengine/pricing` resolves. Files: `src/activation.ts:145, 450`, `src/cli.ts:1882`, `src/index.ts:1132, 1170`.
+- **`docs/deploy/ED25519_FLAG_DAY.md`** can now be archived — the action it scheduled was completed today. Leaving the file in place as a historical record.
+- **`server/deploy.sh` hardened** (this was committed earlier as `bbeffe8`, but tying it to the release for context): pre-flight builds locally, smoke-tests `/health` after deploy and dies on broken state, uses the full PM2 path that actually works in non-interactive ssh shells. Supports `--dry-run`.
+
+### Why this is patch-level, not minor
+The behaviour change is a tightening of a check that was documented as temporary from day one. The semver contract said legacy signatures would be rejected after the flag day; the date moved up because the situation allowed it. No new features. No removed APIs.
+
+### Notes
+- 4 paying-customer rows in the activation DB; 1 is real and active (maintainer's enterprise license, already re-activated). The other 3 already expired April 27 and are non-active per the client's expiry check.
+- Customer notification email (originally scheduled for 2026-08-08) skipped — would have been a no-op or a re-engagement note to the two `gmail.com` addresses whose licenses expired. Yannick can send re-engagement separately if he wants.
+
+
+
 ## [2.0.0] — 2026-06-10 — Strategic pivot + Claude Code native integration (A+B+C)
 
 ### Added (Claude Code integration — A + B + C from the rebrand backlog)

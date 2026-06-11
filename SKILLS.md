@@ -117,8 +117,8 @@
   4. Client decrypts + installs delta modules under `~/.contextengine/delta/`, saves the license to `~/.contextengine/license.json`.
 - **`loadLicense()` verification** has three outcomes via `verifyLicenseSignature()` in `src/license-sig.ts` (LOCK `[LICENSE-SIG]`):
   - `ed25519` → cryptographically verified, full trust.
-  - `legacy-grandfathered` → pre-Ed25519 SHA-256 hash (64-char hex). Allowed with a one-line warning + `activation.legacy_signature` audit event so existing licensees keep access; rejected after the documented flag day.
-  - reject → forged / tampered / wrong keypair / missing. License dropped, `activation.signature_reject` audit event with reason.
+  - `legacy-grandfathered` → **NO LONGER REACHABLE since the flag day was hit 2026-06-11 (2.0.1 release).** The 64-char hex shape now returns `ok: false` with a reactivation pointer in the reason string. The `legacy-grandfathered` variant is kept in the type union for backward compat with existing audit log records carrying `activation.legacy_signature` events from before the flag day.
+  - reject → forged / tampered / wrong keypair / missing / **legacy SHA-256**. License dropped, `activation.signature_reject` audit event with reason.
 - **Public key** is embedded at top of `src/license-sig.ts` (fingerprint `12d0c34c917a47fbed99945d2b7fb439`). Self-hosters override via `CE_LICENSE_PUBLIC_KEY` env var.
 - **Private key** lives at `server/.secrets/ed25519-license-private.pem` on dev (gitignored, mode 0600). In production, mounted via `ED25519_PRIVATE_KEY_PATH` or `ED25519_PRIVATE_KEY_PEM` env var.
 - **Canonical payload is byte-pinned** — `canonicalPayload()` is duplicated identically in client + server license-sig.ts. Each side has a test asserting a known-input → known-output reference string. Drift between the two is the one thing that silently breaks every license.

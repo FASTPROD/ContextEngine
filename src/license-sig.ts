@@ -1,4 +1,4 @@
-// 🔒 LOCKED [LICENSE-SIG] — 2026-06-10
+// 🔒 LOCKED [LICENSE-SIG] — 2026-06-10 (flag day reached 2026-06-11)
 // ⛔ NEVER change canonicalPayload()'s key order or field set without
 //    bumping a new "sig_v":2 marker AND keeping v1 verification working
 //    forever. The byte output of this function is what the Ed25519
@@ -8,10 +8,11 @@
 //    that pins the client to the production activation server.
 //    Self-hosters override via CE_LICENSE_PUBLIC_KEY env var, which
 //    is the documented escape hatch.
-// ⛔ NEVER reject legacy SHA-256 signatures silently. Today they're
-//    grandfathered with a one-line warning + audit event. The flag
-//    day for rejection is a SEPARATE commit, called out in CHANGELOG,
-//    and gives existing licensees 30+ days to reactivate.
+// ⛔ Legacy SHA-256 signatures are NOW REJECTED (flag day reached
+//    2026-06-11 — earlier than the originally scheduled 2026-08-15
+//    because the customer base is effectively empty and no one would
+//    be impacted). The 64-char hex shape returns ok:false with a
+//    reactivation pointer.
 // WHY: Audit identified that loadLicense() did NOT verify the
 //    signature field — anyone could write ~/.contextengine/license.json
 //    with plan:"enterprise" and unlock all PRO tools. Security bug +
@@ -96,12 +97,17 @@ export function verifyLicenseSignature(
   }
   // Legacy detection: pre-Ed25519 signatures were SHA-256 hex (64 chars).
   // Real Ed25519 signatures are 64 raw bytes → 88-char base64.
+  // Flag day reached 2026-06-11: legacy signatures are now REJECTED.
+  // The mode "legacy-grandfathered" + the activation.legacy_signature
+  // audit event are kept in the type union for backward compatibility
+  // with existing audit log records but are no longer emitted.
   if (/^[a-f0-9]{64}$/.test(license.signature)) {
     return {
-      ok: true,
-      mode: "legacy-grandfathered",
-      warning:
-        "Legacy SHA-256 license signature accepted (grandfathered). Reactivate to get an Ed25519-signed license — pre-flag-day licenses will be rejected after the cutover.",
+      ok: false,
+      reason:
+        "Legacy SHA-256 license signature is no longer accepted (flag day 2026-06-11). " +
+        "Run `npx @compr/opscontext-mcp activate <key> <email>` to refresh to an Ed25519-signed license, " +
+        "or see https://api.compr.ch/contextengine/pricing if you need a key.",
     };
   }
   try {

@@ -117,14 +117,16 @@ describe("verifyLicenseSignature", () => {
     expect(r.ok).toBe(false);
   });
 
-  it("grandfathers a legacy SHA-256 hex signature (64-char hex) with a warning", () => {
+  it("REJECTS legacy SHA-256 hex signature (flag day reached 2026-06-11)", () => {
+    // Before the flag day, this returned { ok: true, mode: 'legacy-grandfathered' }.
+    // The flag day fired early because the customer base is empty — see the LOCK
+    // block in src/license-sig.ts.
     const legacyHexSig = "a".repeat(64);
     const r = verifyLicenseSignature({ ...REFERENCE_LICENSE, signature: legacyHexSig });
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.mode).toBe("legacy-grandfathered");
-      // Warning must point to reactivation, not silently pass
-      expect(r.warning.toLowerCase()).toMatch(/reactivate|flag day|grandfathered/);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      // Reason must point to reactivation so users know how to recover
+      expect(r.reason.toLowerCase()).toMatch(/legacy|sha-256|reactivate|activate/);
     }
   });
 

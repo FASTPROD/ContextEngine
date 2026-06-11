@@ -1129,7 +1129,7 @@ server.tool(
 // ---------------------------------------------------------------------------
 server.tool(
   "activate",
-  "Activate a ContextEngine Pro license to unlock premium tools (score_project, run_audit, check_ports, list_projects, HTML reports). Get a license at https://compr.ch/contextengine/pricing",
+  "Activate a ContextEngine Pro license to unlock premium tools (score_project, run_audit, check_ports, list_projects, HTML reports). Get a license at https://api.compr.ch/contextengine/pricing",
   {
     license_key: z.string().describe("Your ContextEngine license key"),
     email: z.string().describe("Email associated with the license"),
@@ -1167,7 +1167,7 @@ server.tool(
       lines.push(`### 🔒 Premium Tools (requires activation)`);
       lines.push(`- score_project, run_audit, check_ports, list_projects`);
       lines.push(``);
-      lines.push(`Get a license: https://compr.ch/contextengine/pricing`);
+      lines.push(`Get a license: https://api.compr.ch/contextengine/pricing`);
       lines.push(`Activate: \`npx contextengine activate <key> <email>\``);
     }
     return respond("activation_status", lines.join("\n"));
