@@ -64,9 +64,12 @@ export function loadPrivateKey(): KeyObject {
   if (process.env.ED25519_PRIVATE_KEY_PEM) {
     return createPrivateKey(process.env.ED25519_PRIVATE_KEY_PEM);
   }
+  // __dirname is <server>/dist after tsc — one ".." reaches <server>/, where
+  // .secrets/ lives. (Earlier this used TWO ".." which landed at /var/www/
+  // on the production VPS and broke startup. Caught in prod 2026-06-11.)
   const path =
     process.env.ED25519_PRIVATE_KEY_PATH ||
-    join(__dirname, "..", "..", ".secrets", "ed25519-license-private.pem");
+    join(__dirname, "..", ".secrets", "ed25519-license-private.pem");
   if (!existsSync(path)) {
     throw new Error(
       `Ed25519 private key not found at ${path}. Set ED25519_PRIVATE_KEY_PEM or ED25519_PRIVATE_KEY_PATH, or place the file at server/.secrets/ed25519-license-private.pem (chmod 600). NEVER commit it.`,
