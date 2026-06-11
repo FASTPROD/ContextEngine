@@ -1,12 +1,16 @@
 {
   "_comment": "Metadata about the npm publish token. Used by scripts/check-npm-token-expiry.mjs as a prepublishOnly check. Update this file every time the token rotates (the token VALUE itself lives in ~/.npmrc + .copilot-credentials.md — NEVER here).",
-  "tokenName": "ContextEngine-Publish-GranularApr2026",
+  "tokenName": "compr-scope-publish-2026-06",
   "tokenType": "granular",
-  "scope": "@compr/contextengine-mcp read+write",
-  "createdAt": "2026-04-18",
-  "expiresAt": "2026-07-17",
+  "scope": "@compr (scope-level Read and write — bypass-2FA enabled)",
+  "createdAt": "2026-06-11",
+  "expiresAt": "2026-07-11",
   "warnDaysBefore": 14,
   "blockDaysBefore": 0,
   "rotationDocPath": ".copilot-credentials.md",
-  "rotationNotes": "https://www.npmjs.com/settings/<account>/tokens/granular-access-tokens/new — scope @compr/contextengine-mcp read+write, expiry 90d. Update ~/.npmrc (_authToken=) AND .copilot-credentials.md AND this file's `expiresAt`. Run bash ~/Projects/backup-credentials.sh after."
+  "rotationHistory": [
+    "2026-04-18 — ContextEngine-Publish-GranularApr2026 (per-package scope @compr/contextengine-mcp); expired May 19 2026; could not publish new package names in @compr",
+    "2026-06-11 — compr-scope-publish-2026-06 (scope-level on @compr, bypass-2FA on); used for the 2.0.0 rebrand publish + deprecation of @compr/contextengine-mcp"
+  ],
+  "rotationNotes": "https://www.npmjs.com/settings/<account>/tokens/granular-access-tokens/new — select scope @compr (NOT individual package), Read and write, ✅ Bypass two-factor authentication, 30-day expiry. Update ~/.npmrc (_authToken=) AND .copilot-credentials.md AND this file's tokenName/scope/createdAt/expiresAt. Run bash ~/Projects/backup-credentials.sh after."
 }
