@@ -59,6 +59,15 @@
 - **Sourcemaps removed from tarball + obfuscation script deleted**: no scoring impact, but tarball is ~28% smaller and the "obfuscation defeated by shipped sourcemap" enterprise red flag is gone.
 - **PRO module list corrected**: `collectors` removed from `PREMIUM_MODULES` because collectors.ts runs for all users unconditionally. The 4 PRO tools that consume the data remain gated. No scoring impact; closes the freemium-theater gap.
 
+## 2026-06-11 (Session 07) — VS Code Marketplace rebrand `css-llc.contextengine 0.8.0`
+
+- **Live on Marketplace**: `css-llc.contextengine v0.8.0` with **displayName "OpsContext — AI Agent Compliance"**. CDN propagation was instant — verified by direct GET on the listing page immediately after publish.
+- **Back-compat preserved across every interface**: extension ID `css-llc.contextengine` unchanged (no user reinstalls), all 6 command IDs (`contextengine.*`) kept (no broken keybindings), all 5 config keys (`contextengine.*`) kept (no broken settings.json), chat handle `@contextengine` kept (no broken transcripts), status bar abbreviation `CE` kept (compact, brand-consistent with the `contextengine` bin alias).
+- **CRITICAL fix** bundled: `vscode-extension/src/contextEngineClient.ts` CLI delegate switched from `@compr/contextengine-mcp` to `@compr/opscontext-mcp`. Without this, every PRO / search / sync feature would silently degrade to a 1.x install once the deprecated package stops being installable. LOCK `[OPSCONTEXT-CLI]` added at the call site so a future cleanup pass doesn't revert it.
+- **Drift bug fixed**: WebView footer was hardcoded `v0.6.0` (had been wrong since the 0.7.0 release). Now reads dynamically from `vscode.extensions.getExtension("css-llc.contextengine")?.packageJSON?.version`. Pattern is reusable anywhere else a version would otherwise be hardcoded.
+- **23 edits, one commit** (`3cd1413`). Safety tag `pre-rebrand-0.7.1` pushed before the change for forward-only rollback. Release tag `v0.8.0-vscode` pushed after.
+- **No scoring impact** on the AI-readiness rubric — the score is for the main project, not the extension. Extension's own quality would now be "well-organized for AI agents" too if scored separately.
+
 ## 2026-06-11 — OpsContext launch + Ed25519 deploy + 2.0.1 flag-day-early
 
 - **Project name**: still "ContextEngine" internally — storage paths, env vars, config name, CLI bin alias, VS Code extension status bar all still say "CE". Marketing identity is "OpsContext for AI Agents" (the package on npm + README headline). Compliance instructions to AI agents can keep using "comply with the CE" — unambiguous, no need to retrain.
