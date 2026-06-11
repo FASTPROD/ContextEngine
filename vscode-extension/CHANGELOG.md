@@ -2,6 +2,16 @@
 
 All notable changes to the OpsContext VS Code Extension (previously ContextEngine).
 
+## [0.8.2] — 2026-06-11 — HTML Score Report button in the info panel
+
+### Added
+- **"Generate HTML Score Report" button inside the `ℹ️ OpsContext — Dashboard` WebView panel**. The 0.8.1 release made the report invokable from the Command Palette; 0.8.2 makes it invokable from the existing dashboard the user already has open. The button delegates to the same `contextengine.scoreHtml` command — same handler, two surfaces. DRY.
+- **WebView ↔ extension messaging wired up**: `webview.onDidReceiveMessage` handler in `src/infoPanel.ts` routes `{command: 'scoreHtml'}` to the existing command and `{command: 'openPricing'}` to the pricing page. Same pattern is reusable for any future WebView-side button.
+- **Upgrade CTA button** (the "Get OpsContext PRO →" link in the same panel) converted from `<a href>` to a `<button>` that posts a message → opens external. Consistent click handling, cleaner WebView CSP posture.
+
+### Why patch, not minor
+Pure UX surfacing. The actual feature (HTML score report generation) shipped in 0.8.1; 0.8.2 just adds a second entry point in a panel the user already opens. No new APIs, no contract changes, no behavior change for users who only used the Command Palette.
+
 ## [0.8.1] — 2026-06-11 — Closeable paid-feature gap: HTML Score Report command
 
 ### Added

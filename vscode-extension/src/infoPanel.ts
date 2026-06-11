@@ -83,6 +83,19 @@ export function showInfoPanel(
 
   currentPanel.webview.html = getInfoHtml(snapshot, stats, sessionActive);
 
+  // WebView → extension messaging. Buttons in the HTML postMessage and we
+  // execute the corresponding command. Keeps logic DRY with the Command
+  // Palette entry — same handler, two surfaces.
+  currentPanel.webview.onDidReceiveMessage((msg) => {
+    if (msg?.command === "scoreHtml") {
+      vscode.commands.executeCommand("contextengine.scoreHtml");
+    } else if (msg?.command === "openPricing") {
+      vscode.env.openExternal(
+        vscode.Uri.parse("https://api.compr.ch/contextengine/pricing"),
+      );
+    }
+  }, undefined, context.subscriptions);
+
   currentPanel.onDidDispose(() => {
     currentPanel = undefined;
   });
@@ -442,6 +455,23 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
   </div>
 
   <!-- ======================================================== -->
+  <!-- PRO ACTIONS                                               -->
+  <!-- ======================================================== -->
+  <!-- The HTML Score Report button works for everyone — non-PRO users
+       get a friendly upgrade notification from the command itself
+       (handler in extension.ts). One click, one path, regardless of plan. -->
+  <div class="cta-box" style="background: rgba(59, 130, 246, 0.08); border-color: var(--accent);">
+    <div style="font-size: 1.15em; font-weight: 700;">📊 Generate HTML Score Report</div>
+    <p class="cta-subtitle" style="margin: 6px 0 12px;">
+      AI-readiness scorecard for the active project — opens in your browser.
+      <span style="display:inline-block; padding:2px 6px; background:rgba(59,130,246,0.2); border-radius:4px; font-size:0.7em; vertical-align: middle;">PRO</span>
+    </p>
+    <button class="cta-button" onclick="vscode.postMessage({command:'scoreHtml'})" style="border: 0; cursor: pointer;">
+      Generate Report →
+    </button>
+  </div>
+
+  <!-- ======================================================== -->
   <!-- UPGRADE CTA                                               -->
   <!-- ======================================================== -->
   <div class="cta-box">
@@ -450,9 +480,16 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
     <div style="margin: 12px 0;">
       <strong>Pro</strong> CHF 2/mo · <strong>Team</strong> CHF 12/mo · <strong>Enterprise</strong> CHF 36/mo
     </div>
-    <a class="cta-button" href="https://api.compr.ch/contextengine/pricing">Get OpsContext PRO →</a>
+    <button class="cta-button" onclick="vscode.postMessage({command:'openPricing'})" style="border: 0; cursor: pointer;">
+      Get OpsContext PRO →
+    </button>
     <p class="cta-subtitle">Already have a key? Run <code>npx @compr/opscontext-mcp activate</code></p>
   </div>
+
+  <script>
+    // Acquire VS Code API once for the postMessage calls in the buttons above.
+    const vscode = acquireVsCodeApi();
+  </script>
 
   <p style="text-align: center; margin-top: 24px; color: var(--vscode-descriptionForeground);">
     OpsContext v${extVersion} · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
