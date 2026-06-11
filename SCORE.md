@@ -59,6 +59,16 @@
 - **Sourcemaps removed from tarball + obfuscation script deleted**: no scoring impact, but tarball is ~28% smaller and the "obfuscation defeated by shipped sourcemap" enterprise red flag is gone.
 - **PRO module list corrected**: `collectors` removed from `PREMIUM_MODULES` because collectors.ts runs for all users unconditionally. The 4 PRO tools that consume the data remain gated. No scoring impact; closes the freemium-theater gap.
 
+## 2026-06-11 (Session 08) — HTML score report UX close-out — npm 2.0.2 + ext 0.8.1
+
+- **Browser tab title now says "OpsContext Score Report"** — `src/agents.ts:1705` `<title>` tag rebrand shipped as `@compr/opscontext-mcp@2.0.2`. Single-line change, semver patch. No API change. Visible when a paying user (or the `score --html` CLI flag) generates the report.
+- **New VS Code command `OpsContext: Generate HTML Score Report (PRO)`** — discoverable in Command Palette. Pre-flight PRO check leads the upgrade flow instead of trailing a confusing error. If PRO: CLI generates HTML, auto-opens in browser, notification offers Reveal in Finder + Open file. If NOT PRO: warning notification with three actions (Get a Pro key → pricing page; Already have a key? Activate → surfaces activate command; Dismiss).
+- **Why this matters**: the pricing page advertises *"HTML score reports — ✓"* for PRO, but until 0.8.1 there was no clickable path for paying users to invoke the report they paid for. Only path was opening a terminal and running `npx @compr/opscontext-mcp score --html`. The new command closes the visible-paid-feature gap.
+- **Both releases verified live**: registry GET returns `dist-tags.latest = 2.0.2`; `vsce publish 0.8.1` returned `DONE`; Marketplace listing still shows "OpsContext".
+- **Tags pushed**: `v2.0.2`, `v0.8.1-vscode`. Both alongside existing `v2.0.0`, `v2.0.1`, `v0.8.0-vscode`, `pre-rebrand-0.7.1`.
+- **182 / 182 tests passing** on the npm side. Extension compiled clean and packaged to 63.76 kB.
+- **No scoring impact** on the main project's AI-readiness rubric.
+
 ## 2026-06-11 (Session 07) — VS Code Marketplace rebrand `css-llc.contextengine 0.8.0`
 
 - **Live on Marketplace**: `css-llc.contextengine v0.8.0` with **displayName "OpsContext — AI Agent Compliance"**. CDN propagation was instant — verified by direct GET on the listing page immediately after publish.
