@@ -72,6 +72,7 @@ cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 | `OpsContext: End Session Checklist` | Run end-of-session protocol |
 | `OpsContext: Search Knowledge Base` | Search OpsContext knowledge |
 | `OpsContext: Sync Docs` | Check doc freshness across all projects |
+| `OpsContext: Generate HTML Score Report (PRO)` | Generate + open HTML AI-readiness report. Pre-flight PRO check; non-PRO users see an upgrade notification. |
 
 ## Configuration
 

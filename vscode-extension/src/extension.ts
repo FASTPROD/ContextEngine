@@ -588,6 +588,95 @@ function registerCommands(
       );
     })
   );
+
+  // -----------------------------------------------------------------------
+  // contextengine.scoreHtml — Generate HTML score report (PRO)
+  // -----------------------------------------------------------------------
+  // Closes the visible-paid-feature gap: the pricing page advertises
+  // "HTML score reports — ✓" for PRO, but before 0.8.1 there was no
+  // clickable path to invoke it from the extension. Users had to know to
+  // open a terminal and run `contextengine score --html`. Now it's a
+  // command palette entry that gates correctly + opens the report.
+  context.subscriptions.push(
+    vscode.commands.registerCommand("contextengine.scoreHtml", async () => {
+      const folders = vscode.workspace.workspaceFolders;
+      const defaultProject = folders?.[0]?.name;
+
+      // Pre-flight PRO check so the upgrade flow LEADS instead of trailing
+      // a confusing error.
+      const isPro = await client.isProActivated();
+      if (!isPro) {
+        const choice = await vscode.window.showWarningMessage(
+          "OpsContext: HTML score reports are a PRO feature. Upgrade to unlock " +
+            "Project Health Score (A+ to F), Compliance Audit, Port Conflict " +
+            "Detection, Multi-Project Discovery, and HTML reports.",
+          "Get a Pro key",
+          "Already have a key? Activate",
+          "Dismiss",
+        );
+        if (choice === "Get a Pro key") {
+          vscode.env.openExternal(
+            vscode.Uri.parse("https://api.compr.ch/contextengine/pricing"),
+          );
+        } else if (choice === "Already have a key? Activate") {
+          // Surface the exact command they need; we don't take the key
+          // through the UI because activate writes to ~/.contextengine/
+          // and the CLI path is the canonical activation surface.
+          vscode.window.showInformationMessage(
+            "Run in a terminal: npx @compr/opscontext-mcp activate <key> <email>",
+          );
+        }
+        return;
+      }
+
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `OpsContext: Generating HTML score report${defaultProject ? ` for ${defaultProject}` : ""}…`,
+          cancellable: false,
+        },
+        async () => {
+          try {
+            const path = await client.generateHtmlScoreReport(defaultProject);
+            // The CLI auto-opens the file in the default browser, so we just
+            // confirm and surface the path for the user who wants to share it.
+            const action = await vscode.window.showInformationMessage(
+              `OpsContext: Score report ready → ${path}`,
+              "Reveal in Finder",
+              "Open file",
+            );
+            if (action === "Reveal in Finder") {
+              vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(path));
+            } else if (action === "Open file") {
+              vscode.env.openExternal(vscode.Uri.file(path));
+            }
+          } catch (error: unknown) {
+            const err = error as { message?: string };
+            const msg = err.message || "unknown error";
+            // Heuristic: if the CLI returned a gate-rejection message that
+            // slipped past isProActivated (e.g., expired between probe and
+            // call), surface the same upgrade prompt.
+            if (/pro|premium|license|activate|signature/i.test(msg)) {
+              vscode.window.showWarningMessage(
+                `OpsContext: Score report rejected — ${msg}`,
+                "Reactivate",
+              ).then((choice) => {
+                if (choice === "Reactivate") {
+                  vscode.env.openExternal(
+                    vscode.Uri.parse("https://api.compr.ch/contextengine/pricing"),
+                  );
+                }
+              });
+            } else {
+              vscode.window.showErrorMessage(
+                `OpsContext: Score report failed — ${msg}`,
+              );
+            }
+          }
+        },
+      );
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------

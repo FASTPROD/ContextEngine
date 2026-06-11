@@ -2,6 +2,21 @@
 
 All notable changes to the OpsContext VS Code Extension (previously ContextEngine).
 
+## [0.8.1] — 2026-06-11 — Closeable paid-feature gap: HTML Score Report command
+
+### Added
+- **`OpsContext: Generate HTML Score Report (PRO)`** in the Command Palette (`Cmd+Shift+P`). Closes the visible-paid-feature gap from 0.8.0 — the pricing page advertises *"HTML score reports — ✓"* for PRO but until now there was no clickable path to invoke it. Users had to know to open a terminal and run `npx @compr/opscontext-mcp score --html`.
+- Command flow:
+  1. Pre-flight PRO check via `contextengine status` so the upgrade flow LEADS instead of trailing a confusing error.
+  2. If not PRO → warning notification with three actions: **Get a Pro key** (opens pricing page), **Already have a key? Activate** (surfaces the `activate <key> <email>` command), **Dismiss**.
+  3. If PRO → progress notification, generates the HTML via the CLI (`score [project] --html --no-save`), CLI auto-opens it in the default browser.
+  4. Post-generation notification offers **Reveal in Finder** + **Open file** actions for the generated `tmpdir()/contextengine-score.html`.
+- Late-bind fallback: if the CLI returns a gate-rejection message AFTER the pre-flight passed (e.g., license expired between probe and call), surface the same upgrade prompt with a **Reactivate** action.
+- New CLI client functions: `generateHtmlScoreReport(projectName?)` and `isProActivated()` in `src/contextEngineClient.ts`.
+
+### Why patch, not minor
+This is a polish release that fills a UX gap in 0.8.0 — no new APIs, no contract changes, no behavior change for existing users. Adding a single command is the textbook patch-level change.
+
 ## [0.8.0] — 2026-06-11 — Renamed to OpsContext
 
 This is a user-visible rebrand release. Back-compat is preserved across every interface that matters:

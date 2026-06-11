@@ -2,6 +2,15 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
+## [2.0.2] — 2026-06-11 — HTML score report browser tab title → OpsContext
+
+Tiny patch release. One change:
+- `src/agents.ts` `generateScoreHTML()` — `<title>` tag changed from `ContextEngine Score Report` to `OpsContext Score Report`. Visible in the browser tab when a paying user (or the `score --html` CLI flag) generates the report. No functional change.
+
+Why patch: cosmetic-only rename of a user-visible string. No new APIs, no contract changes, no behavior change for any caller.
+
+Paired with the VS Code extension `0.8.1` release that adds the `OpsContext: Generate HTML Score Report (PRO)` command — together they close the visible-paid-feature gap from the 2.0.0 rebrand (advertised "HTML score reports — ✓" but no clickable path).
+
 ## [2.0.1] — 2026-06-11 — Flag day reached early + pricing href fix
 
 ### Changed

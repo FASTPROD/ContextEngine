@@ -229,6 +229,65 @@ export async function listLearnings(category?: string): Promise<string> {
   return stdout;
 }
 
+/**
+ * Generate the HTML score report (PRO feature). Returns the absolute path to
+ * the generated HTML file. The CLI also auto-opens the file in the default
+ * browser; we just need to surface the path back to the caller for any
+ * status-bar / notification UX.
+ *
+ * Pricing-page item: "HTML score reports — ✓" (PRO column). Without a clear
+ * VS Code command to trigger it, paying users had no clickable path to the
+ * feature they paid for. This wraps the CLI invocation.
+ *
+ * Behavior:
+ *   - Without a license → CLI prints a gate error to stderr; this throws
+ *     with a recognizable substring so the caller can route to an upgrade
+ *     notification.
+ *   - With a license   → resolves to "/tmp/<...>/contextengine-score.html"
+ *     (path is os.tmpdir() + "contextengine-score.html" in the CLI).
+ */
+export async function generateHtmlScoreReport(projectName?: string): Promise<string> {
+  const args = ["score"];
+  if (projectName) args.push(projectName);
+  args.push("--html", "--no-save");
+  const { stdout, stderr } = await runCLI(args, { timeout: 60_000 });
+  const combined = stdout + "\n" + stderr;
+  // The CLI prints: "📊 HTML report written to: <path>"
+  const match = combined.match(/HTML report written to:\s*([^\s]+)/);
+  if (!match) {
+    // Surface the CLI's own gate-rejection message verbatim so the caller can
+    // distinguish "not Pro" vs "actually broken".
+    throw new Error(
+      stderr.trim() ||
+        stdout.trim() ||
+        "Score report failed and the CLI returned no output.",
+    );
+  }
+  return match[1];
+}
+
+/**
+ * Cheap activation-status probe. Returns true when the local license is
+ * valid (Ed25519-signed by the production server). Used to gate UI before
+ * we actually attempt a PRO command, so the upgrade notification can lead
+ * the user instead of trailing a confusing error.
+ */
+export async function isProActivated(): Promise<boolean> {
+  try {
+    const { stdout } = await runCLI(["status"], { timeout: 10_000 });
+    // The CLI prints "✅ Activated" or similar for valid licenses; the
+    // exact string is not load-bearing — we look for the presence of a
+    // plan name or the absence of any "not activated" wording.
+    const out = stdout.toLowerCase();
+    if (out.includes("not activated") || out.includes("no license")) return false;
+    return /plan|expires|enterprise|pro|team|community/.test(out);
+  } catch {
+    // Treat "CLI not installed at all" as "not Pro" — the upgrade flow
+    // includes how to install the package itself.
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Git Status (direct git commands — does NOT require ContextEngine CLI)
 // ---------------------------------------------------------------------------

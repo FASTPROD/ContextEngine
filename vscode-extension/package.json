@@ -2,7 +2,7 @@
   "name": "contextengine",
   "displayName": "OpsContext — AI Agent Compliance",
   "description": "Protocol Firewall + durable memory for AI coding agents. Your AI sessions end clean, not chaotic — OpsContext ensures agents save learnings, commit code, and update docs.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "css-llc",
   "license": "BSL-1.1",
   "icon": "media/icon.png",
@@ -66,6 +66,11 @@
         "command": "contextengine.sync",
         "title": "OpsContext: Sync Docs",
         "icon": "$(sync)"
+      },
+      {
+        "command": "contextengine.scoreHtml",
+        "title": "OpsContext: Generate HTML Score Report (PRO)",
+        "icon": "$(graph)"
       }
     ],
     "chatParticipants": [

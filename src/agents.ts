@@ -1702,7 +1702,7 @@ export function generateScoreHTML(scores: ProjectScore[]): string {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ContextEngine Score Report</title>
+<title>OpsContext Score Report</title>
 <style>
   :root {
     --bg: #0f172a; --surface: #1e293b; --border: #334155;
