@@ -56,6 +56,8 @@ export interface ContextEngineConfig {
   }>;
 }
 
+import { discoverClaudeMemory } from "./claude-integration.js";
+
 const DEFAULT_PATTERNS = [
   // GitHub Copilot
   ".github/copilot-instructions.md",
@@ -160,6 +162,9 @@ function discoverSources(
  * 1. Config file (CONTEXTENGINE_CONFIG env, ./contextengine.json, ~/.contextengine.json)
  * 2. CONTEXTENGINE_WORKSPACES env var (colon-separated paths)
  * 3. Auto-discover from ~/Projects
+ *
+ * Claude Code auto-memory (~/.claude/projects/<slug>/memory/*.md) is added
+ * to every resolution path unless OPSCONTEXT_SKIP_CLAUDE_MEMORY=1.
  */
 export function loadSources(): KnowledgeSource[] {
   const configPath = findConfigFile();
@@ -196,6 +201,7 @@ export function loadSources(): KnowledgeSource[] {
       sources.push(...discoverSources(resolved, patterns));
     }
 
+    sources.push(...claudeMemorySources());
     return dedup(sources);
   }
 
@@ -204,20 +210,37 @@ export function loadSources(): KnowledgeSource[] {
   if (envWorkspaces) {
     console.error(`[ContextEngine] 🔍 Discovering from CONTEXTENGINE_WORKSPACES`);
     const dirs = envWorkspaces.split(":").filter(Boolean);
-    return dedup(discoverSources(dirs, DEFAULT_PATTERNS));
+    const found = discoverSources(dirs, DEFAULT_PATTERNS);
+    return dedup([...found, ...claudeMemorySources()]);
   }
 
   // Auto-discover from ~/Projects
   const projectsDir = resolve(homedir(), "Projects");
   if (existsSync(projectsDir)) {
     console.error(`[ContextEngine] 🔍 Auto-discovering from ~/Projects`);
-    return dedup(discoverSources([projectsDir], DEFAULT_PATTERNS));
+    const found = discoverSources([projectsDir], DEFAULT_PATTERNS);
+    return dedup([...found, ...claudeMemorySources()]);
   }
 
   console.error(
     `[ContextEngine] ⚠ No sources found. Create contextengine.json or set CONTEXTENGINE_WORKSPACES.`
   );
-  return [];
+  // Claude memory may still exist even without project workspaces — surface it.
+  return claudeMemorySources();
+}
+
+/**
+ * Pull Claude Code auto-memory into the source list (read-only). Skips when
+ * OPSCONTEXT_SKIP_CLAUDE_MEMORY=1 (escape hatch for tests + air-gapped runs
+ * where ~/.claude/ contents may not be indexable).
+ */
+function claudeMemorySources(): KnowledgeSource[] {
+  if (process.env.OPSCONTEXT_SKIP_CLAUDE_MEMORY === "1") return [];
+  try {
+    return discoverClaudeMemory();
+  } catch {
+    return [];
+  }
 }
 
 /** Remove duplicate paths */

@@ -17,7 +17,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
-import { join, basename } from "path";
+import { join, basename, resolve } from "path";
 import { createInterface } from "readline";
 import { tmpdir, homedir } from "os";
 import { execSync } from "child_process";
@@ -606,6 +606,14 @@ import {
   formatDocCoverageViolationsJson,
 } from "./hooks.js";
 import { safeAppend } from "./audit.js";
+import {
+  installSkill,
+  locateBundledSkill,
+  buildManagedBlock,
+  syncClaudeMd,
+  type SkillInstallScope,
+} from "./claude-integration.js";
+import { fileURLToPath } from "url";
 
 // ---------------------------------------------------------------------------
 // Non-interactive mode: skip prompts when piped or --yes flag
@@ -1061,6 +1069,139 @@ async function cliAuditExport(args: string[]): Promise<void> {
   } else {
     for (const r of filtered) process.stdout.write(JSON.stringify(r) + "\n");
   }
+}
+
+async function cliInstallSkill(args: string[]): Promise<void> {
+  let scope: SkillInstallScope | undefined;
+  let force = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--global") { scope = "global"; continue; }
+    if (a === "--project") { scope = "project"; continue; }
+    if (a === "--force" || a === "-f") { force = true; continue; }
+    if (a === "-h" || a === "--help") {
+      console.log(`Usage: contextengine install-skill [--global | --project] [--force]
+
+Copies the bundled OpsContext skill into Claude Code's skills directory so
+Claude Code's native skills system discovers it.
+
+  --global    Install at ~/.claude/skills/opscontext/   (recommended for personal use)
+  --project   Install at <cwd>/.claude/skills/opscontext/   (per-repo opt-in)
+  --force     Overwrite an existing installation
+
+Default scope: --project if <cwd>/.claude/ exists, otherwise --global.
+
+After installation, Claude Code surfaces the skill via its native skills
+loading. MCP tools are discovered the normal way through .vscode/mcp.json
+(or your client's MCP config).`);
+      return;
+    }
+  }
+  const distDir = fileURLToPath(new URL(".", import.meta.url));
+  const bundled = locateBundledSkill(distDir);
+  const result = installSkill(bundled, { scope, force });
+  if (!result.ok) {
+    console.error(result.message);
+    process.exit(1);
+  }
+  console.log(result.message);
+  if (result.alreadyInstalled) {
+    console.log("(Pass --force to overwrite.)");
+  }
+}
+
+async function cliSyncClaudeMd(args: string[]): Promise<void> {
+  let targetPath: string | undefined;
+  let dryRun = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--path" && args[i + 1]) { targetPath = args[++i]; continue; }
+    if (a === "--dry-run") { dryRun = true; continue; }
+    if (a === "-h" || a === "--help") {
+      console.log(`Usage: contextengine sync-claude-md [--path CLAUDE.md] [--dry-run]
+
+Maintains a managed block inside CLAUDE.md with the OpsContext snapshot for
+this project: top operational rules + active policy gates + recent hook
+blocks from the audit log.
+
+The block is delimited by:
+  <!-- BEGIN: managed by OpsContext (...) -->
+  ...
+  <!-- END: managed by OpsContext -->
+
+Run on every commit (or in a pre-commit hook) to keep the snapshot current.
+Since Claude Code loads CLAUDE.md natively at every session start, the
+snapshot reaches the agent's context without any MCP call.
+
+  --path FILE   Target CLAUDE.md path (default: <cwd>/CLAUDE.md)
+  --dry-run     Print the block to stdout, don't touch the file`);
+      return;
+    }
+  }
+  const cwd = process.cwd();
+  const filePath = targetPath ? resolve(targetPath) : join(cwd, "CLAUDE.md");
+  const projectName = basename(cwd);
+
+  // Top learnings — scope to this project + universal
+  const allLearnings = listLearnings(undefined, [projectName]);
+  // Sort by updated desc and take 5; map to the slim shape
+  const topLearnings = [...allLearnings]
+    .sort((a, b) => (b.updated > a.updated ? 1 : -1))
+    .slice(0, 5)
+    .map((l) => ({ id: l.id, category: l.category, rule: l.rule, project: l.project }));
+
+  // Policy summary
+  const policyResult = loadRepoPolicy(cwd);
+  let policySummary: Parameters<typeof buildManagedBlock>[0]["policySummary"] = null;
+  if (policyResult && policyResult.ok) {
+    const p = policyResult.policy;
+    policySummary = {
+      secretPatternCount: p.secret_patterns.length,
+      secretPatternIds: p.secret_patterns.map((s) => s.id),
+      docCoverageCount: p.doc_coverage.length,
+      deployVerifyHostCount: p.deploy_verify_hosts.length,
+      bypassTokenCount: p.bypass_tokens.length,
+    };
+  }
+
+  // Recent hook.block events (last 3)
+  let recentBlocks: Array<{ ts: string; check: string; reason: string }> = [];
+  try {
+    const all = readAuditLog();
+    const blocks = all.filter((r) => r.event === "hook.block");
+    recentBlocks = blocks.slice(-3).reverse().map((r) => ({
+      ts: r.ts,
+      check: String(r.payload.check ?? "unknown"),
+      reason: shortBlockReason(r.payload),
+    }));
+  } catch {
+    // Audit log unreadable or absent — skip silently; managed block omits the section
+  }
+
+  const block = buildManagedBlock({
+    projectName,
+    topLearnings,
+    policySummary,
+    recentBlocks,
+    generatedAt: new Date().toISOString().slice(0, 19) + "Z",
+  });
+
+  if (dryRun) {
+    process.stdout.write(block + "\n");
+    return;
+  }
+
+  const result = syncClaudeMd(filePath, block);
+  console.log(`✅ ${result.mode} — ${result.filePath} (${result.bytesWritten} bytes)`);
+}
+
+function shortBlockReason(payload: Record<string, unknown>): string {
+  if (payload.pattern_id) return `secret pattern ${payload.pattern_id} at ${payload.file}:${payload.line}`;
+  if (payload.matched_files) {
+    const files = Array.isArray(payload.matched_files) ? payload.matched_files.join(", ") : "files";
+    return `doc-coverage on ${files} → ${payload.requires_section ?? "?"} (${payload.reason ?? "?"})`;
+  }
+  return JSON.stringify(payload).slice(0, 120);
 }
 
 async function cliHook(args: string[]): Promise<void> {
@@ -1577,6 +1718,11 @@ Usage:
   contextengine hook <secret-scan|doc-coverage>
                                        Run policy-driven pre-commit checks against staged diff
                                        (exit 1 on blocking violation; CE_JSON=1 for CI output)
+  contextengine install-skill [--global | --project] [--force]
+                                       Install bundled OpsContext skill into Claude Code's skills dir
+  contextengine sync-claude-md [--path CLAUDE.md] [--dry-run]
+                                       Refresh the OpsContext-managed block in CLAUDE.md
+                                       (top learnings + policy summary + recent hook blocks)
   contextengine score [project] [--html] [--no-save] AI-readiness score (Pro, writes SCORE.md)
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
@@ -1700,6 +1846,16 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
   });
 } else if (command === "hook") {
   cliHook(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "install-skill") {
+  cliInstallSkill(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "sync-claude-md") {
+  cliSyncClaudeMd(process.argv.slice(3)).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });

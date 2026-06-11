@@ -2,6 +2,24 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
+## [2.0.0] — 2026-06-10 — Strategic pivot + Claude Code native integration (A+B+C)
+
+### Added (Claude Code integration — A + B + C from the rebrand backlog)
+- **`opscontext install-skill [--global | --project] [--force]`** — copies the bundled OpsContext skill into Claude Code's skills directory (`~/.claude/skills/opscontext/` global or `<cwd>/.claude/skills/opscontext/` project). Claude Code surfaces it via native skills loading; no MCP roundtrip needed for the skill metadata itself. Default scope: project if `<cwd>/.claude/` exists, else global. Refuses to overwrite without `--force`.
+- **`opscontext sync-claude-md [--path FILE] [--dry-run]`** — maintains an idempotent managed block in CLAUDE.md with the OpsContext snapshot: top 5 project learnings (with IDs + categories) + active policy summary (counts per section + first 5 secret-pattern IDs) + last 3 `hook.block` events from the audit log. The block is delimited by canonical `<!-- BEGIN: managed by OpsContext (...) -->` / `<!-- END: managed by OpsContext -->` markers — repeated runs replace the block in place without disturbing surrounding content. **Killer feature**: Claude Code loads CLAUDE.md natively at every session start, so the snapshot reaches the agent's context with zero MCP calls.
+- **Claude Code auto-memory discovery** — `loadSources()` now indexes every `~/.claude/projects/*/memory/*.md` file as a knowledge source. `search_context` finds anything the user told Claude Code to remember; cross-project lookup just works. Opt out via `OPSCONTEXT_SKIP_CLAUDE_MEMORY=1` env var (used by the test suite + air-gapped runs where `~/.claude/` is unreadable).
+- **`src/claude-integration.ts`** (LOCK `[CLAUDE-INTEGRATION]`) — the canonical home for all three. Locked at the managed-block marker format and at the redaction contract (no sensitive payload content ever rendered into CLAUDE.md, since CLAUDE.md is committed to git).
+- **23 new tests** in `tests/claude-integration.test.ts` covering all three:
+  - `installSkill`: bundled-missing rejection, fresh install, already-installed reporting, `--force` overwrite, `locateBundledSkill` path walking.
+  - `buildManagedBlock`: marker wrapping, project name, learning list with ID+category, long-rule truncation, policy summary with all four section counts, no-policy hint, recent-blocks date prefix.
+  - `syncClaudeMd`: creates-when-missing, appends-when-no-markers, replaces-in-place, **true idempotency** (two consecutive runs produce byte-identical output, including the trailing-newline convention).
+  - `discoverClaudeMemory`: empty-when-absent, multi-project discovery, .md-only filter, skip-no-memory-subdir.
+  - `decodeClaudeProjectSlug`: leading-hyphen → slash, non-prefixed pass-through.
+- **Dogfooded**: this commit ran `node dist/cli.js install-skill --project --force` (installing the skill into `.claude/skills/opscontext/`) and `node dist/cli.js sync-claude-md` (appending the OpsContext snapshot to CE's existing CLAUDE.md without disturbing the top-of-file content).
+
+### Renamed
+- **`skills/contextengine/` → `skills/opscontext/`** (with `git mv` for clean history). Frontmatter `name:` updated to `opscontext`, `homepage:` updated to the new npm URL, description reframed to lead with "ops + compliance layer Claude Code can't grow natively". The skill content body still mentions ContextEngine in places — copy refresh is a content-marketing pass, not a code fix.
+
 ## [2.0.0] — 2026-06-10 — Strategic pivot to "OpsContext for AI Agents"
 
 **This is a positioning + package-name change. All features carry forward unchanged. No code behavior changes.**

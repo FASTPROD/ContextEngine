@@ -1,11 +1,11 @@
 ---
-name: contextengine
-description: "Queryable knowledge base for AI coding agents via MCP. Hybrid BM25 + semantic search across project docs, operational data (git, docker, pm2, nginx), and persistent learnings. Use when: (1) searching project documentation or context files, (2) collecting operational insights from workspaces, (3) storing and retrieving persistent learnings across sessions, (4) auditing project compliance or AI-readiness, (5) managing session data. Zero API keys — runs 100% locally with CPU embeddings."
-homepage: https://www.npmjs.com/package/@compr/contextengine-mcp
-metadata: { "openclaw": { "emoji": "🧠", "requires": { "bins": ["npx"] }, "homepage": "https://www.npmjs.com/package/@compr/contextengine-mcp" } }
+name: opscontext
+description: "OpsContext for AI Agents — the ops + compliance layer Claude Code can't grow natively. Read-only fleet visibility (PM2/nginx/Docker/git/cron) + tamper-evident hash-chained audit log (SOC2 CC7.2 / ISO 27001 A.12.4.1) + declarative policy-as-code git hooks (.contextengine/policy.json with secret_patterns, doc_coverage, deploy_verify_hosts, bypass_tokens) + persistent learnings + hybrid BM25/semantic search. Use when: (1) searching project documentation or context files, (2) collecting operational insights from workspaces, (3) storing and retrieving persistent learnings across sessions, (4) auditing project compliance or AI-readiness, (5) managing session data, (6) verifying the audit log chain, (7) authoring/validating policy.json. Zero API keys — runs 100% locally with CPU embeddings."
+homepage: https://www.npmjs.com/package/@compr/opscontext-mcp
+metadata: { "openclaw": { "emoji": "🧭", "requires": { "bins": ["npx"] }, "homepage": "https://www.npmjs.com/package/@compr/opscontext-mcp" } }
 ---
 
-# ContextEngine — Knowledge Base for AI Agents
+# OpsContext for AI Agents — Knowledge Base + Ops + Compliance
 
 ContextEngine turns your project documentation into a **queryable knowledge base** with hybrid BM25 keyword + semantic vector search. Zero API keys required — embeddings run locally on CPU.
 
