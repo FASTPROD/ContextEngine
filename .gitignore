@@ -9,3 +9,6 @@ dist/
 
 # Ed25519 license signing — private key NEVER committed
 server/.secrets/
+
+# install-skill artifacts — generated copies of skills/opscontext/, source of truth lives in skills/
+.claude/skills/
