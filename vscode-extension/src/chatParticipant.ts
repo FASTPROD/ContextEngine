@@ -2,12 +2,12 @@
  * Chat Participant — `@contextengine` in VS Code Copilot Chat.
  *
  * This is the **killer feature** of the extension. It allows AI agents
- * (and humans) to interact with ContextEngine directly from the chat panel.
+ * (and humans) to interact with OpsContext directly from the chat panel.
  *
  * Commands:
  *  - `/status`  — session health, uncommitted changes, enforcement score
  *  - `/commit`  — stage and commit all changes with a descriptive message
- *  - `/search`  — search the ContextEngine knowledge base
+ *  - `/search`  — search the OpsContext knowledge base
  *  - `/remind`  — full enforcement checklist
  *
  * Freeform queries without a command are treated as knowledge searches.
@@ -91,7 +91,7 @@ async function handleStatus(
 
   if (token.isCancellationRequested) return {};
 
-  stream.markdown("## $(shield) ContextEngine — Session Status\n\n");
+  stream.markdown("## $(shield) OpsContext — Session Status\n\n");
 
   // Overall health
   if (snapshot.totalDirty === 0) {
@@ -299,7 +299,7 @@ async function handleSearch(
       `Could not execute search: ${err.message || "unknown error"}\n\n`
     );
     stream.markdown(
-      "Is `@compr/contextengine-mcp` installed? Try: `npm i -g @compr/contextengine-mcp`\n"
+      "Is `@compr/opscontext-mcp` installed? Try: `npm i -g @compr/opscontext-mcp`\n"
     );
   }
 
@@ -321,7 +321,7 @@ async function handleRemind(
   const snapshot = await gitMonitor.forceScan();
   if (token.isCancellationRequested) return {};
 
-  stream.markdown("## $(checklist) ContextEngine — Enforcement Checklist\n\n");
+  stream.markdown("## $(checklist) OpsContext — Enforcement Checklist\n\n");
 
   // Uncommitted changes
   if (snapshot.totalDirty === 0) {
@@ -361,7 +361,7 @@ async function handleRemind(
     }
   } catch {
     stream.markdown(
-      "\n- ⚠️ **End-session checks** — CLI not available (install `@compr/contextengine-mcp`)\n"
+      "\n- ⚠️ **End-session checks** — CLI not available (install `@compr/opscontext-mcp`)\n"
     );
   }
 
@@ -405,7 +405,7 @@ async function handleSync(
   const snapshot = await gitMonitor.forceScan();
   if (token.isCancellationRequested) return {};
 
-  stream.markdown("## $(sync) ContextEngine — Documentation Sync\n\n");
+  stream.markdown("## $(sync) OpsContext — Documentation Sync\n\n");
 
   const ceStatuses = snapshot.ceDocStatus;
   if (ceStatuses.length === 0) {
@@ -489,7 +489,7 @@ async function handleSync(
 // ---------------------------------------------------------------------------
 
 function showHelp(stream: vscode.ChatResponseStream): vscode.ChatResult {
-  stream.markdown("## $(shield) ContextEngine\n\n");
+  stream.markdown("## $(shield) OpsContext\n\n");
   stream.markdown(
     "AI agent compliance — session management, enforcement, and knowledge search.\n\n"
   );
@@ -504,7 +504,7 @@ function showHelp(stream: vscode.ChatResponseStream): vscode.ChatResult {
     "| `/commit` | Stage and commit all changes (add message after command) |\n"
   );
   stream.markdown(
-    "| `/search` | Search the ContextEngine knowledge base |\n"
+    "| `/search` | Search the OpsContext knowledge base |\n"
   );
   stream.markdown(
     "| `/remind` | Full enforcement checklist — what's missing |\n"

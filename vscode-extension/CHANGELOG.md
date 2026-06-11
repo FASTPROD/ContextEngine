@@ -1,6 +1,31 @@
 # Changelog
 
-All notable changes to the ContextEngine VS Code Extension.
+All notable changes to the OpsContext VS Code Extension (previously ContextEngine).
+
+## [0.8.0] — 2026-06-11 — Renamed to OpsContext
+
+This is a user-visible rebrand release. Back-compat is preserved across every interface that matters:
+
+### What changed for users
+- **displayName** in the Marketplace → "OpsContext — AI Agent Compliance"
+- **Command titles** in the palette → "OpsContext: Commit All Changes", etc.
+- **Status bar text**, output channel name, notifications, info panel WebView → "OpsContext"
+- **Chat participant fullName** in `@contextengine` → "OpsContext"
+- **CLI delegate** in `src/contextEngineClient.ts` → switched from `@compr/contextengine-mcp` to `@compr/opscontext-mcp` (LOCKed; the old npm package is now deprecated)
+- **README + CTA links** → point at the new npm name; pricing URL stays at `https://api.compr.ch/contextengine/pricing` (the only path the activation server actually serves)
+- **Info panel footer** now reads the extension version dynamically from `packageJSON.version` so it never drifts from the published version again (the old `v0.6.0` hardcoded footer is gone — it had drifted from 0.7.1)
+
+### What deliberately stays unchanged (back-compat)
+- **Marketplace extension ID**: `css-llc.contextengine` — auto-updates work; nobody has to reinstall.
+- **Command IDs**: `contextengine.commitAll`, `contextengine.showStatus`, `contextengine.endSession`, `contextengine.search`, `contextengine.showInfo`, `contextengine.sync` — existing keybindings continue to work.
+- **Configuration keys**: `contextengine.gitCheckInterval`, `contextengine.enableNotifications`, `contextengine.enableStatusBar`, `contextengine.autoCommitReminder`, `contextengine.maxDirtyFilesBeforeWarning` — existing `settings.json` files continue to apply.
+- **Chat handle**: `@contextengine` — saved transcripts and muscle memory unchanged.
+- **Status bar abbreviation**: `CE` — kept for compactness; the brand is OpsContext.
+
+### Why
+The npm package `@compr/contextengine-mcp` was renamed to `@compr/opscontext-mcp@2.0.0` on 2026-06-10 as part of a strategic pivot to "OpsContext for AI Agents — the ops + compliance layer Claude Code can't grow natively". The 2.0.1 release on 2026-06-11 retired legacy SHA-256 license signatures. This extension delegates to that CLI, so they need to ship together — keeping the extension on the old name would silently break the PRO/search/sync features once the deprecated package stops being installable.
+
+
 
 ## [0.7.1] — 2026-03-03
 

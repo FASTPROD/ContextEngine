@@ -1,5 +1,5 @@
 /**
- * ContextEngine — VS Code Extension
+ * OpsContext — VS Code Extension
  *
  * Persistent memory, enforcement nudges, and session management for AI
  * coding agents. Ensures agents commit code, save context, and follow
@@ -53,10 +53,10 @@ const disposables: vscode.Disposable[] = [];
 // ---------------------------------------------------------------------------
 
 export function activate(context: vscode.ExtensionContext): void {
-  const rawChannel = vscode.window.createOutputChannel("ContextEngine");
+  const rawChannel = vscode.window.createOutputChannel("OpsContext");
   const outputChannel = new LoggedOutputChannel(rawChannel);
   outputChannel.appendLine(
-    `ContextEngine extension activated — ${new Date().toISOString()}`
+    `OpsContext extension activated — ${new Date().toISOString()}`
   );
   outputChannel.appendLine(
     `Output log: ${LoggedOutputChannel.logPath}`
@@ -219,7 +219,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(outputChannel); // flush log file on deactivate
 
   outputChannel.appendLine(
-    `ContextEngine ready — monitoring ${vscode.workspace.workspaceFolders?.length || 0} workspace folders`
+    `OpsContext ready — monitoring ${vscode.workspace.workspaceFolders?.length || 0} workspace folders`
   );
 }
 
@@ -251,7 +251,7 @@ function registerCommands(
 
       if (snapshot.totalDirty === 0) {
         vscode.window.showInformationMessage(
-          "ContextEngine: All projects are clean — nothing to commit."
+          "OpsContext: All projects are clean — nothing to commit."
         );
         return;
       }
@@ -272,7 +272,7 @@ function registerCommands(
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: "ContextEngine: Committing changes…",
+          title: "OpsContext: Committing changes…",
           cancellable: false,
         },
         async (progress) => {
@@ -330,7 +330,7 @@ function registerCommands(
 
       outputChannel.clear();
       outputChannel.appendLine("═══════════════════════════════════════");
-      outputChannel.appendLine("  ContextEngine — Session Status");
+      outputChannel.appendLine("  OpsContext — Session Status");
       outputChannel.appendLine("═══════════════════════════════════════");
       outputChannel.appendLine("");
 
@@ -374,7 +374,7 @@ function registerCommands(
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: "ContextEngine: Running end-session checklist…",
+          title: "OpsContext: Running end-session checklist…",
           cancellable: false,
         },
         async () => {
@@ -383,7 +383,7 @@ function registerCommands(
 
             outputChannel.clear();
             outputChannel.appendLine("═══════════════════════════════════════");
-            outputChannel.appendLine("  ContextEngine — End Session Checklist");
+            outputChannel.appendLine("  OpsContext — End Session Checklist");
             outputChannel.appendLine("═══════════════════════════════════════");
             outputChannel.appendLine("");
 
@@ -409,17 +409,17 @@ function registerCommands(
 
             if (failCount > 0) {
               vscode.window.showWarningMessage(
-                `ContextEngine: ${failCount} end-session check${failCount > 1 ? "s" : ""} failed. See Output.`
+                `OpsContext: ${failCount} end-session check${failCount > 1 ? "s" : ""} failed. See Output.`
               );
             } else {
               vscode.window.showInformationMessage(
-                "✅ ContextEngine: All end-session checks passed!"
+                "✅ OpsContext: All end-session checks passed!"
               );
             }
           } catch (error: unknown) {
             const err = error as { message?: string };
             vscode.window.showErrorMessage(
-              `ContextEngine: End-session failed — ${err.message || "CLI not available"}`
+              `OpsContext: End-session failed — ${err.message || "CLI not available"}`
             );
           }
         }
@@ -446,7 +446,7 @@ function registerCommands(
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: "ContextEngine: Checking CE doc freshness…",
+          title: "OpsContext: Checking CE doc freshness…",
           cancellable: false,
         },
         async () => {
@@ -455,7 +455,7 @@ function registerCommands(
 
             outputChannel.clear();
             outputChannel.appendLine("═══════════════════════════════════════");
-            outputChannel.appendLine("  ContextEngine — CE Doc Sync Report");
+            outputChannel.appendLine("  OpsContext — CE Doc Sync Report");
             outputChannel.appendLine("═══════════════════════════════════════");
             outputChannel.appendLine("");
 
@@ -503,7 +503,7 @@ function registerCommands(
 
             if (totalIssues > 0) {
               vscode.window.showWarningMessage(
-                `ContextEngine: ${totalIssues} CE doc issue(s) found. See Output.`,
+                `OpsContext: ${totalIssues} CE doc issue(s) found. See Output.`,
                 "Open Chat"
               ).then((action) => {
                 if (action === "Open Chat") {
@@ -515,13 +515,13 @@ function registerCommands(
               });
             } else {
               vscode.window.showInformationMessage(
-                "✅ ContextEngine: All CE docs are up to date!"
+                "✅ OpsContext: All CE docs are up to date!"
               );
             }
           } catch (error: unknown) {
             const err = error as { message?: string };
             vscode.window.showErrorMessage(
-              `ContextEngine: Sync failed — ${err.message || "unknown error"}`
+              `OpsContext: Sync failed — ${err.message || "unknown error"}`
             );
           }
         }
@@ -535,7 +535,7 @@ function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.search", async () => {
       const query = await vscode.window.showInputBox({
-        prompt: "Search ContextEngine knowledge base",
+        prompt: "Search OpsContext knowledge base",
         placeHolder: "deployment process, scoring system, security rules…",
       });
 
@@ -544,7 +544,7 @@ function registerCommands(
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `ContextEngine: Searching "${query}"…`,
+          title: `OpsContext: Searching "${query}"…`,
           cancellable: false,
         },
         async () => {
@@ -554,7 +554,7 @@ function registerCommands(
             outputChannel.clear();
             outputChannel.appendLine("═══════════════════════════════════════");
             outputChannel.appendLine(
-              `  ContextEngine — Search: "${query}"`
+              `  OpsContext — Search: "${query}"`
             );
             outputChannel.appendLine("═══════════════════════════════════════");
             outputChannel.appendLine("");
@@ -581,7 +581,7 @@ function registerCommands(
           } catch (error: unknown) {
             const err = error as { message?: string };
             vscode.window.showErrorMessage(
-              `ContextEngine: Search failed — ${err.message || "CLI not available"}`
+              `OpsContext: Search failed — ${err.message || "CLI not available"}`
             );
           }
         }
@@ -601,7 +601,7 @@ async function pushAllProjects(
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: "ContextEngine: Pushing to remotes…",
+      title: "OpsContext: Pushing to remotes…",
       cancellable: false,
     },
     async (progress) => {
@@ -629,6 +629,6 @@ async function pushAllProjects(
   );
 
   vscode.window.showInformationMessage(
-    "ContextEngine: Push complete. See Output for details."
+    "OpsContext: Push complete. See Output for details."
   );
 }

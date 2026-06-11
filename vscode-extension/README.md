@@ -1,10 +1,12 @@
-# ContextEngine — VS Code Extension
+# OpsContext — VS Code Extension
 
 **AI Agent Compliance.** Persistent memory, enforcement nudges, and session management for AI coding agents.
 
+> Previously published as **ContextEngine** — same extension, same install ID (`css-llc.contextengine`), same `@contextengine` chat handle, same settings keys. Auto-update brings you the OpsContext rebrand; your keybindings and configuration continue to work unchanged. See [CHANGELOG.md](CHANGELOG.md) for the 0.8.0 entry.
+
 ## Why
 
-AI coding agents (Copilot, Claude, Cursor) are powerful but forgetful. They don't commit code, they don't save context, and they don't follow protocol. ContextEngine won't make them perfect — but it adds the guardrails that make the difference between a productive session and a mess.
+AI coding agents (Copilot, Claude, Cursor) are powerful but forgetful. They don't commit code, they don't save context, and they don't follow protocol. OpsContext won't make them perfect — but it adds the guardrails that make the difference between a productive session and a mess.
 
 ## Features
 
@@ -12,7 +14,7 @@ AI coding agents (Copilot, Claude, Cursor) are powerful but forgetful. They don'
 Continuous monitoring of uncommitted changes across all workspace projects. Status bar shows real-time count. Notifications fire when changes accumulate without commits.
 
 ### 💬 Chat Participant — `@contextengine`
-Talk to ContextEngine directly from Copilot Chat:
+Talk to OpsContext directly from Copilot Chat:
 
 | Command | What it does |
 |---------|-------------|
@@ -20,7 +22,9 @@ Talk to ContextEngine directly from Copilot Chat:
 | `@contextengine /commit fix: resolve login bug` | Stage + commit all changes with your message |
 | `@contextengine /search deployment process` | Search the knowledge base |
 | `@contextengine /remind` | Full enforcement checklist — what's missing before you end |
-| `@contextengine /sync` | Check CE doc freshness per project — shows stale/missing docs |
+| `@contextengine /sync` | Check doc freshness per project — shows stale/missing docs |
+
+*(The chat handle stays `@contextengine` so your saved transcripts and muscle memory keep working.)*
 
 ### 📊 Status Bar
 Persistent indicator showing:
@@ -28,19 +32,19 @@ Persistent indicator showing:
 - ⚠️ `CE: 5` — uncommitted files (yellow warning)
 - 🔴 `CE: 12` — critical, commit now (red alert)
 
-Click for detailed breakdown with action buttons.
+Click for detailed breakdown with action buttons. *(Status-bar text uses `CE` for compactness; the brand is OpsContext.)*
 
 ### ℹ️ Info Panel
 Click the ℹ️ status bar icon for a WebView panel showing:
-- What ContextEngine monitors (7-item checklist with FREE/PRO badges)
+- What OpsContext monitors (7-item checklist with FREE/PRO badges)
 - End-of-session protocol steps
-- CE Doc Sync status
+- Doc Sync status
 - Architecture overview
 
 ### 🔔 Smart Notifications
 - Warning when uncommitted files exceed threshold (configurable)
 - Escalating urgency — gentle at 5 files, urgent at 10+
-- **Doc staleness alerts** — fires when code is committed but CE docs (copilot-instructions, SKILLS.md, SCORE.md) haven't been updated (15-min cooldown)
+- **Doc staleness alerts** — fires when code is committed but docs (copilot-instructions, SKILLS.md, SCORE.md) haven't been updated (15-min cooldown)
 - Action buttons: "Commit All", "Show Status", "Run Sync"
 - 5-minute cooldown between notifications (no spam)
 
@@ -55,7 +59,7 @@ Monitors all terminal command completions via VS Code Shell Integration API:
 - 30-second cooldown per category (no notification flood)
 
 ### 🪝 Pre-Commit Hook *(v0.4.0, upgraded v1.20.0)*
-Bundled at `hooks/pre-commit` — **BLOCKS commits** (exit 1) when code is staged but CE docs are stale (>4h) or missing. Agents ignore warnings — only hard blocks prevent compliance drift. Override: `git commit --no-verify`. Install:
+Bundled at `hooks/pre-commit` — **BLOCKS commits** (exit 1) when code is staged but docs are stale (>4h) or missing. Agents ignore warnings — only hard blocks prevent compliance drift. Install:
 ```bash
 cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 ```
@@ -63,11 +67,11 @@ cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 ### ⌨️ Commands
 | Command | Description |
 |---------|-------------|
-| `ContextEngine: Commit All Changes` | Stage + commit across all workspace projects |
-| `ContextEngine: Show Session Status` | Detailed status in Output panel |
-| `ContextEngine: End Session Checklist` | Run end-of-session protocol |
-| `ContextEngine: Search Knowledge Base` | Search ContextEngine knowledge |
-| `ContextEngine: CE Doc Sync` | Check doc freshness across all projects |
+| `OpsContext: Commit All Changes` | Stage + commit across all workspace projects |
+| `OpsContext: Show Session Status` | Detailed status in Output panel |
+| `OpsContext: End Session Checklist` | Run end-of-session protocol |
+| `OpsContext: Search Knowledge Base` | Search OpsContext knowledge |
+| `OpsContext: Sync Docs` | Check doc freshness across all projects |
 
 ## Configuration
 
@@ -79,27 +83,29 @@ cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 | `contextengine.autoCommitReminder` | `true` | Remind to commit when files accumulate |
 | `contextengine.maxDirtyFilesBeforeWarning` | `5` | Uncommitted file threshold for warnings |
 
+*(Setting keys stay `contextengine.*` — your existing `settings.json` continues to work after the rebrand.)*
+
 ## How It Works
 
-The extension delegates to the [ContextEngine MCP](https://www.npmjs.com/package/@compr/contextengine-mcp) CLI for knowledge operations (search, sessions, learnings). Git operations use native `git` commands directly.
+The extension delegates to the [OpsContext MCP](https://www.npmjs.com/package/@compr/opscontext-mcp) CLI for knowledge operations (search, sessions, learnings). Git operations use native `git` commands directly.
 
 This separation means:
 - **Extension stays lightweight** — no heavy dependencies (embeddings, BM25)
-- **Always works** — git monitoring works even without ContextEngine CLI installed
+- **Always works** — git monitoring works even without the OpsContext CLI installed
 - **Full power when available** — search, sessions, end-session checks when CLI is installed
 
 ## Privacy
 
-**ContextEngine runs 100% on your machine.** No project data — code, learnings, sessions, git history, dependencies — is ever sent to an external server. The only network calls are license validation for PRO users (license key + machine ID hash). See the [full privacy details](https://www.npmjs.com/package/@compr/contextengine-mcp#privacy--data-security).
+**OpsContext runs 100% on your machine.** No project data — code, learnings, sessions, git history, dependencies — is ever sent to an external server. The only network calls are license validation for PRO users (license key + machine ID hash). See the [full privacy details](https://www.npmjs.com/package/@compr/opscontext-mcp#privacy--data-security).
 
 ## Requirements
 
 - VS Code 1.93+
 - Git installed and available in PATH
-- (Optional) `@compr/contextengine-mcp` npm package for search/session features
+- (Optional) `@compr/opscontext-mcp` npm package for search/session features
 
 ## License
 
-BSL-1.1 (Business Source License) — see [LICENSE](https://www.npmjs.com/package/@compr/contextengine-mcp)
+BSL-1.1 (Business Source License) — see [LICENSE](https://www.npmjs.com/package/@compr/opscontext-mcp)
 
 © 2026 FASTPROD / compr.ch

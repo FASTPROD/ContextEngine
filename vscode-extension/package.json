@@ -1,15 +1,16 @@
 {
   "name": "contextengine",
-  "displayName": "ContextEngine — AI Agent Compliance",
-  "description": "Protocol Firewall + durable memory for AI coding agents. Your AI sessions end clean, not chaotic — ContextEngine ensures agents save learnings, commit code, and update docs.",
-  "version": "0.7.1",
+  "displayName": "OpsContext — AI Agent Compliance",
+  "description": "Protocol Firewall + durable memory for AI coding agents. Your AI sessions end clean, not chaotic — OpsContext ensures agents save learnings, commit code, and update docs.",
+  "version": "0.8.0",
   "publisher": "css-llc",
   "license": "BSL-1.1",
   "icon": "media/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://www.npmjs.com/package/@compr/contextengine-mcp"
+    "url": "https://github.com/FASTPROD/ContextEngine.git"
   },
+  "homepage": "https://www.npmjs.com/package/@compr/opscontext-mcp",
   "engines": {
     "vscode": "^1.93.0"
   },
@@ -19,12 +20,16 @@
   ],
   "keywords": [
     "mcp",
-    "copilot",
+    "claude-code",
     "claude",
+    "copilot",
     "cursor",
-    "ai",
-    "agent",
-    "enforcement",
+    "ai-agents",
+    "ops",
+    "observability",
+    "audit-log",
+    "compliance",
+    "policy-as-code",
     "context",
     "session",
     "knowledge-base"
@@ -37,36 +42,36 @@
     "commands": [
       {
         "command": "contextengine.commitAll",
-        "title": "ContextEngine: Commit All Changes",
+        "title": "OpsContext: Commit All Changes",
         "icon": "$(git-commit)"
       },
       {
         "command": "contextengine.showStatus",
-        "title": "ContextEngine: Show Session Status"
+        "title": "OpsContext: Show Session Status"
       },
       {
         "command": "contextengine.endSession",
-        "title": "ContextEngine: End Session Checklist"
+        "title": "OpsContext: End Session Checklist"
       },
       {
         "command": "contextengine.search",
-        "title": "ContextEngine: Search Knowledge Base"
+        "title": "OpsContext: Search Knowledge Base"
       },
       {
         "command": "contextengine.showInfo",
-        "title": "ContextEngine: What We Check",
+        "title": "OpsContext: What We Check",
         "icon": "$(info)"
       },
       {
         "command": "contextengine.sync",
-        "title": "ContextEngine: Sync CE Docs",
+        "title": "OpsContext: Sync Docs",
         "icon": "$(sync)"
       }
     ],
     "chatParticipants": [
       {
         "id": "contextengine.agent",
-        "fullName": "ContextEngine",
+        "fullName": "OpsContext",
         "name": "contextengine",
         "description": "AI agent compliance — session status, uncommitted changes, enforcement reminders, knowledge search",
         "isSticky": false,
@@ -81,7 +86,7 @@
           },
           {
             "name": "search",
-            "description": "Search the ContextEngine knowledge base"
+            "description": "Search the OpsContext knowledge base"
           },
           {
             "name": "remind",
@@ -89,13 +94,13 @@
           },
           {
             "name": "sync",
-            "description": "Check CE documentation freshness and find stale docs"
+            "description": "Check documentation freshness and find stale docs"
           }
         ]
       }
     ],
     "configuration": {
-      "title": "ContextEngine",
+      "title": "OpsContext",
       "properties": {
         "contextengine.gitCheckInterval": {
           "type": "number",

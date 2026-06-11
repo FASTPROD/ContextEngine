@@ -1,7 +1,7 @@
 /**
  * Status Bar — persistent value meter in the VS Code status bar.
  *
- * Shows what ContextEngine has done for you this session:
+ * Shows what OpsContext has done for you this session:
  *  - 🧠 N recalls (learnings surfaced via search)
  *  - 💾 N saved (new learnings persisted)
  *  - ⏱ ~Xmin saved (estimated time saved)
@@ -39,14 +39,14 @@ export class StatusBarController implements vscode.Disposable {
     );
 
     this._item.command = "contextengine.showStatus";
-    this._item.name = "ContextEngine";
+    this._item.name = "OpsContext";
 
     const config = vscode.workspace.getConfiguration("contextengine");
     this._threshold = config.get<number>("maxDirtyFilesBeforeWarning", 5);
 
     // Show immediately with "scanning" state
     this._item.text = "$(shield) CE — scanning…";
-    this._item.tooltip = "ContextEngine — scanning workspace…";
+    this._item.tooltip = "OpsContext — scanning workspace…";
 
     const enabled = config.get<boolean>("enableStatusBar", true);
     this._log?.appendLine(`Status bar: created (enabled=${enabled}, priority=100, alignment=Left)`);
@@ -188,7 +188,7 @@ export class StatusBarController implements vscode.Disposable {
     md.isTrusted = true;
     md.supportThemeIcons = true;
 
-    md.appendMarkdown(`### $(shield) ContextEngine — Value Meter\n\n`);
+    md.appendMarkdown(`### $(shield) OpsContext — Value Meter\n\n`);
 
     md.appendMarkdown(`| Metric | Value |\n`);
     md.appendMarkdown(`|--------|-------|\n`);
@@ -234,7 +234,7 @@ export class StatusBarController implements vscode.Disposable {
     md.isTrusted = true;
     md.supportThemeIcons = true;
 
-    md.appendMarkdown(`### $(shield) ContextEngine\n\n`);
+    md.appendMarkdown(`### $(shield) OpsContext\n\n`);
     md.appendMarkdown(`**${headline}**\n\n`);
     md.appendMarkdown(`*No active MCP session detected — showing git status*\n\n`);
 

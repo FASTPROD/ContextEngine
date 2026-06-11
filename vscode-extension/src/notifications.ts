@@ -67,7 +67,7 @@ export class NotificationManager implements vscode.Disposable {
 
     if (isUrgent) {
       const action = await vscode.window.showWarningMessage(
-        `🚨 ContextEngine: ${totalDirty} uncommitted files across ${dirtyProjects.length} project${dirtyProjects.length > 1 ? "s" : ""}: ${projectList}`,
+        `🚨 OpsContext: ${totalDirty} uncommitted files across ${dirtyProjects.length} project${dirtyProjects.length > 1 ? "s" : ""}: ${projectList}`,
         "Commit All",
         "Show Status",
         "Dismiss"
@@ -75,7 +75,7 @@ export class NotificationManager implements vscode.Disposable {
       await this._handleAction(action);
     } else {
       const action = await vscode.window.showInformationMessage(
-        `$(git-commit) ContextEngine: ${totalDirty} uncommitted files — ${projectList}`,
+        `$(git-commit) OpsContext: ${totalDirty} uncommitted files — ${projectList}`,
         "Commit All",
         "Dismiss"
       );
@@ -125,7 +125,7 @@ export class NotificationManager implements vscode.Disposable {
       : `${issues.length} projects have stale CE docs`;
 
     const action = await vscode.window.showWarningMessage(
-      `📝 ContextEngine: ${summary}`,
+      `📝 OpsContext: ${summary}`,
       "Run Sync",
       "Show Details",
       "Dismiss"
@@ -150,7 +150,7 @@ export class NotificationManager implements vscode.Disposable {
     if (!config.get<boolean>("enableNotifications", true)) return;
 
     const action = await vscode.window.showInformationMessage(
-      `$(shield) ContextEngine: ${message}`,
+      `$(shield) OpsContext: ${message}`,
       "End Session",
       "Dismiss"
     );

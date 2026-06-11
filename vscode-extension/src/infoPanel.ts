@@ -30,9 +30,9 @@ export class InfoStatusBarController implements vscode.Disposable {
     );
 
     this._item.text = "$(info)";
-    this._item.tooltip = "ContextEngine — What do we check?";
+    this._item.tooltip = "OpsContext — What do we check?";
     this._item.command = "contextengine.showInfo";
-    this._item.name = "ContextEngine Info";
+    this._item.name = "OpsContext Info";
 
     const config = vscode.workspace.getConfiguration("contextengine");
     if (config.get<boolean>("enableStatusBar", true)) {
@@ -76,7 +76,7 @@ export function showInfoPanel(
 
   currentPanel = vscode.window.createWebviewPanel(
     "contextengine.info",
-    "ContextEngine — Dashboard",
+    "OpsContext — Dashboard",
     vscode.ViewColumn.One,
     { enableScripts: true }
   );
@@ -100,13 +100,18 @@ export function updateInfoPanel(snapshot: GitSnapshot, stats?: SessionStats, ses
 
 function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive?: boolean): string {
   const totalDirty = snapshot?.totalDirty ?? 0;
+  // Read version dynamically from the extension manifest so the footer never
+  // drifts from the published version again. Falls back to "?.?.?" if the
+  // extension API isn't available (e.g., in a test harness).
+  const extVersion =
+    vscode.extensions.getExtension("css-llc.contextengine")?.packageJSON?.version ?? "?.?.?";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ContextEngine — Agent Memory &amp; Compliance</title>
+  <title>OpsContext — Agent Memory &amp; Compliance</title>
   <style>
     body {
       font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, sans-serif);
@@ -217,7 +222,7 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
 </head>
 <body>
 
-  <h1>🛡️ ContextEngine</h1>
+  <h1>🛡️ OpsContext</h1>
   <p class="subtitle">
     Persistent memory and compliance enforcement for AI coding agents.
     <br>What VS Code doesn't do — we do.
@@ -289,7 +294,7 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
     </p>
     <p>
       <strong>It just works.</strong> No configuration needed. Active on all 17 MCP tools.
-      When agents comply, they get full access. When they don't, ContextEngine handles it.
+      When agents comply, they get full access. When they don't, OpsContext handles it.
     </p>
   </div>
 
@@ -302,7 +307,7 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
   <!-- ======================================================== -->
   <!-- WHAT CE UNIQUELY PROVIDES (not in VS Code natively)       -->
   <!-- ======================================================== -->
-  <h2>🧠 What ContextEngine Does (that VS Code Doesn't)</h2>
+  <h2>🧠 What OpsContext Does (that VS Code Doesn't)</h2>
 
   <div class="card">
     <div class="check-item">
@@ -402,7 +407,7 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
   <!-- ======================================================== -->
   <h2>🏁 What the Agent Must Do Before Ending</h2>
   <p style="color: var(--vscode-descriptionForeground); font-size: 0.9em;">
-    ContextEngine ensures these happen — you don't need to remind the agent.
+    OpsContext ensures these happen — you don't need to remind the agent.
   </p>
 
   <div class="card">
@@ -445,13 +450,13 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
     <div style="margin: 12px 0;">
       <strong>Pro</strong> CHF 2/mo · <strong>Team</strong> CHF 12/mo · <strong>Enterprise</strong> CHF 36/mo
     </div>
-    <a class="cta-button" href="https://api.compr.ch/contextengine/pricing">Get ContextEngine PRO →</a>
-    <p class="cta-subtitle">Already have a key? Run <code>npx @compr/contextengine-mcp activate</code></p>
+    <a class="cta-button" href="https://api.compr.ch/contextengine/pricing">Get OpsContext PRO →</a>
+    <p class="cta-subtitle">Already have a key? Run <code>npx @compr/opscontext-mcp activate</code></p>
   </div>
 
   <p style="text-align: center; margin-top: 24px; color: var(--vscode-descriptionForeground);">
-    ContextEngine v0.6.0 · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
-    · <a href="https://www.npmjs.com/package/@compr/contextengine-mcp">npm</a>
+    OpsContext v${extVersion} · <a href="https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine">Marketplace</a>
+    · <a href="https://www.npmjs.com/package/@compr/opscontext-mcp">npm</a>
   </p>
 
 </body>

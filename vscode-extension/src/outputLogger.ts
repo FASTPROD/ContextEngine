@@ -173,7 +173,7 @@ export class LoggedOutputChannel implements vscode.OutputChannel {
     const marker = [
       "",
       "════════════════════════════════════════════════════════════════",
-      `  ContextEngine Extension Session — ${new Date().toISOString()} [${this._wsTag}]`,
+      `  OpsContext Extension Session — ${new Date().toISOString()} [${this._wsTag}]`,
       "════════════════════════════════════════════════════════════════",
       "",
     ].join("\n");
