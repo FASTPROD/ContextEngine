@@ -22,7 +22,7 @@
     "nodemailer": "^6.10.1",
     "stripe": "^14.25.0",
     "terser": "^5.46.0",
-    "uuid": "^10.0.0"
+    "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.8",
