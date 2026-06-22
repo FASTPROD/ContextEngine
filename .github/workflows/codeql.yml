@@ -1,0 +1,65 @@
+# CodeQL — static analysis for security vulnerabilities.
+# SOC 2 evidence: CC7.1 (vulnerability management) + CC7.2 (system monitoring).
+# Enabled 2026-06-22 as part of the no-cost SOC 2 foundations pass.
+#
+# Scans TypeScript/JavaScript in the main package, server, and vscode-extension
+# on every push to main, every PR against main, and once a week as a safety net.
+# Results land in the GitHub Security tab and become permanent audit evidence.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 02:00 UTC = 04:00 Europe/Paris. Catches new advisories disclosed
+    # since the last push even if the code hasn't changed.
+    - cron: "0 2 * * 1"
+
+# Cancel superseded runs on the same ref so a fast force-push doesn't queue
+# multiple full scans.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # CodeQL groups TypeScript under javascript-typescript in 2026+
+        language: ["javascript-typescript"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-and-quality includes the standard CWE queries plus
+          # additional quality-of-code checks; security-extended is harsher
+          # and we can tighten to it once we've cleared the baseline.
+          queries: security-and-quality
+
+      # No manual build step — CodeQL's autobuilder handles TypeScript fine
+      # without configuration for our flat npm layout.
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

@@ -1,0 +1,74 @@
+# Dependabot — automatic security + version updates.
+# SOC 2 evidence: CC7.1 (vulnerability management).
+# Enabled 2026-06-22 as part of the no-cost SOC 2 foundations pass.
+version: 2
+updates:
+  # Main npm package
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "automated"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    # Group all minor + patch updates into one PR to reduce noise; majors stay separate
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Activation server (separate package)
+  - package-ecosystem: "npm"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Europe/Paris"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "automated"
+      - "server"
+    commit-message:
+      prefix: "chore(server-deps)"
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # VS Code extension
+  - package-ecosystem: "npm"
+    directory: "/vscode-extension"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "automated"
+      - "vscode-ext"
+    commit-message:
+      prefix: "chore(vscode-deps)"
+
+  # GitHub Actions themselves (keeps the CI / CodeQL action versions current)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "chore(actions)"
