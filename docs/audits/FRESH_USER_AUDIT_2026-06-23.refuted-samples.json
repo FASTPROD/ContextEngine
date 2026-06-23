@@ -1,0 +1,22 @@
+[
+  {
+    "title": "README and CWS submission doc contradict each other on the install path",
+    "reason": "The chrome-extension/README.md install section is explicitly titled \"Install (local development)\" and states the extension is \"Not yet published to the Chrome Web Store\" \u2014 so a fresh user reading it understands they're on a dev/source path. The CHROME_WEBSTORE_SUBMISSION.md is clearly an internal submission pack (checklists, $5 dev account, screenshot plan, risk register) \u2014 its \"paste into Store form\" text only reaches end-users after the listing goes live, at which point users install via the Web Store rather than the README. A fresh user pursuing install would land on the README, not browse into docs/ for a submission pack, so they wouldn't be torn between two paths."
+  },
+  {
+    "title": "install-autostart is macOS-only but README doesn't warn Linux/Windows users",
+    "reason": "The chrome-extension/README.md never instructs users to run `install-autostart` \u2014 its Step 4 is the platform-neutral `node dist/index.js`, which works fine on Linux/Windows; the only doc mentioning `install-autostart` is the internal CWS submission doc, which already annotates the command with \"auto-start server at every macOS login\" inline."
+  },
+  {
+    "title": "Popup shows 'Status: loading\u2026' with no actionable hint for unconfigured users",
+    "reason": "The finding misreads the code: \"loading\u2026\" only shows for the ~100ms before the first refresh() tick \u2014 after that, on a fresh install the SW returns status=null and popup.ts sets state.textContent = \"unknown\" (not \"loading\u2026\"), and the dot is gray/unknown, not red/amber. An \"Open options\" button is already present and clearly visible at popup.html:25, and the README's Install step 3 explicitly tells the user to right-click \u2192 Options \u2192 paste secret before they would ever inspect the popup, so a user following the documented flow has already configured the secret. The finding overstates impact; \"unknown\" + a labeled \"Open options\" button is a reasonable cue, not a dead end."
+  },
+  {
+    "title": "Options page URL convention (`chrome-extension://<id>/options/options.html`) only works with random extension ID",
+    "reason": "The `chrome-extension://<id>/options/options.html` URL appears only in `docs/CHROME_WEBSTORE_SUBMISSION.md` under the \"Screenshot capture plan\" \u2014 a developer-facing doc for submitting screenshots to the Chrome Web Store, not an install guide. The chrome-extension/README.md install step 3 gives the working right-click path (\"Right-click the extension icon \u2192 Options \u2192 paste the secret \u2192 Save\"), and never instructs the user to paste a chrome-extension://<id>/... URL. A brand-new user following the README install flow would not encounter the URL convention at all; the finding requires the user to misread an unrelated screenshot-submission doc as an install instruction, which is a contrived scenario."
+  },
+  {
+    "title": "No detection of prior install / version \u2014 silent upgrade-in-place can break the running LaunchAgent",
+    "reason": "The lens is a fresh-user audit (install-vscode), and a brand-new user by definition has no prior install \u2014 no existing plist, no running LaunchAgent, no version mismatch \u2014 so all three chained commands succeed cleanly; the finding itself explicitly scopes to \"Returning user re-runs setup\", which is outside the fresh-user lens, and even in that off-lens case the && chain halts with a clear actionable error (\"Pass --force to overwrite, or run: opscontext autostart-status\") rather than a silent half-upgrade."
+  }
+]

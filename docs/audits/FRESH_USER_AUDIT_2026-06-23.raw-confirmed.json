@@ -1,0 +1,587 @@
+[
+  {
+    "title": "Root README never mentions the Chrome extension exists",
+    "severity": "high",
+    "location": "/Users/yan/Projects/ContextEngine/README.md (entire file)",
+    "observation": "The repo root README.md (467 lines, the entry point any GitHub visitor hits first) has zero references to `chrome-extension/`, `OpsContext Browser Capture`, claude.ai/chatgpt capture, the browser ext, or even the 127.0.0.1:7842 endpoint. A new user landing on the GitHub repo has no signal that a Chrome extension is shipped from this monorepo at all.",
+    "impact": "Brand-new user reading the GitHub front page never discovers the Chrome ext. They install `@compr/opscontext-mcp` from npm, follow the quick-start, and never realize there is a browser-capture surface they could install. Adoption funnel for the Chrome ext is effectively zero from the README.",
+    "fix": "Add a short `## Browser Capture (Chrome extension)` section to the root README pointing to `chrome-extension/README.md` and `docs/CHROME_WEBSTORE_SUBMISSION.md`. State explicitly: 'Not yet on Web Store \u2014 install unpacked from chrome-extension/dist after `npm run build`'.",
+    "lens": "install-chromeext",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: README.md (470 lines) has zero references to chrome-extension/, browser capture, claude.ai/chatgpt, or port 7842, while prominently featuring the VS Code extension \u2014 a new GitHub visitor has no signal the Chrome extension exists in this monorepo.",
+      "severity_correct": false,
+      "severity_correction": "medium"
+    }
+  },
+  {
+    "title": "chrome-extension build silently depends on parent-repo `npm install` for esbuild",
+    "severity": "blocker",
+    "location": "/Users/yan/Projects/ContextEngine/chrome-extension/scripts/bundle-content.mjs:30-32 (resolves esbuild from `../node_modules`) + chrome-extension/package.json:22-26 (devDependencies has zero esbuild)",
+    "observation": "`bundle-content.mjs` does `requireFromParent.resolve(\"esbuild\")` against `../package.json`, but chrome-extension/package.json declares only `@types/chrome`, `@types/node`, `typescript`. Esbuild is a transitive dep of the parent repo (`vitest` -> `esbuild ^0.27.0` per package-lock line 4574). A brand-new user who clones the repo and runs the README's instructions (`cd chrome-extension && npm install && npm run build`) will get `Cannot find module 'esbuild'` because they never ran `npm install` at the repo root.",
+    "impact": "Build fails on the very first run for any user who follows the README literally. They see an opaque `Error: Cannot find package 'esbuild'` from createRequire and have no idea why \u2014 the missing dep is in a sibling package.json they were never told to install.",
+    "fix": "Either (a) add `\"esbuild\": \"^0.27.0\"` to chrome-extension/package.json devDependencies so chrome-extension is self-contained, or (b) add an explicit step at the top of chrome-extension/README.md: `cd .. && npm install` BEFORE the `cd chrome-extension && npm install`. Option (a) is the clean fix.",
+    "lens": "install-chromeext",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: chrome-extension/README.md lines 17-21 instruct only `cd chrome-extension && npm install && npm run build`; chrome-extension/package.json lists no esbuild; bundle-content.mjs line 30 explicitly creates a require rooted at `../package.json` so esbuild MUST be in the parent's node_modules, which a fresh user never installs \u2014 and even worse, naively adding esbuild to chrome-extension wouldn't fix it because the require is anchored to the parent path. Build fails on first run with an opaque createRequire error pointing at a sibling package.json the user was never told about.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Install step 2 silently changes directory back to repo root with no explanation",
+    "severity": "high",
+    "location": "/Users/yan/Projects/ContextEngine/chrome-extension/README.md:22-26",
+    "observation": "The README block does `cd chrome-extension && npm install && npm run build` (step 1), then `cd ..` and `node dist/cli.js init-extension-secret` (step 2). The `cd ..` is in the snippet but unexplained \u2014 and `dist/cli.js` here refers to the *parent* ContextEngine compiled CLI, not chrome-extension/dist. The parent's `dist/cli.js` only exists if the user has separately run `npm run build` (tsc) in the parent. The README never instructs that build.",
+    "impact": "User runs `node dist/cli.js init-extension-secret` from the repo root and gets `Error: Cannot find module ... /dist/cli.js`. They have no way to know they need to first `cd .. && npm install && npm run build` in the parent. Stuck.",
+    "fix": "Rewrite step 2 to either (a) instruct `cd .. && npm install && npm run build && node dist/cli.js init-extension-secret`, or better (b) recommend the npm-installed binary path: `npm install -g @compr/opscontext-mcp && opscontext init-extension-secret` which matches the path advertised in `docs/CHROME_WEBSTORE_SUBMISSION.md:65-67`. Pick ONE canonical path and document it consistently.",
+    "lens": "install-chromeext",
+    "verdict": {
+      "real": true,
+      "reason": "Parent dist/ is gitignored, so a fresh clone has no dist/cli.js; the README's step 2 (`cd .. && node dist/cli.js init-extension-secret`) silently assumes the parent project was already `npm install && npm run build`'d, which the README never instructs \u2014 fresh user hits `Cannot find module dist/cli.js` with no in-doc clue, especially confusing since CHROME_WEBSTORE_SUBMISSION.md advertises a different canonical path (`npm i -g @compr/opscontext-mcp && opscontext init-extension-secret`).",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "README Status block says v0.1.0 but manifest is v0.1.4",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/chrome-extension/README.md:12 ('v0.1.0 \u2014 Phase 1a MVP') vs chrome-extension/package.json:3 + src/manifest.json:4 ('0.1.4')",
+    "observation": "README claims 'v0.1.0 \u2014 Phase 1a MVP'. Actual package + manifest are 0.1.4. There is a LOCKED note in sync-manifest-version.mjs explaining that 0.1.3 already had a manifest-vs-package-version drift incident \u2014 but the README's hardcoded version was apparently never updated as part of those releases.",
+    "impact": "New user reading 'v0.1.0 MVP' assumes the ext is barely-built and may set their expectations very low, or assume the docs are stale and stop trusting other instructions in the same file (e.g. the install steps).",
+    "fix": "Either (a) drop the explicit version and use a dynamic badge (`![version](https://img.shields.io/...)`), or (b) extend `scripts/sync-manifest-version.mjs` to also patch the README's Status line. Option (a) is lower-maintenance.",
+    "lens": "install-chromeext",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: README line 12 says 'v0.1.0 \u2014 Phase 1a MVP' while package.json and manifest.json both say 0.1.4. A new user will notice the mismatch (Chrome's extension page shows 0.1.4 after install) and may briefly distrust the docs, but install steps still work fine \u2014 closer to a polish issue than true confusion.",
+      "severity_correct": false,
+      "severity_correction": "low"
+    }
+  },
+  {
+    "title": "init-extension-secret help text references `contextengine` binary; README uses `node dist/cli.js`; CWS doc uses `opscontext`",
+    "severity": "medium",
+    "location": "src/cli.ts:1466 ('Usage: contextengine init-extension-secret'), chrome-extension/README.md:25 ('node dist/cli.js init-extension-secret'), docs/CHROME_WEBSTORE_SUBMISSION.md:67 ('opscontext init-extension-secret')",
+    "observation": "Three different binary names appear across three places that a brand-new user will read. package.json declares 4 bin aliases (opscontext / opscontext-mcp / contextengine / contextengine-mcp), but documentation never explains they are aliases. The options.html UI itself says 'opscontext init-extension-secret' (options.html:20).",
+    "impact": "User pastes the README command, then sees the options page reference `opscontext init-extension-secret` and wonders if they're running the right CLI or if the docs are for a different version. They lose confidence in the docs and ping for help.",
+    "fix": "Pick `opscontext` as the canonical binary (matches the product name and the CWS doc). Update chrome-extension/README.md to use `opscontext init-extension-secret`. Update cli.ts:1466 help text from `contextengine` -> `opscontext`. Add a one-line note in cli.ts help that `contextengine`/`contextengine-mcp` are legacy aliases.",
+    "lens": "install-chromeext",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: cli.ts:1466 says `contextengine`, README.md:25 says `node dist/cli.js`, CWS doc and options.html say `opscontext` \u2014 three names for one binary that a chrome-ext installer encounters in sequence, causing real but recoverable confusion since `node dist/cli.js` actually works.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "No instructions for how to actually START the local HTTP endpoint after installing the ext",
+    "severity": "blocker",
+    "location": "chrome-extension/README.md:32-33 ('node dist/index.js   # or however you normally run the MCP server')",
+    "observation": "The README's step 4 says 'Start the OpsContext MCP server (which exposes the local HTTP endpoint)' with the lazy fallback 'or however you normally run the MCP server'. But a brand-new user has no prior way of running the MCP server \u2014 they are NEW. The HTTP endpoint at 127.0.0.1:7842 is started inside `main()` in src/index.ts:1416 (`startEventIngestServer()`), which only runs when the MCP stdio server is launched. There is no standalone `opscontext serve` command documented; running `node dist/index.js` directly starts a stdio MCP server expecting MCP protocol bytes on stdin, then exits/hangs in a confusing way. The CWS submission doc points users to `opscontext install-autostart` for this \u2014 but the chrome-extension README never mentions install-autostart at all.",
+    "impact": "User completes steps 1-3 perfectly, opens claude.ai, types a prompt \u2014 nothing flows to the audit log. They check the popup (red dot, connection error). They run `node dist/index.js`, terminal hangs silently, no port opens until they pipe something into stdin. They give up convinced the ext is broken.",
+    "fix": "Replace step 4 with explicit guidance: `opscontext install-autostart` (the documented, macOS-supported path that starts the server in the background). For non-macOS, add a fallback like `node dist/index.js < /dev/null &` with a note that the HTTP endpoint binds at start. Also document `curl http://127.0.0.1:7842/health` as the verification step.",
+    "lens": "install-chromeext",
+    "verdict": {
+      "real": true,
+      "reason": "README step 4 truly is sparse and never mentions the documented `opscontext install-autostart` path; a fresh user is left guessing. However, the finding overstates the failure mode: running `node dist/index.js` DOES bind 127.0.0.1:7842 (startEventIngestServer is called in main() and prints a clear `\ud83c\udf10 event-ingest on http://127.0.0.1:7842 (secret loaded)` line), so a reasonably attentive user sees it works and can keep the terminal open \u2014 they're confused, not stuck giving up.",
+      "severity_correct": false,
+      "severity_correction": "medium"
+    }
+  },
+  {
+    "title": "No screenshot / visual guide for 'Load unpacked' in chrome://extensions",
+    "severity": "medium",
+    "location": "chrome-extension/README.md:28-29 ('chrome://extensions \u2192 Developer mode ON \u2192 Load unpacked \u2192 pick chrome-extension/dist/')",
+    "observation": "The 'Load unpacked' instruction is one line of prose. A brand-new user who has never enabled Developer Mode has to find a toggle in the top-right of chrome://extensions, click a specific button, then navigate to the right folder. No screenshot, no callout that the folder to pick is `chrome-extension/dist/` (not `chrome-extension/` itself \u2014 picking the wrong one yields 'Manifest file is missing or unreadable').",
+    "impact": "First-time-unpacked-installer user clicks 'Load unpacked', picks `chrome-extension/`, gets an error, doesn't know what went wrong. They may pick `chrome-extension/src/` next (the manifest source IS there, but icons/ are in a sibling folder, so the ext loads with broken icons), or give up entirely.",
+    "fix": "Either embed a screenshot of chrome://extensions with Developer Mode highlighted, or add a numbered substep: 'a. Visit chrome://extensions. b. Toggle Developer Mode (top-right) ON. c. Click Load unpacked (top-left). d. Navigate to <REPO>/chrome-extension/dist and click Select. The folder you pick MUST contain manifest.json at its root.'",
+    "lens": "install-chromeext",
+    "verdict": {
+      "real": true,
+      "reason": "README line 29 is a single terse prose line with no screenshot or numbered substeps; since both src/ and dist/ contain a manifest.json, a skimming first-time-unpacked user could pick the wrong folder and either get an error or load a broken-icon extension, though the instruction does literally name dist/ so most users will recover.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "minimum_chrome_version = 110 is not mentioned in any user-facing doc",
+    "severity": "low",
+    "location": "chrome-extension/src/manifest.json:6 (`\"minimum_chrome_version\": \"110\"`); not in README; not in CWS doc",
+    "observation": "Manifest declares minimum Chrome 110. A user on an older corporate-managed Chrome would see 'This extension requires a newer version of Chrome' on load with no advance warning.",
+    "impact": "Edge case \u2014 most users are on current Chrome \u2014 but for the unlucky few on stale enterprise builds, it's silent failure at install time.",
+    "fix": "Add a 'Requirements' section to chrome-extension/README.md: 'Chrome 110+ (Mar 2023 or newer). Node 18+ to build.'",
+    "lens": "install-chromeext",
+    "verdict": {
+      "real": true,
+      "reason": "Manifest at line 6 sets minimum_chrome_version=110 and the README has no Requirements section mentioning Chrome version \u2014 confirmed by reading both files. Edge-case impact for enterprise-pinned Chrome, but Chrome's native error is self-explanatory, so polish-level severity is correct.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "No troubleshooting section \u2014 first-failure debugging steps not documented",
+    "severity": "medium",
+    "location": "chrome-extension/README.md (entire file lacks a Troubleshooting section)",
+    "observation": "Common first-install failures (secret mismatch, server not running, capture toggle off, port 7842 occupied) have no documented debug path. There IS a `/health` endpoint mentioned in cli.ts:1513 but the README doesn't surface it.",
+    "impact": "User hits any of the multiple failure modes (already enumerated above) and has no checklist to walk through. They open a GitHub issue or email instead of self-serving.",
+    "fix": "Add a `## Troubleshooting` section at the end of chrome-extension/README.md covering: (1) `curl http://127.0.0.1:7842/health` to verify server, (2) `lsof -i :7842` to spot port conflicts, (3) chrome://extensions \u2192 click 'service worker' link to see background console errors, (4) Inspect popup \u2192 console for content-script errors, (5) `cat ~/.contextengine/extension-secret` to confirm the secret on disk matches what's pasted.",
+    "lens": "install-chromeext",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed \u2014 chrome-extension/README.md has no Troubleshooting section; the /health endpoint hint exists only in CLI stdout after init-extension-secret runs, and no systematic debug checklist (port conflict, secret mismatch, service worker errors) is surfaced to a first-install user.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "No npm/Node.js precheck \u2014 first line fails with cryptic 'command not found'",
+    "severity": "blocker",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/src/extension.ts:723-731 (contextengine.setup handler)",
+    "observation": "The setup handler creates a terminal and types `npm install -g @compr/opscontext-mcp && opscontext install-autostart && opscontext install-claude-hook` with NO precheck for whether Node.js or npm even exist. On a stock macOS install (which is what a 'vibe coder' has), neither is installed. The terminal will print `zsh: command not found: npm`, the `&&` chain halts immediately, and the user sees the 'setup complete' echo never fire \u2014 but they ALSO don't get told what went wrong.",
+    "impact": "Brand-new user clicks the rocket icon, sees red error text in a terminal they don't understand, and assumes the extension is broken. Zero install completes. Worse \u2014 the modal already promised 'this will install npm package + LaunchAgent + hook', so the user thinks all three happened.",
+    "fix": "Before opening the terminal, run `which node && which npm` via `cp.execFile`. If missing, show a modal: 'OpsContext needs Node.js (free, from nodejs.org). Open the download page?' with an 'Open Download' button that calls `vscode.env.openExternal('https://nodejs.org/')`. Block the install until node is detected. Bonus: detect Homebrew and offer `brew install node` as a one-button alternative.",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed at extension.ts:723-731 \u2014 the setup command sends `npm install -g ...` directly to a terminal with zero precheck for node/npm; grep shows no `which node`, `node --version`, or equivalent check anywhere in the extension. The README lists only VS Code 1.93+ and git as Requirements (npm package is \"Optional\"), so a fresh user reasonably installs the extension without node, clicks the rocket-icon modal that promises 3 install steps, and gets only `zsh: command not found: npm` red text with no recovery hint \u2014 matching the install-vscode lens fresh-user failure mode.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "`npm install -g` silently requires sudo on system Node installs",
+    "severity": "blocker",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/src/extension.ts:724",
+    "observation": "If the user installed Node via the official .pkg installer from nodejs.org (the path a non-tech user is most likely to follow), `/usr/local/lib/node_modules` is root-owned. `npm install -g` exits with `EACCES: permission denied`. The terminal does NOT prompt for sudo \u2014 it just dies. The `&&` chain halts and the user sees a wall of red 'npm ERR!' text plus a recommendation to `sudo chown -R 501:20 /Users/...` which a vibe coder will not type.",
+    "impact": "User stares at npm error noise, has no idea whether to retype with sudo, panics that the extension wants root, abandons setup. This is the #1 reported failure mode for any 'npm install -g' onboarding flow.",
+    "fix": "Either (a) detect EACCES and prompt with a modal offering `sudo npm install -g \u2026` via VS Code's terminal (which can surface the sudo password prompt safely), or (b) preferred \u2014 install to a user-writable prefix (`npm config set prefix ~/.npm-global` + PATH wiring) before the install. Best practice 2026 is to recommend nvm/fnm/Volta in the npm precheck and skip global installs entirely (`npx @compr/opscontext-mcp install-autostart`).",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed at extension.ts:724 \u2014 command runs `npm install -g @compr/opscontext-mcp && ...` in a terminal with no EACCES detection, no sudo prompt, no user-prefix precheck, and no nvm/fnm recommendation; on the nodejs.org .pkg install path (root-owned /usr/local/lib/node_modules, which a non-tech user is likely to follow), this fails immediately with red npm ERR! noise, the && chain halts so autostart + Claude hook steps never run, and the targeted vibe-coder persona has no affordance to recover.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Terminal output is raw CLI jargon, not user-friendly \u2014 wall of \u2705/\u274c shell lines with npm scrollback",
+    "severity": "high",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/src/extension.ts:718-731",
+    "observation": "The setup deliberately uses a visible terminal ('the user must SEE the npm install scroll past'). For a developer, fine. For a vibe coder this means: 200+ lines of npm peer-dep noise, deprecation warnings, funding spam, then `launchctl bootout` / `launchctl bootstrap gui/501` raw output, then `splices three entries into ~/.claude/settings.json under hooks`, plus advice like `tail -f ~/.contextengine/audit.log | grep --line-buffered '\"actor\":\"claude-code\"'`. The 'friendly' final echo is one line in a sea of jargon. The modal promise of 'one-click for non-tech users' is broken the moment the terminal opens.",
+    "impact": "Non-tech user sees red 'WARN' / 'deprecated' / 'gyp' messages from npm and assumes the install failed even when it succeeded. Trust collapses on the first install.",
+    "fix": "Replace the raw terminal with `vscode.window.withProgress({ location: Notification, title: 'Installing OpsContext\u2026' })`. Spawn each step with `cp.execFile`, capture stdout/stderr to the OpsContext output channel (hidden by default), and update the progress message: 'Downloading OpsContext (1/3)\u2026' \u2192 'Configuring auto-start (2/3)\u2026' \u2192 'Wiring Claude Code (3/3)\u2026'. On success show ONE modal: 'OpsContext installed. Server running on port 7842.' with a 'Show technical log' button for power users.",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "Code confirms: setup command opens a visible terminal running chained npm + launchctl + hook-splice commands; a vibe-coder will see red npm WARN/deprecated/gyp output that looks like errors even on success \u2014 but the modal pre-warns \"You'll see each step in a new terminal\" and the final `\u2705 setup complete` line is a clear success signal, so users are more likely to be confused than fully stuck.",
+      "severity_correct": false,
+      "severity_correction": "medium"
+    }
+  },
+  {
+    "title": "Post-install message points to Chrome Web Store (not yet live) + unpacked repo install",
+    "severity": "high",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/src/extension.ts:728-729",
+    "observation": "The final terminal echo says 'Next: install the Chrome extension when it lands on the Web Store. For now, see chrome-extension/ in the repo for unpacked install.' A vibe coder (a) has no idea what 'unpacked install' means, (b) does not have the git repo cloned (they installed from the marketplace .vsix), (c) is told to wait for an undefined future event ('when it lands'). The user is dumped at the finish line with a confusing pointer to nothing actionable.",
+    "impact": "User finishes the 'one-click install', reads the last line, and has no idea what to do next. Worse: they think OpsContext doesn't work without the Chrome extension and the Chrome extension isn't shippable yet \u2014 so they uninstall.",
+    "fix": "Replace the final echoes with a vscode showInformationMessage (after the terminal closes/exits) that says: 'OpsContext is now running. You can:' with action buttons: [Open claude.ai] [Try @contextengine in Copilot Chat] [Show what we monitor]. The 'Open claude.ai' button addresses the question 'I'm done, now go to claude.ai?' that the user told us they're asking. Defer the Chrome extension mention to a separate optional 'Add browser capture' command.",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed at lines 728-729: the final terminal echoes literally tell a marketplace-install user to either wait for an undefined future Chrome Web Store release or look at chrome-extension/ in a repo they don't have cloned \u2014 leaving the \"one-click install for non-tech users\" flow (explicit per the comment at line 689) with no actionable next step.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "No success/failure detection \u2014 terminal closes (or stays open) and user has no clear signal",
+    "severity": "high",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/src/extension.ts:731 (term.sendText)",
+    "observation": "After `term.sendText(cmd)` the extension has zero visibility into whether the install succeeded. If any of the three steps fails, the chain halts via `&&`, the final '\u2705 OpsContext setup complete' never echoes, but the extension also does nothing \u2014 no follow-up notification, no retry button, no error report. The user is left in a terminal with a $ prompt and no idea whether they're done.",
+    "impact": "Half-installed state is invisible to the extension. The status bar may still show `CE` because the extension never re-checks. The user thinks setup succeeded when it didn't (or vice versa).",
+    "fix": "Use `vscode.window.onDidEndTerminalShellExecution` (VS Code 1.93+ shell-integration API \u2014 the extension already depends on it per terminalWatcher.ts) to detect exit code. On non-zero exit, show 'Install failed at step X \u2014 [Show log] [Retry] [Get help]'. On success, show a celebratory modal with the 'next steps' buttons from the previous finding.",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed at extension.ts:731 \u2014 setup uses fire-and-forget term.sendText with no onDidEndTerminalShellExecution hook, despite that API already being used in terminalWatcher.ts:168; any failure in the && chain leaves the user at a $ prompt with no extension-level success/failure signal, retry, or status re-check.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "No idempotency / 'already set up?' detection at command entry",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/src/extension.ts:703-716",
+    "observation": "If the user clicks 'OpsContext: Set up' a second time (curious about what it does, or after a partial install), they get the same modal with no indication that anything is already installed. They'll click Install, hit the 'plist already exists' error mid-chain (see Finding 3), and now think the extension is broken on every machine.",
+    "impact": "Returning users + curious clickers get errors that look like bugs.",
+    "fix": "On command invocation, hit `http://127.0.0.1:7842/health` (LaunchAgent endpoint). If 200, show 'OpsContext is already running. [Show status] [Re-install (advanced)] [Cancel]' instead of the install modal.",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: the setup command at extension.ts:703-716 has no pre-flight check (no health probe, no plist check, no autostart-status), and install-autostart.ts:167-170 hard-exits with \"plist already exists\" when re-run, halting the && chain \u2014 a returning/curious user gets a raw terminal error on re-click.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Modal preamble uses CLI jargon a vibe coder won't understand",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/src/extension.ts:706-715",
+    "observation": "The confirmation modal says: '1. npm install -g @compr/opscontext-mcp 2. Install a macOS LaunchAgent (auto-start at login) 3. Wire Claude Code hooks (capture terminal prompts).' For a vibe coder, every noun in that list is jargon: npm, -g, @compr/opscontext-mcp, LaunchAgent, hooks. The modal asking for consent is the FIRST experience and it speaks DevOps-ese.",
+    "impact": "User reads the modal, feels out of their depth, clicks Cancel, and never tries again. The one-click promise dies before any command runs.",
+    "fix": "Rewrite as user-language: 'OpsContext will install a small helper on your Mac so it can: (1) Watch your AI coding sessions, (2) Start automatically when you log in, (3) Connect to Claude Code. About 30 seconds. You can uninstall anytime. Continue?' Move the technical details under a 'Show technical details' link or the README.",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "The modal at lines 707-711 does lead with raw CLI/devops nouns (npm -g, @compr/opscontext-mcp, LaunchAgent, hooks) to a persona the dev's own comment (line 694) explicitly labels \"vibe coders\"; the parentheticals soften but don't replace the jargon, so a non-CLI user would feel out of depth \u2014 medium severity fits since most would still proceed but some will bounce.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "No Linux / Windows handling \u2014 modal lies about platform support",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/src/extension.ts:706-715 vs /Users/yan/Projects/ContextEngine/src/install-autostart.ts:160-164",
+    "observation": "The modal says 'Install a macOS LaunchAgent' unconditionally, regardless of platform. A Windows or Linux user clicks Install and gets `\u274c install-autostart currently supports macOS only` after the (slow, ~30 MB) `npm install` already succeeded. The setup is half-done with no auto-start and no rollback.",
+    "impact": "Non-Mac users waste bandwidth + end up with a confusingly-half-installed setup.",
+    "fix": "Check `process.platform` at command entry. On Linux/Windows show a different modal: 'OpsContext auto-start is macOS-only today \u2014 Linux support coming soon. You can still install the CLI and start it manually. Continue?' Or hide the command entirely on non-darwin via `when: isMac` in package.json contribution.",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: extension.ts:706-715 unconditionally shows \"Install a macOS LaunchAgent\" in the modal with no process.platform check, package.json has no `when: isMac` clause, and install-autostart.ts:160-164 only errors out AFTER `npm install -g @compr/opscontext-mcp` already ran \u2014 leaving Linux/Windows users with a half-installed setup after a 30MB download.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "README has no mention of the new one-click setup command",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/README.md (entire file)",
+    "observation": "The README's Commands table (lines 67-76) lists six commands but does NOT include 'OpsContext: Set up OpsContext (one-click install)'. The 'Requirements' section still says '(Optional) @compr/opscontext-mcp npm package' \u2014 implying the user is expected to install it themselves. There is no Getting Started / Quickstart section pointing users to the rocket-icon command. A user discovering OpsContext on the Marketplace will not know the one-click path exists.",
+    "impact": "The flagship adoption-friction-reducing feature is invisible in the marketplace listing. Users will manually run `npm install -g \u2026` (and hit Findings 1+2) instead of using the setup command.",
+    "fix": "Add a 'Quickstart' section at the top of the README BEFORE 'Why': 'After installing this extension, open the Command Palette (Cmd+Shift+P) and run `OpsContext: Set up OpsContext` \u2014 that's it.' Add the command to the Commands table. Update Requirements to say the setup command handles the CLI install automatically.",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: the `contextengine.setup` command exists in package.json with title \"OpsContext: Set up OpsContext (one-click install)\" and rocket icon, but the README's Commands table (lines 67-76) omits it entirely and Requirements still says the MCP package is \"(Optional)\" \u2014 a Marketplace visitor has no way to discover the flagship one-click install path.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Install runs unsandboxed shell command \u2014 `&&` chain breakage produces a confused partial state with no rollback path",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/vscode-extension/src/extension.ts:723-731",
+    "observation": "The chain `npm install -g \u2026 && opscontext install-autostart && opscontext install-claude-hook` has three independent failure modes (network/perm, launchd, ~/.claude/settings.json write). If step 2 fails, the npm package is on disk but no LaunchAgent and no hook. If step 3 fails, the LaunchAgent is loaded but no Claude hook. There is no 'rollback' or 'continue from step N' path \u2014 the user can only re-run the whole modal, which then trips Finding 3 ('plist already exists').",
+    "impact": "Partial install states are common (transient network, occupied port, malformed pre-existing settings.json) and each one paints the user into a corner where the only fix is uninstalling from CLI \u2014 which requires terminal skill they don't have.",
+    "fix": "Run each step as a separate `withProgress` stage with explicit pass/fail capture. On per-step failure, offer 'Retry just this step' (with --force already applied where applicable). Add an 'OpsContext: Uninstall' command that calls `uninstall-autostart && uninstall-claude-hook && npm uninstall -g \u2026` so users have a clean retry path.",
+    "lens": "install-vscode",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: extension.ts:723-731 chains 3 commands with && and offers no rollback. install-autostart.ts:167-169 explicitly refuses to re-run without --force when plist exists, so if step 3 (install-claude-hook) fails after step 2 succeeded, re-running the VS Code \"Setup\" modal will fail at step 2 with \"plist already exists\", and the user must drop to terminal and discover the uninstall-autostart/uninstall-claude-hook CLI commands to recover \u2014 no VS Code command for that exists in extension.ts.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Short description violates Single Purpose by advertising features the extension does not implement",
+    "severity": "blocker",
+    "location": "/Users/yan/Projects/ContextEngine/docs/CHROME_WEBSTORE_SUBMISSION.md:38 (short description, pasted into the Store listing)",
+    "observation": "The short description reads: 'Local-first browser capture for OpsContext: tamper-evident audit log, drift detection, MCP companion. Zero cloud, zero keys.' The extension code (content scripts + service worker) does NOT implement tamper-evident hash chaining, does NOT detect drift, and is NOT an MCP server or companion. Those features live in the separate @compr/opscontext-mcp npm package. The extension reads DOM, redacts, and POSTs to 127.0.0.1:7842 \u2014 that is its entire scope. The listing names three additional unrelated product capabilities.",
+    "impact": "CWS reviewers reject under Single Purpose ('An extension must have a single purpose that is narrow and easy to understand') and under Deceptive Behavior ('Do not make false or misleading statements... in your Web Store listing'). A first-pass reviewer who installs the extension will see capture only, then read 'drift detection, MCP companion' and flag the listing as misleading scope.",
+    "fix": "Rewrite the short description to describe only what the extension itself does. Example: 'Captures your Claude.ai and ChatGPT prompts and responses to a local audit log on your own machine. Local-first. No cloud, no signup.' Move 'tamper-evident audit log / drift detection / MCP companion' into the detailed description under a clearly labeled 'Companion server (separate install)' section.",
+    "lens": "cws-reviewer",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: the short description at line 38 advertises \"tamper-evident audit log, drift detection, MCP companion\" but grep of chrome-extension/src/ shows zero drift detection code, no hash-chaining (the lib/types.ts comment explicitly says \"the server adds prev_hash + hash\"), and the extension is a content-script/service-worker capture tool, not an MCP server \u2014 those features live in the separate @compr/opscontext-mcp npm package, creating a real Single Purpose / Deceptive Behavior risk for CWS review.",
+      "severity_correct": false,
+      "severity_correction": "high"
+    }
+  },
+  {
+    "title": "Detailed description claims per-domain capture is 'opt-in' but DEFAULT_CONFIG sets both to true",
+    "severity": "high",
+    "location": "/Users/yan/Projects/ContextEngine/docs/CHROME_WEBSTORE_SUBMISSION.md:74 vs /Users/yan/Projects/ContextEngine/chrome-extension/src/lib/types.ts:57-58",
+    "observation": "Listing says 'Opt-in per-domain capture (Claude.ai and ChatGPT.com toggle independently)'. DEFAULT_CONFIG: `captureClaudeAi: true, captureChatGptCom: true`. content/claude.ts and content/chatgpt.ts read these defaults via DEFAULT_CONFIG.captureClaudeAi / captureChatGptCom and proceed to capture on first load. The user must affirmatively UNCHECK to disable. That is opt-OUT, not opt-IN.",
+    "impact": "CWS User Data Policy requires 'prominent disclosure' of data collection and forbids misrepresenting user consent posture. Calling opt-out behavior 'opt-in' is a textbook deceptive-description violation. The companion privacy policy will be cross-checked against this claim and flagged.",
+    "fix": "Either (a) flip DEFAULT_CONFIG.captureClaudeAi and captureChatGptCom to false so the description's 'opt-in' claim becomes true, and add a first-run onboarding nudge in the popup, OR (b) change the description to 'Per-domain capture toggles (Claude.ai and ChatGPT.com can be disabled independently)' and add a corresponding sentence to PRIVACY.md \u00a7 1 stating that capture is on by default on both domains after install.",
+    "lens": "cws-reviewer",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: DEFAULT_CONFIG sets captureClaudeAi/captureChatGptCom to true (types.ts:57-58), the in-code comment literally says \"Per-domain opt-out\", and both content scripts initialize captureEnabled from those true defaults, so fresh installs capture immediately without affirmative user consent \u2014 yet CHROME_WEBSTORE_SUBMISSION.md:74 advertises \"Opt-in per-domain capture\", which a CWS reviewer cross-checking the listing against behavior will flag as a User Data Policy misrepresentation.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "PRIVACY.md describes the 'capture_miss' event as carrying no message text, but the service worker writes a non-trivial error string into it on queue overflow",
+    "severity": "low",
+    "location": "/Users/yan/Projects/ContextEngine/chrome-extension/PRIVACY.md:14 vs /Users/yan/Projects/ContextEngine/chrome-extension/src/background/service-worker.ts:62-72",
+    "observation": "PRIVACY.md says: '`browser.capture_miss` \u2014 diagnostic markers (no message text).' Service-worker.ts on overflow emits a capture_miss with `payload.error: 'queue.overflow: dropped ${dropped} oldest events; flush had been failing.'`. That is a diagnostic string, not user text, but it IS payload content. A precise reviewer reading both files side-by-side will note the wording is slightly off.",
+    "impact": "Polish-grade. Not a rejection trigger.",
+    "fix": "Adjust PRIVACY.md \u00a7 1: '`browser.session_start` / `browser.capture_miss` \u2014 diagnostic markers. They never contain your prompt or assistant text; the `capture_miss` event may include a short diagnostic string such as a selector-failure count or a queue-overflow notice.'",
+    "lens": "cws-reviewer",
+    "verdict": {
+      "real": true,
+      "reason": "PRIVACY.md says capture_miss has \"no message text\" but service-worker.ts:62-72 puts a diagnostic string in payload.error on queue overflow; technically the wording is imprecise, though no user content leaks \u2014 pure polish.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "License (BSL-1.1) is not an OSI-approved open-source license but the listing footer says 'open-source'",
+    "severity": "low",
+    "location": "/Users/yan/Projects/ContextEngine/docs/CHROME_WEBSTORE_SUBMISSION.md:63 'Install the companion OpsContext MCP server (open-source, npm):' and line 81 'License: BSL-1.1'",
+    "observation": "The Business Source License 1.1 is source-available with a non-compete restriction, not OSI-certified open source. Calling a BSL-1.1 product 'open-source' in a Chrome Web Store listing is a common point of confusion that some reviewers note (the Open Source Initiative has been pushing back on this usage publicly).",
+    "impact": "Unlikely rejection trigger, but a precise reviewer may comment. Mostly a community-perception risk.",
+    "fix": "Replace 'open-source, npm' with 'source-available (BSL-1.1), npm' to keep the listing factually unambiguous.",
+    "lens": "cws-reviewer",
+    "verdict": {
+      "real": true,
+      "reason": "The phrase \"open-source, npm\" on line 63 lives inside the \"Detailed description (paste into Store form)\" block (lines 45-84) and line 81 declares \"License: BSL-1.1\" in the same block, so the listing-as-pasted does contain a factual inconsistency since BSL-1.1 is source-available, not OSI-approved open source; severity \"low\" (polish wording fix) is appropriate as it's not a CWS rejection trigger and the user is not blocked.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "README never mentions init-extension-secret, install-autostart, or browser ext setup \u2014 onboarding journey starts in the wrong file",
+    "severity": "blocker",
+    "location": "/Users/yan/Projects/ContextEngine/README.md (no mention of 'init-extension-secret', 'install-autostart', '7842', or the chrome ext install flow). Browser setup only in /Users/yan/Projects/ContextEngine/chrome-extension/README.md.",
+    "observation": "The main README's Quick Start jumps from `npx @compr/opscontext-mcp init` straight to MCP-client wiring (VS Code mcp.json, Claude Desktop config). It never instructs the user to: (a) generate the extension secret with `opscontext init-extension-secret`, (b) install autostart with `opscontext install-autostart`, (c) load the unpacked Chrome extension, or (d) paste the secret. The chrome-extension/README has these steps but a brand-new user installing from npm has no signpost to it. `grep init-extension-secret README.md` returns nothing; `grep 7842 README.md` returns nothing.",
+    "impact": "A user who follows the README literally never starts the HTTP event-ingest server, never generates a secret, and never knows the browser ext needs one. They install all three surfaces (CLI, VS Code ext, Chrome ext) and sit at zero events forever, with no diagnostic trail pointing at the missing step.",
+    "fix": "Add a 'Step 3 \u2014 capture browser + Claude Code events' section to the main README that runs: `opscontext init-extension-secret` (prints secret + next-steps), `opscontext install-autostart` (or `node dist/index.js`), then 'open chrome://extensions \u2192 load chrome-extension/dist/ \u2192 paste secret'. Cross-link to chrome-extension/README. The CLI's `init` command (Step 1 in the README) should also detect missing extension-secret and print a one-line nudge.",
+    "lens": "first-event-path",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: README.md has zero mentions of init-extension-secret, install-autostart, port 7842, or chrome extension setup, yet both CLI commands ship in src/cli.ts and the chrome-extension/README.md documents a real feature; a npm-installing user has no signpost to browser capture. However, severity should be medium not blocker \u2014 the MCP-only path still works (search, audit, scoring, PM2/nginx snapshots), so the user gets a working tool and simply never discovers browser capture rather than giving up entirely.",
+      "severity_correct": false,
+      "severity_correction": "medium"
+    }
+  },
+  {
+    "title": "Popup stays on 'loading\u2026' / grey 'unknown' dot forever when no events have ever flowed \u2014 masks the unauthenticated state",
+    "severity": "blocker",
+    "location": "/Users/yan/Projects/ContextEngine/chrome-extension/src/background/service-worker.ts:90-103 (flush returns at line 95 when queue empty, BEFORE persistStatus is called) + /Users/yan/Projects/ContextEngine/chrome-extension/src/popup/popup.ts:14-22 (status arrives null \u2192 'unknown')",
+    "observation": "`persistStatus()` is only called from inside `flush()` AFTER the `q.length === 0` early return at line 95. A brand-new user has never enqueued an event (or only just installed and not visited claude.ai), so the queue is empty, `flush()` exits at line 95, status is never persisted, popup gets `status: null` \u2192 renders 'state: loading\u2026' with the `dot--unknown` grey class permanently. The code at line 98-101 that sets `lastError = 'No secret configured. Open the extension options.'` is unreachable on the empty-queue path.",
+    "impact": "Brand-new user opens popup \u2192 sees 'loading\u2026' indefinitely. No hint that they need to paste a secret. No call-to-action. They assume the extension is broken and abandon. The very state designed to tell them what's wrong ('unauthenticated' with a friendly error) is never written.",
+    "fix": "Refactor: call `persistStatus(await getConfig())` at SW startup AND at the top of `flush()` BEFORE the `q.length === 0` early return. Then 'no secret + empty queue' correctly resolves to `state: 'unauthenticated'` with a red dot and 'No secret configured. Open the extension options.' message. Bonus: have the popup's initial render call `persistStatus` via a new message type so opening the popup on a fresh install always paints the real state.",
+    "lens": "first-event-path",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: flush() returns at line 95 when queue is empty before persistStatus runs, and SW startup (line 212) only calls flush(), so a fresh user with no events ever gets status=null. Popup then renders grey 'unknown' dot with no error text \u2014 the 'No secret configured' message is genuinely unreachable on the empty-queue path. Severity is high not blocker because popup.html still shows an 'Open options' button (line 25) that gives a discovery path; user is stuck/confused but has an obvious next click rather than abandoning entirely.",
+      "severity_correct": false,
+      "severity_correction": "high"
+    }
+  },
+  {
+    "title": "Server-side log never records 'bad secret' attempts \u2014 operator can't diagnose a typo from the server side",
+    "severity": "high",
+    "location": "/Users/yan/Projects/ContextEngine/src/http-server.ts:111-115 (sends 401, but no console.error / no audit event)",
+    "observation": "When the extension POSTs with a wrong secret, `handleEvents` returns `sendJson(res, 401, { ok: false, error: 'bad_secret' })` and stops \u2014 no `console.error`, no `safeAppend` audit event, no rate-limit counter. The only place 401 surfaces is the extension popup. If the user has Chrome ext options closed and just runs `tail -f ~/.contextengine/logs/mcp-stderr.log`, they see complete silence even while POSTs are arriving and being rejected.",
+    "impact": "User with a one-char-typo'd secret tails the server log expecting to see WHY it's not working. Sees nothing. Concludes 'server isn't even receiving requests', goes hunting for firewall / port issues. Real cause (secret typo in extension options) is hidden behind the popup, which they may not realize shows errors.",
+    "fix": "On every 401 in `handleEvents`, `console.error('[OpsContext] rejected event POST: bad secret from <UA prefix>')` (UA helps distinguish ext vs hook vs vscode emitter). Also write a `safeAppend('opscontext.event.rejected', { reason: 'bad_secret', ... })` so it lands in the audit log. Throttle to one log line per minute to avoid log flooding.",
+    "lens": "first-event-path",
+    "verdict": {
+      "real": true,
+      "reason": "Code confirmed: lines 111-115 return 401 with no console.error and no safeAppend audit event, so a user tailing server logs sees silence on bad-secret POSTs. However, the README explicitly directs new users to the extension popup (which displays the precise message \"Server rejected secret (401). Re-paste secret in options.\") and to `~/.contextengine/audit.log`, not mcp-stderr.log; a user following the documented diagnostic path gets the exact actionable error. The gap is real but the severity is overstated \u2014 the popup surfaces a precise, actionable error pointing to the exact fix, so this is polish, not a stuck-and-asks-for-help blocker.",
+      "severity_correct": false,
+      "severity_correction": "low"
+    }
+  },
+  {
+    "title": "Popup state derivation has dead code and uses same red dot for 'unauthenticated' and 'error' \u2014 undiagnosable difference",
+    "severity": "high",
+    "location": "/Users/yan/Projects/ContextEngine/chrome-extension/src/background/service-worker.ts:149-154 and /Users/yan/Projects/ContextEngine/chrome-extension/src/popup/popup.css:11-15",
+    "observation": "Line 151: `if (lastError) return queueLength > 0 ? 'error' : 'error';` \u2014 both ternary branches return 'error', so the condition is dead code. CSS maps both `dot--unauthenticated` and `dot--error` to `var(--err)` (red). The 'paused' state defined in CaptureStatus union is never produced anywhere. A user with a missing secret and a user with a typo'd secret both see: red dot + 'error' text + whichever lastError message happened to be set last. The popup's actionable error message exists but the visual state collapses them.",
+    "impact": "Brand-new user: 'red dot, says error, I think I pasted the secret right? Why is it red?' Hard to tell 'I never pasted' vs 'I pasted wrong' vs 'server is down' at a glance. Worse: a stale `lastError` from a previous boot (e.g., before they pasted the secret) can survive in module-level state and make a freshly-correct setup still look broken.",
+    "fix": "(1) Fix the dead ternary: `if (lastError) return 'error';`. (2) Give `unauthenticated` its own visible color (e.g., blue 'needs setup') and an inline CTA in the popup like 'Paste secret in options \u2192'. (3) On every successful flush, clear lastError BEFORE checking length (already done \u2014 but also clear it on config.secret change via storage.onChanged so editing the secret doesn't carry over a stale 'bad secret' message). (4) Drop the unused `paused` state from the union or actually implement it.",
+    "lens": "first-event-path",
+    "verdict": {
+      "real": true,
+      "reason": "The dead ternary at line 151 (`queueLength > 0 ? \"error\" : \"error\"`) is real, and the CSS does map both `dot--unauthenticated` and `dot--error` to the same red `var(--err)` color. However, the popup ALSO renders the state name as text (\"unauthenticated\" vs \"error\") and surfaces a specific actionable message (\"No secret configured. Open the extension options.\") in the error box, plus an \"Open options\" button is always visible \u2014 so a brand-new user is not actually undiagnosably stuck, just looking at a slightly polish-deficient UI. Severity is \"low\" (cosmetic dead code + dot-color collision with clear textual disambiguation), not \"high\".",
+      "severity_correct": false,
+      "severity_correction": "low"
+    }
+  },
+  {
+    "title": "Chrome ext fires content scripts immediately on claude.ai \u2014 captures and queues BEFORE secret pasted, then dumps a misleading 'No secret' error after first prompt",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/chrome-extension/src/content/claude.ts:21 (`captureEnabled = DEFAULT_CONFIG.captureClaudeAi` defaults to TRUE) + /Users/yan/Projects/ContextEngine/chrome-extension/src/lib/types.ts:57 (DEFAULT_CONFIG.captureClaudeAi: true) + service-worker.ts:98-101",
+    "observation": "DEFAULT_CONFIG enables `captureClaudeAi: true`. The content script runs on claude.ai before the user has opened the options page. The first prompt the user submits gets captured + enqueued + the SW tries to flush + finds no secret + sets `lastError = 'No secret configured...'` + still keeps the event in queue. The capture happened, the redaction ran, but the event sits in storage.session indefinitely. If the user later pastes the secret, the queued event gets flushed \u2014 which might be a privacy surprise (something I typed BEFORE I set this up just got sent).",
+    "impact": "Scenario 5 in the brief \u2014 'user opens claude.ai BEFORE pasting the secret'. The extension is capturing real prompts and storing them locally with no consent gate. Most users won't realize. Also: the first time they DO paste the secret, prior prompts surface in the audit log out of order from their understanding of when capture 'started'.",
+    "fix": "In the SW, when `!config.secret`, do not call `enqueue()` from `onMessage` \u2014 instead drop the event AND set `lastError = 'Capture paused \u2014 paste secret in options to enable.'`. Alternative: default `captureClaudeAi: false` and have the options page Save also set it to true (opt-in). Either way the popup should show a clear 'capture paused \u2014 needs secret' state before the user has opted in.",
+    "lens": "first-event-path",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: DEFAULT_CONFIG.captureClaudeAi=true (types.ts:57), content script defaults captureEnabled to true (claude.ts:21,42), SW onMessage always calls enqueue() before checking config (service-worker.ts:170), and flush() with !config.secret merely sets lastError and returns without dropping the queued event (service-worker.ts:98-102) \u2014 so prompts typed before any opt-in persist in chrome.storage.session and will be transmitted when the user later pastes the secret, which is a real privacy surprise for a fresh user.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "install-autostart silently relies on `npm root -g` resolving to a global install \u2014 npx-only users get the dev-tree fallback or a confusing error",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/src/install-autostart.ts:40-61 (detectOpscontextEntry) + lines 173-180 (error path)",
+    "observation": "`detectOpscontextEntry()` tries `npm root -g` \u2192 `@compr/opscontext-mcp/dist/index.js`. If the user installed via `npx -y @compr/opscontext-mcp` (the README's recommended pattern!), there is no global install \u2014 `npm root -g` returns a path that does not contain the package. The function then falls through to the dev-tree branch which only matches if `__dirname/index.js` exists. For a user running via npx, NEITHER branch hits \u2192 'Could not locate opscontext entrypoint' error tells them 'install globally OR clone the repo' \u2014 but the README pushed them to npx, which is neither.",
+    "impact": "User who followed the README's npx-based MCP wiring and now wants browser+hook events runs `opscontext install-autostart` (or `npx ... install-autostart`) and gets a dead-end error. The error message doesn't acknowledge the npx pattern they were guided into. Path of least resistance is to give up.",
+    "fix": "Add a third branch to detectOpscontextEntry: resolve via `require.resolve('@compr/opscontext-mcp/dist/index.js')` (works from inside npx's transient install). Update the error in lines 175-179 to mention: 'If you installed with npx, install globally first: `npm install -g @compr/opscontext-mcp`, OR pin a path with `opscontext install-autostart --entry=/path/to/dist/index.js`'. Add the `--entry` flag for power users.",
+    "lens": "first-event-path",
+    "verdict": {
+      "real": true,
+      "reason": "Verified: package is ESM (`\"type\": \"module\"`), so `__filename` throws ReferenceError in dist/install-autostart.js \u2014 the catch swallows it and the \"dev-tree\" branch never returns a path. Combined with `npm root -g` not containing the package for an npx user, the function returns null and the user gets the \"install globally or clone\" dead-end error. The README's recommended setup uses `npx -y @compr/opscontext-mcp` exclusively (zero global-install instructions), so a typical first-event user following the README hits this. Reproduced locally by copying dist/install-autostart.js + dist/index.js into a fresh ESM dir; `__filename` threw, both branches missed, result was null.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "When MCP server is down (Scenario 1, 3), popup shows raw fetch error like 'Failed to fetch' with no remediation hint",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/chrome-extension/src/background/service-worker.ts:134-139 (catch block uses raw err.message)",
+    "observation": "The catch sets `lastError = msg` where msg is the raw fetch error (typically 'Failed to fetch' or 'NetworkError when attempting to fetch resource'). The popup renders this verbatim in errorBox. There is no detection of 'connection refused / ECONNREFUSED \u2192 MCP server probably down' and no remediation text like 'Run: opscontext autostart-status'.",
+    "impact": "Scenarios 1 (MCP not running) and 3 (MCP crashed) both surface as 'Failed to fetch' in the popup. User has no idea what 'Failed to fetch' means or where to look. The CLI has a beautiful `opscontext autostart-status` command with diagnostics, but the popup never points to it.",
+    "fix": "In the catch block, when err.message matches /Failed to fetch|NetworkError|ECONNREFUSED/i, replace lastError with: 'Cannot reach MCP server at <endpoint>. Run `opscontext autostart-status` in a terminal to check.' Add a small 'Troubleshoot' link in the popup to a docs page or a chrome.runtime.openOptionsPage section with a connectivity self-check button (POST to /health, show the result).",
+    "lens": "first-event-path",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed at service-worker.ts:134-139 (raw err.message stored as lastError) and popup.ts:32 (rendered verbatim into errorBox). A first-event-path user with MCP not yet running sees \"Failed to fetch\" with no hint about checking the server, opscontext autostart-status, or anything actionable; medium severity fits as the user is confused but a technically literate audience can eventually infer \"server isn't running\".",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Options page never validates the secret it just saved \u2014 no probe POST, no green checkmark",
+    "severity": "medium",
+    "location": "/Users/yan/Projects/ContextEngine/chrome-extension/src/options/options.ts:24-36 (save() just writes to storage and shows 'Saved at ...')",
+    "observation": "`save()` writes config and shows a 'Saved at HH:MM:SS' label. There is no verification round-trip: no POST to `<endpoint>/health` to check the endpoint is alive, no synthetic dry-run event to check the secret matches. A typo'd secret is silently saved, and the user moves on. The only feedback comes much later from the popup, after they visit claude.ai and type something \u2014 and by then they've forgotten which char they might have mistyped.",
+    "impact": "Scenario 2 in the brief \u2014 'secret typo'd by one char'. Discovery loop is: paste \u2192 save \u2192 switch tab \u2192 open claude.ai \u2192 type prompt \u2192 wait \u2192 open popup \u2192 see red dot \u2192 return to options \u2192 try again. This is the classic 'silent save, distant fail' anti-pattern; brand-new users are most likely to typo here and most likely to give up.",
+    "fix": "On Save, before persisting: probe `GET <endpoint>/health` \u2014 if it 404s/refuses, show 'MCP server not reachable at <endpoint>. Start it with `opscontext install-autostart`.' If health OK, POST a synthetic event with the entered secret to `<endpoint>/events`: 200 \u2192 'Verified \u2014 events will flow', 401 \u2192 'Server rejected this secret. Did you copy the full 64 hex chars?', other \u2192 show error. Color-code the savedAt label green/red accordingly. Costs ~200 ms and shifts the discovery loop from 'minutes later in another surface' to 'instantly, right here'.",
+    "lens": "first-event-path",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: options.ts save() lines 24-36 only writes to chrome.storage.local and shows a 'Saved at...' label \u2014 no GET /health probe, no synthetic POST to verify the secret, no 401 detection at save time. A typo'd 64-hex-char secret is silently accepted; the only feedback channel is the popup polling status every 2s after the user generates an event on claude.ai/chatgpt.com, which is exactly the distant-fail loop the finding describes. Medium is correct: the popup does eventually show 'Server rejected secret (401)' so users won't give up entirely, but the discovery loop is needlessly long for the most common first-time mistake.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Three different identities: which one is the actual publisher?",
+    "severity": "high",
+    "location": "README.md:9, README.md:467, chrome-extension/src/options/options.html:64, chrome-extension/PRIVACY.md:43, manifest.json (no author field)",
+    "observation": "I count four publisher names: VS Code Marketplace badge says 'css-llc' (README.md:9), README footer says 'Built by PROD LLC' linking to compr.fr (README.md:467), the extension Options page says 'Built by FASTPROD / OpsContext' (options.html:64), and Privacy + GitHub URL says 'FASTPROD' (github.com/FASTPROD/ContextEngine). Contact email is yannick@compr.ch \u2014 a fifth domain. The manifest.json has no author field at all. As a non-technical user, I have no idea who I'm trusting.",
+    "impact": "Trust killer at install time. Chrome's prompt will show some publisher name; if it's 'css-llc' and the listing says 'FASTPROD' and the website is compr.fr, I'll assume something is sketchy and bounce. Googling 'css-llc' returns nothing reassuring; it looks like a placeholder.",
+    "fix": "Pick ONE legal entity name and use it everywhere: manifest.json author field, options.html footer, README footer, Chrome Web Store publisher, VS Code publisher ID, GitHub org. If 'PROD LLC' is the real company, rename the GitHub org from FASTPROD to PROD-LLC (or vice versa), republish the VS Code ext under 'prod-llc' instead of 'css-llc', and put 'PROD LLC (compr.fr) \u2014 yannick@compr.ch' in the options footer.",
+    "lens": "trust-signals",
+    "verdict": {
+      "real": true,
+      "reason": "All five (actually seven) identity variants are confirmed present in the exact files cited: css-llc (README:9 VS Code badge), PROD LLC (README:467), FASTPROD (options.html:64, GitHub URL in PRIVACY.md:44), yannick@compr.ch (PRIVACY.md:43), compr.fr (README:467), plus package.json author is yet another combo \"FASTPROD (PROD LLC)\" and chrome-extension manifest.json has no author field \u2014 exactly as the finding states. For a security/compliance/audit-log product, a marketplace publisher ID (css-llc) that matches nothing else in the project is a genuine trust-signal red flag a fresh user will notice.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Compliance claims (SOC 2 CC7.2, ISO 27001 A.12.4.1) presented as facts with zero proof",
+    "severity": "high",
+    "location": "README.md:20, README.md:244, docs/CHROME_WEBSTORE_SUBMISSION.md:58",
+    "observation": "The README states 'SOC2 CC7.2 and ISO 27001 A.12.4.1 evidence out of the box' as if certified. The Chrome Web Store long description says 'SOC 2 CC7.2 / ISO 27001 A.12.4.1 grade'. Nowhere is there a link to a SOC 2 report, an auditor's letter, a Type I/II attestation, a sample evidence packet, or even a one-paragraph explainer telling me what CC7.2 or A.12.4.1 actually require. As a non-technical reader I have no way to know whether 'grade' means 'we passed an audit' or 'we wrote a log file'.",
+    "impact": "Anyone in regulated industries (the explicit target audience per README.md:17) will see this as either a misleading marketing claim or possibly a regulatory violation. Non-technical buyers will assume certification exists and be embarrassed when their compliance team asks for the report.",
+    "fix": "Rewrite as: 'Produces hash-chained audit log evidence aligned with SOC 2 CC7.2 (change monitoring) and ISO 27001 A.12.4.1 (event logging) \u2014 these are evidence artifacts, not a certification. OpsContext itself is not SOC 2 or ISO 27001 certified.' Link each control ID to a 1-paragraph plain-English explanation. Drop the word 'grade'.",
+    "lens": "trust-signals",
+    "verdict": {
+      "real": true,
+      "reason": "README:20 uses \"SOC2 CC7.2 and ISO 27001 A.12.4.1 evidence out of the box\" and Chrome Web Store says \"SOC 2 CC7.2 / ISO 27001 A.12.4.1 grade\" with no disclaimer that OpsContext is not itself certified, no link explaining what the control IDs require, and no sample evidence packet \u2014 while the internal ROADMAP confirms certification is Phase 4 deferred; a non-technical reader in the explicitly-targeted regulated-industry audience could plausibly assume certification exists.",
+      "severity_correct": false,
+      "severity_correction": "medium"
+    }
+  },
+  {
+    "title": "Acronym soup with zero glossary \u2014 MCP, MV3, BSL-1.1, BM25, JWT, PII, AGPL, CWS, CC7.2, A.12.4.1, PWA",
+    "severity": "high",
+    "location": "README.md (throughout), chrome-extension/PRIVACY.md:20, 37, 39, docs/CHROME_WEBSTORE_SUBMISSION.md:163",
+    "observation": "Within the first paragraph of the README the user hits 'MCP server' with one link, then 'BSL-1.1', then 'PM2 / nginx / Docker / git / cron'. The privacy policy uses 'MV3 service workers', 'JWTs', 'PII', without explaining any of them. The Chrome Web Store doc references 'CWS user-data policy', 'MCP', and 'AGPL-3.0' unexplained. A non-technical user (designer, marketer) does not know what an MCP server is, what BSL-1.1 means for them, or whether MV3 is good or bad.",
+    "impact": "A non-developer reader will either close the tab or, worse, install without understanding the security model \u2014 meaning the privacy claims are effectively unread.",
+    "fix": "Add a 'For non-developers' lede above the technical README explaining in plain words what this is, what it does for the user, and what it does NOT do. Include a glossary section: MCP = Model Context Protocol (how AI tools call local servers); BSL-1.1 = a source-available license you can use for free unless you sell it as a hosted service; MV3 = the modern Chrome extension format; PII = personal info; CC7.2 / A.12.4.1 = specific clauses in two standards (link to plain-English explainers).",
+    "lens": "trust-signals",
+    "verdict": {
+      "real": true,
+      "reason": "The README and PRIVACY.md do dump many unexplained acronyms (MCP, BSL-1.1, BM25, MV3, PII, JWTs, CC7.2, A.12.4.1, CWS, AGPL) in the first paragraphs without any glossary; however the target audience is explicitly developers integrating MCP/AI tooling \u2014 designers/marketers are not the user \u2014 so confusion exists but does not derail adoption, making this medium rather than high.",
+      "severity_correct": false,
+      "severity_correction": "medium"
+    }
+  },
+  {
+    "title": "No uninstall / opt-out / data-deletion instructions in the popup or Options page",
+    "severity": "medium",
+    "location": "chrome-extension/src/popup/popup.html, chrome-extension/src/options/options.html, chrome-extension/PRIVACY.md:32",
+    "observation": "The popup (popup.html) shows 'Flush now' and 'Open options' but offers no way to pause capture, no 'delete all captured data' button, no link to uninstall instructions. The Options page has redaction toggles and per-domain capture but no 'Pause everything' kill switch. The privacy policy buries the deletion instructions in section 5: 'stop the local OpsContext server, delete ~/.contextengine/ from your home directory, and remove the extension from chrome://extensions' \u2014 three CLI/filesystem steps a non-technical user cannot do.",
+    "impact": "GDPR/privacy-conscious users have no easy way to stop capture or wipe data. Reduces trust at evaluation time ('what if I want out?') and creates real friction for users who do want to delete data.",
+    "fix": "Add a 'Pause capture (all domains)' master toggle to the Options page \u2014 single click stops everything. Add a 'Clear queued events' button to the popup. Add a 'Delete all captured data' button on the Options page that calls a /reset endpoint on the local server. In PRIVACY.md, link to a step-by-step uninstall page with screenshots showing chrome://extensions and the Trash.",
+    "lens": "trust-signals",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: popup has only Flush/Open options, Options page has no master pause toggle or \"delete all captured data\" button, and PRIVACY.md \u00a75 deletion requires CLI/filesystem steps; however, users can effectively pause by unchecking the two per-domain capture boxes and uninstall via standard chrome://extensions, and the target audience (devs who ran `opscontext init-extension-secret`) can handle `rm -rf ~/.contextengine/`, so impact is polish-level not medium.",
+      "severity_correct": false,
+      "severity_correction": "low"
+    }
+  },
+  {
+    "title": "Domain sprawl: compr.ch, compr.fr, compr.app, invoc.io, plank.io, konive.com, crowlr.io, crowlr.com, invoc.me \u2014 which one is OpsContext?",
+    "severity": "medium",
+    "location": "README.md:178, README.md:467-470, PRIVACY.md:43, options.html:65",
+    "observation": "The README footer lists 7+ unrelated-looking products ('compr.app \u00b7 crowlr.io \u00b7 crowlr.com \u00b7 invoc.io \u00b7 plank.io \u00b7 konive.com \u00b7 invoc.me'). Pricing page URL is api.compr.ch/contextengine/pricing. Email is yannick@compr.ch. Privacy policy is to be hosted at compr.fr/privacy-opscontext.html. GitHub is github.com/FASTPROD. As a non-technical evaluator, this looks like a personal portfolio of side projects rather than a real company \u2014 which means the 'will this be supported in 2 years?' question gets a no.",
+    "impact": "Trust signal lost. A non-technical buyer will not pay CHF 2/mo (or recommend internally) for an extension whose publisher looks like a hobbyist with 8 domains.",
+    "fix": "Pick one canonical domain for OpsContext (e.g., opscontext.com or contextengine.dev), put everything under it: docs, pricing, privacy policy, support email (support@opscontext.com). Move the 'portfolio of products' list off the README and into an 'About PROD LLC' subpage if needed at all.",
+    "lens": "trust-signals",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: README footer lists 7 unrelated product domains (compr.app, crowlr.io, crowlr.com, invoc.io, plank.io, konive.com, invoc.me), pricing is on api.compr.ch, email is yannick@compr.ch, parent link is compr.fr, GitHub org is FASTPROD \u2014 five+ distinct identifiers for one product creates a real \"is this a real company?\" trust signal problem for non-technical buyers.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Compliance claims use the word 'grade' in a way that may legally imply certification",
+    "severity": "high",
+    "location": "docs/CHROME_WEBSTORE_SUBMISSION.md:58",
+    "observation": "Store description: 'every interaction gets a tamper-evident, hash-chained record (SOC 2 CC7.2 / ISO 27001 A.12.4.1 grade).' The word 'grade' next to two well-known compliance standards reads to a non-technical buyer as 'this product is SOC 2 / ISO 27001 graded' \u2014 i.e., certified or audited to that level. There is no certification.",
+    "impact": "This is exactly the language pattern that gets flagged by AICPA / ISO licensing bodies and trips up enterprise procurement. Could lead to a Chrome reviewer escalating, or worse, a takedown request from a standards body or a buyer's lawyer.",
+    "fix": "Drop the word 'grade'. Replace with: 'produces evidence artifacts that map to SOC 2 CC7.2 (change monitoring) and ISO 27001 A.12.4.1 (event logging) controls. OpsContext is not itself SOC 2 or ISO 27001 certified.' Same fix applies in README.md:20.",
+    "lens": "trust-signals",
+    "verdict": {
+      "real": true,
+      "reason": "The exact text \"(SOC 2 CC7.2 / ISO 27001 A.12.4.1 grade)\" appears at line 58, and the word \"grade\" next to two named compliance standards can read as a certification claim with no anti-claim disclaimer; but this is a wording/polish issue \u2014 a fresh user installing the extension does not get stuck or give up over this phrasing, so severity \"high\" is overstated.",
+      "severity_correct": false,
+      "severity_correction": "low"
+    }
+  },
+  {
+    "title": "No screenshots in the README to ground the marketing claims",
+    "severity": "low",
+    "location": "README.md (entire file)",
+    "observation": "The README is 470 lines of text, ASCII art, and tables \u2014 zero screenshots. No image of the popup, the Options page, the value meter, the score report, the audit log verifier output, the VS Code chat surface, or the Chrome capture in action. For a non-technical evaluator, 'show me what it looks like' is a basic trust signal.",
+    "impact": "Lower conversion from README readers to installers. Higher abandon rate at the Store listing too \u2014 the same images are presumably going to be the Store screenshots, and the doc admits they're not yet captured (CHROME_WEBSTORE_SUBMISSION.md:19).",
+    "fix": "Capture the 5 screenshots listed in CHROME_WEBSTORE_SUBMISSION.md:108 and embed 2-3 of them at the top of the README \u2014 at minimum: (1) the popup with green dot + recent events, (2) a score report card, (3) the audit_verify CLI output.",
+    "lens": "trust-signals",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed: the 470-line README contains only badge images (4 shield badges) and zero actual screenshots of the product surfaces (popup, Options page, score report, audit verifier output, VS Code chat), and CHROME_WEBSTORE_SUBMISSION.md:19 explicitly admits \"Screenshots captured\" is unchecked \u2014 so the trust-signal gap is real and \"low\" (polish) is the correct severity since developer evaluators will still proceed via the code examples and won't fully abandon.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  },
+  {
+    "title": "Setup requires running terminal commands \u2014 invisible to non-technical users until after install",
+    "severity": "high",
+    "location": "docs/CHROME_WEBSTORE_SUBMISSION.md:63-68, options.html:21",
+    "observation": "The Store detailed description tells users to run: 'npm install -g @compr/opscontext-mcp; opscontext install-autostart; opscontext init-extension-secret'. The Options page (options.html:21) says 'Paste the secret printed by opscontext init-extension-secret. The OpsContext MCP server reads the same secret from ~/.contextengine/extension-secret'. A non-technical user does not have npm installed, does not know what a terminal is, and will hit a wall at step 1.",
+    "impact": "Confused, frustrated users either uninstall and leave a bad review or never get the extension working. Mismatch between 'browser extension' (low-friction) and 'requires Node.js + terminal + paste a hex secret' (developer-only).",
+    "fix": "Two paths: (a) be explicit in the short description that this is 'a developer tool \u2014 requires Node.js and terminal access', so non-devs self-select out before installing; (b) ship a one-click installer (.pkg / .dmg on Mac, .exe on Windows) that installs the server, generates the secret, and auto-pastes it into the extension via a deep link (chrome-extension://...). Until (b) exists, lean hard on (a).",
+    "lens": "trust-signals",
+    "verdict": {
+      "real": true,
+      "reason": "Confirmed in source: the Store detailed description (CHROME_WEBSTORE_SUBMISSION.md:62-68) literally instructs users to run three npm/CLI commands, and options.html:20 requires pasting a secret produced by `opscontext init-extension-secret` \u2014 a non-technical user without Node.js/terminal will hit a wall at the Options page with no in-extension fallback.",
+      "severity_correct": true,
+      "severity_correction": ""
+    }
+  }
+]
