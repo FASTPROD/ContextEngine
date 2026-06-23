@@ -1314,6 +1314,58 @@ tamper-evident audit log at ~/.contextengine/audit.log.`);
   process.exit(1);
 }
 
+async function cliEmitEvent(args: string[]): Promise<void> {
+  const { safeAppend } = await import("./audit.js");
+  const help = args.includes("-h") || args.includes("--help");
+  if (help || args.length < 2) {
+    console.log(`Usage: contextengine emit-event <event-kind> <payload-json> [--actor NAME]
+
+Appends a single event to the hash-chained audit log. Useful for VS Code
+extensions, custom integrations, or scripted test scenarios.
+
+  event-kind    One of: browser.* / vscode.* / cli.* / learning.* / etc.
+  payload-json  A JSON object describing the event. Will be validated as
+                a Record<string, unknown>.
+  --actor NAME  Override the actor field. Defaults to 'cli'.
+
+Examples:
+  contextengine emit-event vscode.tool_call '{"tool":"Edit","args_preview":"file=src/x.ts"}'
+  contextengine emit-event browser.prompt   '{"surface":"claude.ai","text":"hello","char_count":5}' --actor browser-ext
+
+The event becomes a regular audit-chain record (prev_hash + hash added by
+safeAppend), visible via 'contextengine audit-verify' and consumed by the
+'contextengine watch' detector + 'drift_status' MCP tool.`);
+    process.exit(help ? 0 : 1);
+  }
+
+  const eventKind = args[0];
+  const payloadJson = args[1];
+  let actor = "cli";
+  for (let i = 2; i < args.length; i++) {
+    if (args[i] === "--actor" && args[i + 1]) actor = args[++i];
+  }
+
+  let payload: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(payloadJson);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("payload must be a JSON object (not array, not primitive)");
+    }
+    payload = parsed as Record<string, unknown>;
+  } catch (e) {
+    console.error(`Bad payload JSON: ${e instanceof Error ? e.message : String(e)}`);
+    process.exit(1);
+  }
+
+  // Cast — the audit module accepts any string for the event field; the
+  // AuditEvent union is documentation, not enforcement. Validation of
+  // "what's a valid event kind" is the caller's responsibility (the HTTP
+  // server enforces a prefix allow-list; this CLI is trusted).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  safeAppend(eventKind as any, payload, actor);
+  console.log(`✅ Appended ${eventKind} to audit log.`);
+}
+
 async function cliWatch(args: string[]): Promise<void> {
   const { watchAuditLog, detect } = await import("./detector.js");
   let jsonMode = false;
@@ -1866,6 +1918,8 @@ Usage:
                                        Generate ~/.contextengine/extension-secret for the browser ext
   contextengine watch [--json] [--severity info|warn|critical] [--once] [--window SECONDS]
                                        Stream drift / loop / stuck-tool / fabrication alerts from the audit log
+  contextengine emit-event <kind> <payload-json> [--actor NAME]
+                                       Append a single event to the audit log (for integrations / scripted tests)
   contextengine hook <secret-scan|doc-coverage>
                                        Run policy-driven pre-commit checks against staged diff
                                        (exit 1 on blocking violation; CE_JSON=1 for CI output)
@@ -2038,6 +2092,11 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
     process.exit(result.success ? 0 : 1);
   }).catch((err) => {
     console.error("Activation error:", err);
+    process.exit(1);
+  });
+} else if (command === "emit-event") {
+  cliEmitEvent(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
     process.exit(1);
   });
 } else if (command === "watch") {
