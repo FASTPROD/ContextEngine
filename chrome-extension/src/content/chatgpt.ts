@@ -106,6 +106,24 @@ function attachPromptListeners() {
   }, true);
 }
 
+// 🔒 LOCKED [RESPONSE-DEDUPE-CHATGPT] — 2026-06-23
+// ⛔ NEVER put `text.length` back in the dedupe key (responses or tool calls).
+//    Same root cause as the claude.ts streaming over-emit bug: length grows
+//    on every settle during streaming, length-in-key churns, dedupe Set
+//    misses, re-emit. Length stays OUT. See LOCK in claude.ts captureResponses
+//    for the full incident summary.
+// ⛔ NEVER emit tool_calls without a done-marker check. ChatGPT streams tool
+//    arguments token-by-token too — without a stream-done gate, each
+//    characterData mutation produces a new dedupe key. The audit during the
+//    workflow on 2026-06-23 flagged this as the SAME bug class as responses.
+// WHY: Mirror of the fix in claude.ts. Keeping the two files near-identical
+//    (rather than parameterizing into a single helper) is the explicit
+//    architectural call from the file header — surface-specific quirks tend
+//    to leak through any abstraction.
+// FIX: If ChatGPT changes the per-turn ancestor selector
+//    (`data-message-author-role="assistant"` / `data-message-id`), patch
+//    the `turn.closest(...)` line and update CHATGPT_SELECTORS.
+
 function captureResponses() {
   if (!captureEnabled) return;
   const blocks = document.querySelectorAll(
@@ -120,14 +138,21 @@ function captureResponses() {
     const block = blocks[i];
     const text = (block as HTMLElement).innerText || "";
     if (!text.trim()) continue;
-    const key = `${i}:${text.length}:${text.slice(0, 64)}`;
-    if (emittedResponses.has(key)) continue;
-    // ChatGPT's done marker = the copy button in the turn-action toolbar.
+
+    // Per-turn done check — copy button inside the assistant turn container.
+    // ChatGPT's `data-message-author-role="assistant"` ancestor is stable
+    // and contains the action toolbar with the copy button as a sibling
+    // of the markdown block.
     const turn = block.closest('div[data-message-author-role="assistant"], div[data-message-id]');
     const done = turn?.querySelector(S.streamDoneMarker.primary) ||
                   turn?.querySelector(S.streamDoneMarker.fallback);
     if (!done) continue;
+
+    // Dedupe key: position + first 64 chars. NO LENGTH — see LOCK above.
+    const key = `r:${i}:${text.slice(0, 64)}`;
+    if (emittedResponses.has(key)) continue;
     emittedResponses.add(key);
+
     const { text: redactedText, redacted, counts } = applyRedaction(text);
     emitEvent(
       buildEvent("browser.response", SURFACE, {
@@ -136,6 +161,7 @@ function captureResponses() {
         char_count: text.length,
         redacted,
         redaction_counts: redacted ? counts : undefined,
+        ordinal: i,
       }),
     );
   }
@@ -149,9 +175,23 @@ function captureToolCalls() {
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
     const text = (block as HTMLElement).innerText || "";
-    const key = `${i}:${text.slice(0, 200)}`;
+    if (!text.trim()) continue;
+
+    // Done check — a tool call is finished when its enclosing assistant
+    // turn has the copy button. Without this gate, streaming tool args
+    // emit on every characterData mutation. See LOCK above.
+    const turn = block.closest('div[data-message-author-role="assistant"], div[data-message-id]');
+    const done = turn?.querySelector(S.streamDoneMarker.primary) ||
+                  turn?.querySelector(S.streamDoneMarker.fallback);
+    if (!done) continue;
+
+    // Dedupe key: position + first 64 chars (shorter than the old 200 to
+    // be more forgiving of trivial format drift, and consistent with the
+    // response dedupe shape). NO LENGTH — see LOCK above.
+    const key = `t:${i}:${text.slice(0, 64)}`;
     if (emittedToolCalls.has(key)) continue;
     emittedToolCalls.add(key);
+
     const nameEl = block.querySelector("code, [class*='font-mono']");
     const tool = nameEl ? (nameEl as HTMLElement).innerText.trim() : "unknown";
     emitEvent(

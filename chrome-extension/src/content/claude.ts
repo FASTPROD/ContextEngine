@@ -119,6 +119,51 @@ function capturePromptsFromDOM() {
 
 // ─── Response capture ───────────────────────────────────────────────────────
 
+// 🔒 LOCKED [RESPONSE-DEDUPE] — 2026-06-23
+// ⛔ NEVER put `text.length` back in the dedupe key. The streaming-growth
+//    over-emit bug (a response firing ~6× as it grew, once per 750ms settle)
+//    was exactly this: each settle saw a longer text, length-in-key differed,
+//    Set check missed, re-emit. Length stays OUT.
+// ⛔ NEVER replace `isBlockDone` with a document-wide `anyDone` check. While
+//    turn N+1 is mid-stream, turn N still has its copy button, so doc-wide
+//    "any copy button anywhere" returns true throughout. The result: turn
+//    N+1 emits a partial under the prefix-only dedupe key, and the final
+//    full text is suppressed (same prefix). Per-block ancestor walk is what
+//    makes this safe.
+// WHY: This is the "polish fix" the user flagged on 2026-06-23 — they
+//    observed a single response firing 6× in the audit log. Workflow
+//    designed + 3 adversarial verifiers all flagged the original two-settle
+//    stability gate as silently dropping legitimate captures (a stream that
+//    finishes generates ONE final settle, not two). The per-block done-marker
+//    check is the verifier-recommended fallback that works in all 4 cases:
+//    new-response-just-finished, page-reload-with-existing-chat,
+//    mid-stream-pause, multiple-completed-with-one-streaming.
+// FIX: To extend to chatgpt.com, see chatgpt.ts captureResponses — same
+//    pattern, walks up from the assistant block to find the surface-specific
+//    copy button.
+
+function isBlockDone(block: Element): boolean {
+  // Walk up looking for an ancestor whose subtree contains a copy button
+  // for THIS block. The copy button only appears once the stream finishes
+  // for THIS turn — that's our per-block done signal. We cap the walk at
+  // 5 levels to avoid accidentally matching the NEXT turn's copy button
+  // (turn containers in claude.ai are typically 3–4 ancestors above the
+  // markdown block).
+  let cur: Element | null = block.parentElement;
+  let depth = 0;
+  while (cur && cur !== document.body && depth < 5) {
+    if (
+      cur.querySelector('button[data-testid="action-bar-copy"]') ||
+      cur.querySelector('button[aria-label*="Copy" i]')
+    ) {
+      return true;
+    }
+    cur = cur.parentElement;
+    depth++;
+  }
+  return false;
+}
+
 function captureResponses() {
   if (!captureEnabled) return;
   const blocks = document.querySelectorAll(
@@ -130,29 +175,18 @@ function captureResponses() {
   }
   consecutiveMisses = 0;
 
-  // Stream-done signal: if ANY action-bar-copy button exists in the document,
-  // at least the most recent fully-streamed turn has a copy button. Combined
-  // with debounceSettle's 750ms quiet window, we treat this as "responses are
-  // done streaming for now" and emit any blocks we haven't seen.
-  //
-  // The earlier per-turn scoped check (find a `conversation-turn-*` ancestor
-  // then look for the copy button inside) silently failed when Anthropic
-  // dropped the `conversation-turn-*` testid in mid-2026; we got no responses
-  // at all. This wider check is correct in the common case and over-emits at
-  // worst (which the emittedResponses Set then dedupes).
-  const anyDone =
-    document.querySelector(S.streamDoneMarker.primary) ||
-    document.querySelector(S.streamDoneMarker.fallback);
-  if (!anyDone) return;
-
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
     const text = (block as HTMLElement).innerText || "";
     if (!text.trim()) continue;
-    // Stable dedupe key: position + length + first 64 chars. Position alone
-    // isn't enough (turns shift on edit); text alone isn't enough (the same
-    // canned greeting could repeat across chats).
-    const key = `r:${i}:${text.length}:${text.slice(0, 64)}`;
+    // Per-block done check — see LOCK [RESPONSE-DEDUPE] above. If this
+    // specific turn doesn't have a copy button in a nearby ancestor, it's
+    // still streaming. Skip; the copy button appearing will trigger a
+    // mutation → debounceSettle → re-entry of captureResponses → emit.
+    if (!isBlockDone(block)) continue;
+
+    // Dedupe key: position + first 64 chars. NO LENGTH — see LOCK above.
+    const key = `r:${i}:${text.slice(0, 64)}`;
     if (emittedResponses.has(key)) continue;
     emittedResponses.add(key);
 

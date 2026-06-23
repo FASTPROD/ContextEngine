@@ -2,9 +2,27 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
-## [2.1.1] — 2026-06-23 — Phase 1c: one-command install + Claude Code terminal capture
+## [chrome-ext 0.1.3] — 2026-06-23 — streaming-dedupe polish (response over-emit fix)
+
+Companion to 2.1.1. Chrome-ext-only release; not on Web Store yet — users reload the unpacked dir.
+
+### Fixed
+- **`chrome-extension/src/content/claude.ts`** — single response no longer fires 6× during streaming. Root cause: the dedupe key included `text.length` (`r:${i}:${text.length}:${text.slice(0,64)}`). debounceSettle (750 ms) fired multiple times as Claude's response grew; each settle saw a longer text, so the length-in-key differed, the Set check missed, and the same response re-emitted on every settle observation. Fix: drop length from the key + replace document-wide `anyDone` with a per-block `isBlockDone` that walks up 5 ancestor levels looking for an `action-bar-copy` button. Per-block scoping is critical: while turn N+1 is mid-stream, turn N still has its copy button → document-wide check would emit turn N+1 partial. LOCK `[RESPONSE-DEDUPE]`.
+- **`chrome-extension/src/content/chatgpt.ts`** — same bug class fixed in mirror file. `captureResponses` had the same length-in-key pattern; `captureToolCalls` had no done-marker check at all, so tool args streamed → emit on every characterData mutation. Both now use the existing `data-message-author-role="assistant"` turn ancestor + copy button check + prefix-only key. LOCK `[RESPONSE-DEDUPE-CHATGPT]`.
+
+### Process note
+- Designed via a Workflow run (`wf_f9bf9bbc-46a`) with 3 parallel design proposals (length-stability, longer-debounce, hybrid-stability) + audit of chatgpt.ts + adversarial verification from 3 lenses (miss responses / dedupe preservation / chatgpt generalization). All 3 verifiers blocked the synthesizer's chosen "two-settle stability gate" design — concrete failure: a stream that finishes generates ONE final settle, not two, so the gate never fires and the response is silently dropped. All three verifiers converged on the same suggested fix (per-block done-marker check). That's what shipped here.
+- 8 agents, 236K tokens, ~6.7 min. The adversarial verification phase paid for itself by catching the silent-drop failure mode before it shipped.
+
+## [2.1.1] — 2026-06-23 — Phase 1c: one-command install + Claude Code terminal capture + browser-capture end-to-end
+
+**Published to npm** as `@compr/opscontext-mcp@2.1.1` on 2026-06-23 after end-to-end live verification on the maintainer's machine. Tarball 162.3 kB / 57 files. Latest dist-tag confirmed.
 
 Closes the last surface gap from 2.1.0. Before this patch, "use OpsContext" meant running `nohup npx ...` every time the Mac restarted and hand-editing `~/.claude/settings.json` to wire Claude Code hooks. Now both are single commands. This is the release that lets non-technical users actually adopt OpsContext.
+
+### Browser-capture surface verified live
+
+End-to-end verified on the maintainer's machine 2026-06-23: prompts typed on https://claude.ai land in `~/.contextengine/audit.log` as `browser.prompt` events, Claude's responses land as `browser.response` events. Required several mid-day fixes (Chrome MV3 module-import bug, selector drift on Anthropic's DOM, React-clear race on input intercept). All fixed in companion `@compr/opscontext-chrome@0.1.2` (repo-only, unpacked install).
 
 ### Added
 - **`src/install-autostart.ts`** (LOCK `[AUTOSTART-INSTALL]`) — installs a macOS LaunchAgent at `~/Library/LaunchAgents/com.opscontext.mcp.plist`. Set-and-forget — server starts at every login, KeepAlive restarts on crash, logs to `~/.contextengine/logs/mcp-{stdout,stderr}.log`. Companion `uninstall-autostart` + `autostart-status` commands. Auto-detects either a global npm install or a dev tree; pins node path absolutely (launchd has no PATH).
