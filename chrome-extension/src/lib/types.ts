@@ -13,7 +13,6 @@ export type BrowserEventKind =
   | "browser.response"
   | "browser.tool_call"
   | "browser.session_start"
-  | "browser.session_end"
   | "browser.capture_miss"; // emitted when both selector tiers fail
 
 export interface BrowserEvent {

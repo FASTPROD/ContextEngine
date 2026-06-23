@@ -132,7 +132,11 @@ The initial workflow-generated privacy policy had 3 MAJOR inaccuracies caught by
 
 ### Open follow-ups (defer to later sprint)
 
-- **`browser.session_end` declared in `types.ts:16` but never emitted anywhere** — either wire it (e.g., emit on `beforeunload`) or remove from the type union. Confused the privacy auditor; will confuse Chrome Web Store reviewers. Small cleanup.
+- *(none — all auditor follow-ups resolved.)*
+
+### Resolved follow-ups
+
+- ~~`browser.session_end` declared in `types.ts:16` but never emitted anywhere.~~ **Removed from the type union 2026-06-23** rather than wired — the chrome ext has no use case for an end-of-session marker (session_start is enough to delimit conversations; capture is event-driven from there). If a future feature wants it back, add a `beforeunload` emitter on the content script + restore the union member.
 
 ---
 
