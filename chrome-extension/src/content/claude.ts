@@ -70,57 +70,51 @@ function applyRedaction(text: string) {
   return result;
 }
 
-function capturePromptSubmit() {
+// Capture user prompts by reading the RENDERED `[data-testid="user-message"]`
+// nodes after each settle. Replaces the prior intercept-the-contenteditable
+// approach which raced React's input-clear (input was empty by the time our
+// setTimeout(0) fired). Rendered-DOM source survives that race because the
+// element only appears AFTER React flushes submit. LOCK note: keep this as
+// the primary capture path; the keydown/click handlers were removed for this
+// reason in 2026-06-23.
+const emittedPrompts = new Set<string>();
+
+function capturePromptsFromDOM() {
   if (!captureEnabled) return;
-  const input = resolve(S.promptInput);
-  if (!input) {
+  const nodes = document.querySelectorAll(
+    S.userMessage.primary + ", " + S.userMessage.fallback,
+  );
+  if (nodes.length === 0) {
     consecutiveMisses++;
     return;
   }
   consecutiveMisses = 0;
 
-  // Read BEFORE the input clears on submit.
-  const text = (input as HTMLElement).innerText || "";
-  if (!text.trim()) return;
+  for (let i = 0; i < nodes.length; i++) {
+    const el = nodes[i] as HTMLElement;
+    const text = el.innerText || "";
+    if (!text.trim()) continue;
+    // Stable dedupe key: position-in-list + first 64 chars + length.
+    // Position alone isn't enough because new turns shift positions on edit.
+    const key = `p:${i}:${text.length}:${text.slice(0, 64)}`;
+    if (emittedPrompts.has(key)) continue;
+    emittedPrompts.add(key);
 
-  const { text: redactedText, redacted, counts } = applyRedaction(text);
-  const conversationId = conversationIdFromUrl(location.href);
-  lastConversationId = conversationId;
+    const { text: redactedText, redacted, counts } = applyRedaction(text);
+    const conversationId = conversationIdFromUrl(location.href);
+    lastConversationId = conversationId;
 
-  emitEvent(
-    buildEvent("browser.prompt", SURFACE, {
-      conversation_id: conversationId,
-      text: redactedText,
-      char_count: text.length,
-      redacted,
-      redaction_counts: redacted ? counts : undefined,
-    }),
-  );
-}
-
-function attachPromptListeners() {
-  // Submit-button click (delegated; the button rerenders).
-  document.addEventListener("click", (ev) => {
-    const target = ev.target as Element | null;
-    if (!target) return;
-    const btn = target.closest("button");
-    if (!btn) return;
-    if (
-      btn.getAttribute("aria-label") === "Send message" ||
-      btn.getAttribute("type") === "submit"
-    ) {
-      // Read on the event-loop turn AFTER the click so React has flushed.
-      setTimeout(capturePromptSubmit, 0);
-    }
-  }, true);
-
-  // Enter without Shift on the contenteditable.
-  document.addEventListener("keydown", (ev) => {
-    if (ev.key !== "Enter" || ev.shiftKey) return;
-    const t = ev.target as Element | null;
-    if (!t || !t.matches('div[contenteditable="true"]')) return;
-    setTimeout(capturePromptSubmit, 0);
-  }, true);
+    emitEvent(
+      buildEvent("browser.prompt", SURFACE, {
+        conversation_id: conversationId,
+        text: redactedText,
+        char_count: text.length,
+        redacted,
+        redaction_counts: redacted ? counts : undefined,
+        ordinal: i,
+      }),
+    );
+  }
 }
 
 // ─── Response capture ───────────────────────────────────────────────────────
@@ -206,11 +200,12 @@ async function boot() {
     return;
   }
 
-  attachPromptListeners();
-
-  // Watch the whole page for response/tool changes; debounceSettle fires when
-  // the streaming completes (no DOM mutations for 750ms).
+  // Watch the whole page for prompt + response + tool changes; debounceSettle
+  // fires when DOM has been quiet for 750ms — after React has finished
+  // rendering both the user's submitted message and the assistant's response.
+  // This is what replaced the old keydown/click input-intercept approach.
   debounceSettle(document.body, 750, () => {
+    capturePromptsFromDOM();
     captureResponses();
     captureToolCalls();
   });
@@ -223,6 +218,7 @@ async function boot() {
       lastConversationId = conversationIdFromUrl(lastUrl);
       emittedResponses.clear();
       emittedToolCalls.clear();
+      emittedPrompts.clear();
       emitEvent(buildEvent("browser.session_start", SURFACE, {
         conversation_id: lastConversationId,
       }));
@@ -242,8 +238,10 @@ async function boot() {
     }
   }, 30_000);
 
-  // Initial scan in case responses are already on screen when the page loads.
+  // Initial scan in case responses/prompts are already on screen when the
+  // page loads (e.g. returning to an existing chat).
   setTimeout(() => {
+    capturePromptsFromDOM();
     captureResponses();
     captureToolCalls();
   }, 1_500);
