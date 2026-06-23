@@ -121,31 +121,41 @@ function capturePromptsFromDOM() {
 
 function captureResponses() {
   if (!captureEnabled) return;
-  const list = resolve(S.messageList);
-  if (!list) {
+  const blocks = document.querySelectorAll(
+    S.assistantMarkdown.primary + ", " + S.assistantMarkdown.fallback,
+  );
+  if (blocks.length === 0) {
     consecutiveMisses++;
     return;
   }
+  consecutiveMisses = 0;
 
-  // Find all assistant markdown blocks. For each, check if it's "done" (the
-  // copy button appears) and we haven't emitted it yet.
-  const blocks = list.querySelectorAll(S.assistantMarkdown.primary + ", " + S.assistantMarkdown.fallback);
+  // Stream-done signal: if ANY action-bar-copy button exists in the document,
+  // at least the most recent fully-streamed turn has a copy button. Combined
+  // with debounceSettle's 750ms quiet window, we treat this as "responses are
+  // done streaming for now" and emit any blocks we haven't seen.
+  //
+  // The earlier per-turn scoped check (find a `conversation-turn-*` ancestor
+  // then look for the copy button inside) silently failed when Anthropic
+  // dropped the `conversation-turn-*` testid in mid-2026; we got no responses
+  // at all. This wider check is correct in the common case and over-emits at
+  // worst (which the emittedResponses Set then dedupes).
+  const anyDone =
+    document.querySelector(S.streamDoneMarker.primary) ||
+    document.querySelector(S.streamDoneMarker.fallback);
+  if (!anyDone) return;
+
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
-    // Use a stable key: position + length. Not perfect, but the dedupe is
-    // belt-and-braces because debounceSettle already debounces.
     const text = (block as HTMLElement).innerText || "";
     if (!text.trim()) continue;
-    const key = `${i}:${text.length}:${text.slice(0, 64)}`;
+    // Stable dedupe key: position + length + first 64 chars. Position alone
+    // isn't enough (turns shift on edit); text alone isn't enough (the same
+    // canned greeting could repeat across chats).
+    const key = `r:${i}:${text.length}:${text.slice(0, 64)}`;
     if (emittedResponses.has(key)) continue;
-
-    // Check for the done marker NEAR this block (in its action toolbar).
-    const turn = block.closest('div[data-testid^="conversation-turn-"], main > div > div');
-    const done = turn?.querySelector(S.streamDoneMarker.primary) ||
-                  turn?.querySelector(S.streamDoneMarker.fallback);
-    if (!done) continue;
-
     emittedResponses.add(key);
+
     const { text: redactedText, redacted, counts } = applyRedaction(text);
     emitEvent(
       buildEvent("browser.response", SURFACE, {
@@ -154,6 +164,7 @@ function captureResponses() {
         char_count: text.length,
         redacted,
         redaction_counts: redacted ? counts : undefined,
+        ordinal: i,
       }),
     );
   }
