@@ -45,6 +45,15 @@ export function registerChatParticipant(
     stream: vscode.ChatResponseStream,
     token: vscode.CancellationToken
   ): Promise<vscode.ChatResult> => {
+    // Emit a vscode.prompt_submit audit event for the chat participant invocation.
+    // Fire-and-forget — never blocks the response.
+    void client.emitEvent("vscode.prompt_submit", {
+      surface: "vscode-copilot-chat",
+      command: request.command || "",
+      text: (request.prompt || "").slice(0, 4000),
+      char_count: (request.prompt || "").length,
+    });
+
     // Route to command handler
     switch (request.command) {
       case "status":

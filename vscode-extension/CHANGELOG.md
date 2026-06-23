@@ -2,6 +2,28 @@
 
 All notable changes to the OpsContext VS Code Extension (previously ContextEngine).
 
+## [0.9.0] — 2026-06-23 — Cross-surface event emitters → OpsContext audit log
+
+### Added
+- **VS Code → OpsContext event capture** — the extension now writes audit-log events for every meaningful user interaction:
+  - `vscode.prompt_submit` — fires when the user invokes the `@contextengine` chat participant (any command or freeform prompt). Payload includes the surface, command, prompt text (truncated to 4 KB), and char_count.
+  - `vscode.tool_call` — fires when the user invokes any Command Palette entry (`OpsContext: Commit All`, `Show Session Status`, `End Session Checklist`, `Search Knowledge Base`, `What We Check`, `Sync Docs`, `Generate HTML Score Report`). Payload includes the command id + the trigger source.
+- **Fire-and-forget delivery via the `contextengine emit-event` CLI** (new in `@compr/opscontext-mcp@2.1.0`). The extension's `contextEngineClient.ts` now exports `emitEvent(kind, payload, actor?)` that shells out asynchronously — never blocks the chat response, never surfaces errors to the user (if the CLI is missing or the audit log is unreachable, the event drops silently and the UI is unaffected).
+- **End-to-end flow now closed**: every interaction with OpsContext via VS Code (chat panel, command palette, dashboard button) lands in the same hash-chained `~/.contextengine/audit.log` that the Chrome extension writes to. `contextengine watch` and the `drift_status` MCP tool see them all.
+
+### Why minor (0.8 → 0.9)
+- Net-new capability: an extension that previously had no telemetry now has structured audit-log events for every user interaction.
+- No breaking changes — all existing commands, settings, keybindings, and the `@contextengine` chat handle continue to work identically.
+- Bumps the minor digit per semver because adding an event-emission contract is a feature, not a fix.
+
+### Privacy posture (unchanged from prior releases)
+- Events go ONLY to the local audit log (`~/.contextengine/audit.log`). No outbound traffic.
+- The same redaction discipline that protects Chrome captures applies: prompt text is truncated to 4 KB and passes through the secret-pattern scrubbers in the existing audit pipeline.
+- The user can disable event emission entirely by uninstalling `@compr/opscontext-mcp` (the CLI shell-out becomes a silent no-op and the UI degrades gracefully).
+
+### Required companion release
+- `@compr/opscontext-mcp@2.1.0` ships the `emit-event` CLI that this extension shells out to. The extension still works against 2.0.2 (events become silent no-ops), but you'll want both upgraded together to get the full audit-log flow.
+
 ## [0.8.2] — 2026-06-11 — HTML Score Report button in the info panel
 
 ### Added

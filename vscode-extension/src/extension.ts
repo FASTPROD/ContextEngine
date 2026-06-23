@@ -247,6 +247,7 @@ function registerCommands(
   // -----------------------------------------------------------------------
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.commitAll", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.commitAll", trigger: "command-palette" });
       const snapshot = await gitMonitor.forceScan();
 
       if (snapshot.totalDirty === 0) {
@@ -326,6 +327,7 @@ function registerCommands(
   // -----------------------------------------------------------------------
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.showStatus", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.showStatus", trigger: "command-palette" });
       const snapshot = await gitMonitor.forceScan();
 
       outputChannel.clear();
@@ -371,6 +373,7 @@ function registerCommands(
   // -----------------------------------------------------------------------
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.endSession", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.endSession", trigger: "command-palette" });
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -432,6 +435,7 @@ function registerCommands(
   // -----------------------------------------------------------------------
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.showInfo", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.showInfo", trigger: "command-palette" });
       const snapshot = await gitMonitor.forceScan();
       statsPoller.poll(); // get latest stats
       showInfoPanel(context, snapshot, statsPoller.stats, statsPoller.isActive);
@@ -443,6 +447,7 @@ function registerCommands(
   // -----------------------------------------------------------------------
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.sync", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.sync", trigger: "command-palette" });
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -534,6 +539,7 @@ function registerCommands(
   // -----------------------------------------------------------------------
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.search", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.search", trigger: "command-palette" });
       const query = await vscode.window.showInputBox({
         prompt: "Search OpsContext knowledge base",
         placeHolder: "deployment process, scoring system, security rules…",
@@ -599,6 +605,7 @@ function registerCommands(
   // command palette entry that gates correctly + opens the report.
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.scoreHtml", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.scoreHtml", trigger: "command-palette" });
       const folders = vscode.workspace.workspaceFolders;
       const defaultProject = folders?.[0]?.name;
 

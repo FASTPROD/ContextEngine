@@ -1,6 +1,6 @@
 {
   "name": "@compr/opscontext-mcp",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "description": "OpsContext for AI Agents — read-only fleet visibility (PM2/nginx/Docker/git/cron) + tamper-evident audit log + policy-as-code hooks. The ops + compliance layer Claude Code can't grow natively.",
   "type": "module",
   "main": "dist/index.js",

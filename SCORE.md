@@ -59,6 +59,16 @@
 - **Sourcemaps removed from tarball + obfuscation script deleted**: no scoring impact, but tarball is ~28% smaller and the "obfuscation defeated by shipped sourcemap" enterprise red flag is gone.
 - **PRO module list corrected**: `collectors` removed from `PREMIUM_MODULES` because collectors.ts runs for all users unconditionally. The 4 PRO tools that consume the data remain gated. No scoring impact; closes the freemium-theater gap.
 
+## 2026-06-23 (Session 10) — Phase 1 LIVE — npm 2.1.0 + ext 0.9.0 + Chrome ext loadable
+
+- **`@compr/opscontext-mcp@2.1.0`** published to npm. Tarball 152.7 kB / 52 files. The first feature release after the OpsContext rebrand — adds the HTTP event ingest endpoint, the 8-heuristic drift detector, `contextengine watch` + `init-extension-secret` + `emit-event` CLIs, and the `drift_status` MCP tool.
+- **`css-llc.contextengine@0.9.0`** published to VS Code Marketplace. The companion release that emits `vscode.prompt_submit` (on every `@contextengine` chat invocation) and `vscode.tool_call` (on every Command Palette entry) into the same hash-chained audit log the Chrome extension writes to. End-to-end cross-surface event flow now closed.
+- **`@compr/opscontext-chrome@0.1.0`** scaffold under `chrome-extension/` (repo-only; not on Chrome Web Store yet). Loadable unpacked via Developer mode. 15-file dist, 80 kB. Selector library MIT-attributed in `LICENSE_THIRD_PARTY.md`.
+- **Cross-surface wedge is shipped and operational.** No other product captures browser + IDE + terminal events into a single tamper-evident audit log with policy enforcement and heuristic drift alerts. This is OpsContext's defensible position.
+- **196 / 196 tests passing.** Build clean across all three packages.
+- **Day-1 test plan ready** at `docs/test-plans/PHASE1_DAY1.md` — 15-minute end-to-end verification covering deliberate `fabrication_suspect` + `silent_failure` triggers.
+- **No scoring impact** on the AI-readiness rubric — all additive.
+
 ## 2026-06-22 (Session 09) — Strategic crossroads + SOC 2 foundations + overnight Phase 1 scaffold
 
 - **Strategic decisions locked into docs**:

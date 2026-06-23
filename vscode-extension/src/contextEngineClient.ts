@@ -230,6 +230,37 @@ export async function listLearnings(category?: string): Promise<string> {
 }
 
 /**
+ * Emit a single audit event via the `contextengine emit-event` CLI.
+ *
+ * Fire-and-forget by design — telemetry must never block the user's
+ * workflow. If the CLI fails (not installed, audit log unwritable, etc.)
+ * we swallow the error and log to the extension's output channel. The
+ * caller doesn't await failure handling.
+ *
+ * Use sparingly: each call shells out, which is ~80-150 ms on a warm
+ * Node.js. Batch where possible (a single tool_call event per command
+ * invocation, not one per file Save during a multi-file refactor).
+ */
+export async function emitEvent(
+  kind: string,
+  payload: Record<string, unknown>,
+  actor: string = "vscode-ext",
+): Promise<void> {
+  // Detached & unawaited so the caller doesn't pay the latency.
+  void (async () => {
+    try {
+      const json = JSON.stringify(payload);
+      // emit-event takes <kind> <payload-json> [--actor NAME].
+      await runCLI(["emit-event", kind, json, "--actor", actor], { timeout: 5_000 });
+    } catch {
+      // Drop silently. The CLI may not be installed (degraded mode), the
+      // audit log may be unreachable (rare), or the user may not yet have
+      // initialized ~/.contextengine. None of these should surface to the UI.
+    }
+  })();
+}
+
+/**
  * Generate the HTML score report (PRO feature). Returns the absolute path to
  * the generated HTML file. The CLI also auto-opens the file in the default
  * browser; we just need to surface the path back to the caller for any

@@ -2,6 +2,49 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
+## [2.1.0] — 2026-06-23 — Phase 1: cross-surface capture + drift detector + local event ingest
+
+The first feature release after the OpsContext rebrand. Closes the wedge the audit identified: **no other tool captures AI interactions across browser + IDE + terminal and feeds them into a tamper-evident audit log with policy enforcement**. Now we do.
+
+### Added
+- **`src/http-server.ts`** (LOCK `[HTTP-EVENT-INGEST]`) — local event-ingest HTTP endpoint at `http://127.0.0.1:7842`. The browser extension and the VS Code extension POST batched events here; the MCP server validates and appends them to the existing hash-chained audit log via `safeAppend()`.
+  - `POST /events` — schema-validated batched events (max 50 events, 64 KB body). Event-kind allowlist: `^(browser|vscode|cli)\.` — system kinds like `learning.save` can only come from the local writer, never the network. Auth via shared 32-byte hex secret at `~/.contextengine/extension-secret` (mode 0600), compared in constant time.
+  - `GET /health` — unauthenticated liveness probe.
+  - Bound to `127.0.0.1` ONLY — never `0.0.0.0`. LAN devices cannot inject audit events.
+  - Hot-reload of the secret on every request — `init-extension-secret --force` rotates without restarting MCP.
+  - Started automatically at MCP boot. Gracefully degrades on port conflict (`OPSCONTEXT_EVENT_PORT=<n>` to override).
+- **`src/detector.ts`** (LOCK `[DRIFT-HEURISTICS]`) — 8-heuristic drift / loop / fabrication detector.
+  - **loop** (warn): same prompt sent 3+ times in 5 min (Jaccard > 0.6 token overlap)
+  - **stuck** (warn): identical tool call 3+ times in 5 min
+  - **context_bloat** (warn): session > 80K tokens with no `session.save` event
+  - **fabrication_suspect** (critical): assistant response cites `file.ext:NN` that doesn't exist on disk
+  - **drift** (info): per-session, last 3 prompts have joint Jaccard < 0.10 against the session's first prompt
+  - **no_insight** (info): 30+ tool calls since the last `learning.save`
+  - **silent_failure** (critical): same tool returns error 3+ times in 5 min
+  - **stale_doc_signal**: stubbed (Phase 3.1; reads `policy.json` `doc_coverage`)
+  - `watchAuditLog()` uses `fs.watch` + 250 ms debounce + in-memory LRU dedupe (100 entries) so the same signal doesn't fire every poll cycle.
+  - Auto-emits `drift.detected` audit records for each fired signal — alerting itself is auditable.
+- **`contextengine watch`** CLI — streams alerts as they fire. Supports `--json` (NDJSON for log aggregators), `--severity info|warn|critical` (floor filter), `--once` (single-scan exit, code 2 if any critical signal — usable in CI), `--window SECONDS`.
+- **`contextengine init-extension-secret`** CLI — generates a 32-byte hex secret at `~/.contextengine/extension-secret` (mode 0600). Refuses by default if one already exists (`--force` to rotate).
+- **`contextengine emit-event <kind> <payload-json> [--actor NAME]`** CLI — appends a single event to the audit log. Used by the VS Code extension `0.9.0` for `vscode.prompt_submit` and `vscode.tool_call` events. Also useful for custom integrations and scripted tests.
+- **`drift_status` MCP tool** — agents can call this between major task phases to self-check active signals. Returns "pause and surface to the human" guidance if any critical signal is active.
+
+### Audit-log event types added (additive — no breaking changes)
+- `browser.prompt`, `browser.response`, `browser.tool_call`, `browser.session_start`, `browser.session_end`, `browser.capture_miss`
+- `vscode.prompt_submit`, `vscode.tool_call`, `vscode.session_start`
+- `drift.detected`, `notification.fired`
+
+### Tests
+- **14 new tests** in `tests/detector.test.ts` with 11 hand-written NDJSON fixtures in `tests/__fixtures__/audit-logs/`. One catalog test per heuristic + its negative ("similar prompts" fires loop; "different prompts" doesn't). Plus 2 integration tests on `detect()` and evidence cap.
+- **196 / 196 tests passing total** (was 182).
+
+### Companion release
+- **`@compr/opscontext-chrome@0.1.0`** — new Chrome extension scaffold under `chrome-extension/`. Captures Claude.ai + ChatGPT prompts/responses/tool-calls, streams them via the new `POST /events` endpoint. Not yet on the Chrome Web Store; loadable unpacked via `chrome://extensions` → Developer mode → "Load unpacked" → pick `chrome-extension/dist/`. BSL-1.1 license; selector seeds attributed to MIT prior art in `chrome-extension/LICENSE_THIRD_PARTY.md`.
+- **`css-llc.contextengine@0.9.0`** — VS Code extension companion release that emits `vscode.prompt_submit` and `vscode.tool_call` events into the audit log via the new `emit-event` CLI.
+
+### Day-1 test plan
+[`docs/test-plans/PHASE1_DAY1.md`](docs/test-plans/PHASE1_DAY1.md) — 10-step, ~15-minute end-to-end verification. Starts with `init-extension-secret`, ends with deliberate `fabrication_suspect` + `silent_failure` triggers verifying `watch` exits code 2.
+
 ## [2.0.2] — 2026-06-11 — HTML score report browser tab title → OpsContext
 
 Tiny patch release. One change:
