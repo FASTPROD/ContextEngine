@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" shape-rendering="geometricPrecision">
+  <!-- OpsContext Browser Capture — 16px (silhouette only) -->
+  <!-- Slightly less rounded tile so the corners read at 16px -->
+  <rect x="0" y="0" width="16" height="16" rx="3" ry="3" fill="#0F172A"/>
+
+  <!-- Shield: solid cyan fill (no stroke at 16px — strokes go fuzzy) -->
+  <path d="M8 2.5
+           L13 4.2
+           L13 8.5
+           C13 11.2 10.8 13 8 13.8
+           C5.2 13 3 11.2 3 8.5
+           L3 4.2 Z"
+        fill="#22D3EE"/>
+
+  <!-- Aperture: punched-out dark dot on the shield (negative space = record dot) -->
+  <circle cx="8" cy="7.5" r="2.4" fill="#0F172A"/>
+  <circle cx="8" cy="7.5" r="1" fill="#22D3EE"/>
+</svg>

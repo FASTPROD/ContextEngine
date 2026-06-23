@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- OpsContext Browser Capture — 128px master -->
+  <!-- Background: rounded slate-900 tile (Chrome web-store safe radius ~22%) -->
+  <rect x="0" y="0" width="128" height="128" rx="28" ry="28" fill="#0F172A"/>
+
+  <!-- Subtle inner highlight ring for depth -->
+  <rect x="1.5" y="1.5" width="125" height="125" rx="26.5" ry="26.5"
+        fill="none" stroke="#1E293B" stroke-width="1"/>
+
+  <!-- Shield silhouette (locality / SOC2 trust motif), cyan outline -->
+  <path d="M64 18
+           L98 30
+           L98 64
+           C98 84 84 100 64 110
+           C44 100 30 84 30 64
+           L30 30 Z"
+        fill="none" stroke="#22D3EE" stroke-width="4"
+        stroke-linejoin="round"/>
+
+  <!-- Capture aperture: concentric ring + dot (record/recording symbol) -->
+  <circle cx="64" cy="58" r="18" fill="none" stroke="#22D3EE" stroke-width="3.5"/>
+  <circle cx="64" cy="58" r="7" fill="#22D3EE"/>
+
+  <!-- AI observability wave (3 ticks) below aperture, inside shield -->
+  <g stroke="#22D3EE" stroke-width="3" stroke-linecap="round" fill="none">
+    <line x1="48" y1="90" x2="48" y2="96"/>
+    <line x1="58" y1="86" x2="58" y2="100"/>
+    <line x1="68" y1="83" x2="68" y2="103"/>
+    <line x1="78" y1="86" x2="78" y2="100"/>
+    <line x1="80" y1="86" x2="80" y2="100" opacity="0"/>
+  </g>
+</svg>
