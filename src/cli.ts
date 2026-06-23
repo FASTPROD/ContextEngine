@@ -1916,6 +1916,11 @@ Usage:
                                        Author + validate the declarative .contextengine/policy.json
   contextengine init-extension-secret [--force]
                                        Generate ~/.contextengine/extension-secret for the browser ext
+  contextengine install-autostart [--force]
+                                       Install macOS LaunchAgent so MCP server auto-starts at login
+                                       (uninstall-autostart / autostart-status — companion commands)
+  contextengine install-claude-hook    Wire Claude Code terminal sessions into the OpsContext audit log
+                                       (UserPromptSubmit + PostToolUse + SessionStart hook entries)
   contextengine watch [--json] [--severity info|warn|critical] [--once] [--window SECONDS]
                                        Stream drift / loop / stuck-tool / fabrication alerts from the audit log
   contextengine emit-event <kind> <payload-json> [--actor NAME]
@@ -2107,6 +2112,41 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
 } else if (command === "init-extension-secret") {
   cliInitExtensionSecret(process.argv.slice(3)).catch((err) => {
     console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "install-autostart") {
+  import("./install-autostart.js").then((m) =>
+    m.cliInstallAutostart(process.argv.slice(3)),
+  ).catch((err) => {
+    console.error("Error:", err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+} else if (command === "uninstall-autostart") {
+  import("./install-autostart.js").then((m) =>
+    m.cliUninstallAutostart(process.argv.slice(3)),
+  ).catch((err) => {
+    console.error("Error:", err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+} else if (command === "autostart-status") {
+  import("./install-autostart.js").then((m) =>
+    m.cliAutostartStatus(process.argv.slice(3)),
+  ).catch((err) => {
+    console.error("Error:", err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+} else if (command === "install-claude-hook") {
+  import("./install-claude-hook.js").then((m) =>
+    m.cliInstallClaudeHook(process.argv.slice(3)),
+  ).catch((err) => {
+    console.error("Error:", err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+} else if (command === "uninstall-claude-hook") {
+  import("./install-claude-hook.js").then((m) =>
+    m.cliUninstallClaudeHook(process.argv.slice(3)),
+  ).catch((err) => {
+    console.error("Error:", err instanceof Error ? err.message : err);
     process.exit(1);
   });
 } else if (command === "stats") {

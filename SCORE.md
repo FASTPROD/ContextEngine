@@ -59,6 +59,18 @@
 - **Sourcemaps removed from tarball + obfuscation script deleted**: no scoring impact, but tarball is ~28% smaller and the "obfuscation defeated by shipped sourcemap" enterprise red flag is gone.
 - **PRO module list corrected**: `collectors` removed from `PREMIUM_MODULES` because collectors.ts runs for all users unconditionally. The 4 PRO tools that consume the data remain gated. No scoring impact; closes the freemium-theater gap.
 
+## 2026-06-23 (Session 11) — Phase 1c: one-command install + Claude Code terminal capture
+
+Same-day afternoon follow-up to Session 10. Closes two adoption-blocking gaps surfaced during the user's first run-through:
+
+- **Claude Code terminal sessions now feed the audit log.** Hook script at `~/.claude/hooks/opscontext-emit.sh` (bundled at `defaults/claude-code-hook.sh`). LOCK `[OPSCONTEXT-CC-HOOK]`. Three hook entries spliced idempotently into `~/.claude/settings.json`: `UserPromptSubmit` → `vscode.prompt_submit`, `PostToolUse` `.*` → `vscode.tool_call`, `SessionStart` → `vscode.session_start`. Pure bash + jq + curl, **28 ms latency**, silent-on-every-failure. PostToolUse only (not PreToolUse) to avoid double-counting against the `stuck` heuristic. Namespace stays `vscode.*` so the published 2.1.0 detector heuristics fire today without a parallel namespace migration; `payload.surface="claude-code"` disambiguates.
+- **macOS LaunchAgent (`com.opscontext.mcp.plist`)** auto-starts the MCP server at every login. Per-user `gui/$UID`, no root, KeepAlive, logs to `~/.contextengine/logs/`. End of the `nohup npx ...` ritual. Same idiom as the user's existing `com.invocme.backup-*` plists.
+- **Five new CLI subcommands**: `install-autostart` / `uninstall-autostart` / `autostart-status` / `install-claude-hook` / `uninstall-claude-hook`. Each `--help`-documented. Splice operation idempotent + preserves every existing hook entry + writes timestamped backup before any edit.
+- **`@compr/opscontext-mcp@2.1.1`** staged locally — package.json bumped, CHANGELOG entry written, all 196 tests still green. Not yet published; publish gated on the user's live-install verification.
+- **Audit-chain race finding documented**: 8 historical breaks (2026-06-10 / 06-11) caused by concurrent writers (activation server vs main MCP). Zero new breaks since flag-day. Real bug (`audit-001-write-race`); fix is `flock` on append; deferred. With HTTP-only writes through the launchd-managed server, all events go through ONE in-process chain cache and sidestep the race in practice.
+- **`chrome-extension/src/options/options.html`** placeholder fixed (`32 hex chars` → `64 hex chars`). Placeholder text only; no validation change.
+- **No scoring impact** on the AI-readiness rubric — all additive. The adoption-friction reduction is real but doesn't move a rubric category.
+
 ## 2026-06-23 (Session 10) — Phase 1 LIVE — npm 2.1.0 + ext 0.9.0 + Chrome ext loadable
 
 - **`@compr/opscontext-mcp@2.1.0`** published to npm. Tarball 152.7 kB / 52 files. The first feature release after the OpsContext rebrand — adds the HTTP event ingest endpoint, the 8-heuristic drift detector, `contextengine watch` + `init-extension-secret` + `emit-event` CLIs, and the `drift_status` MCP tool.

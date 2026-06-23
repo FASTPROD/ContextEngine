@@ -2,6 +2,39 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
+## [2.1.1] — 2026-06-23 — Phase 1c: one-command install + Claude Code terminal capture
+
+Closes the last surface gap from 2.1.0. Before this patch, "use OpsContext" meant running `nohup npx ...` every time the Mac restarted and hand-editing `~/.claude/settings.json` to wire Claude Code hooks. Now both are single commands. This is the release that lets non-technical users actually adopt OpsContext.
+
+### Added
+- **`src/install-autostart.ts`** (LOCK `[AUTOSTART-INSTALL]`) — installs a macOS LaunchAgent at `~/Library/LaunchAgents/com.opscontext.mcp.plist`. Set-and-forget — server starts at every login, KeepAlive restarts on crash, logs to `~/.contextengine/logs/mcp-{stdout,stderr}.log`. Companion `uninstall-autostart` + `autostart-status` commands. Auto-detects either a global npm install or a dev tree; pins node path absolutely (launchd has no PATH).
+- **`src/install-claude-hook.ts`** (LOCK `[CLAUDE-HOOK-INSTALL]`) — copies `defaults/claude-code-hook.sh` to `~/.claude/hooks/opscontext-emit.sh` and splices three entries into `~/.claude/settings.json` under `hooks`: `UserPromptSubmit` → `vscode.prompt_submit`, `PostToolUse` (`.*` matcher) → `vscode.tool_call`, `SessionStart` → `vscode.session_start`. **Idempotent + preserves every existing hook entry** (backs up settings.json before any change). Closes the terminal-side capture gap — every Claude Code session in any project now feeds the audit log.
+- **`defaults/claude-code-hook.sh`** — the actual shell hook: ~3 KB, pure bash + jq + curl, ~28 ms latency per invocation, **silent on every failure** (never blocks Claude Code), 1-second hard timeout on the HTTP call. Posts to `127.0.0.1:7842/events` with shared secret in `X-OpsContext-Secret` header. LOCK `[OPSCONTEXT-CC-HOOK]`.
+- **New CLI subcommands:**
+  - `opscontext install-autostart [--force]`
+  - `opscontext uninstall-autostart`
+  - `opscontext autostart-status`
+  - `opscontext install-claude-hook`
+  - `opscontext uninstall-claude-hook`
+
+### Fixed
+- **`chrome-extension/src/options/options.html`** — Secret field placeholder said `32 hex chars` but the actual secret is 64 hex (256-bit). Updated to `64 hex chars` to match what `init-extension-secret` writes. No backwards-compat issue — placeholder text only, not validation.
+
+### Why this matters
+- Before: `nohup npx -y --package=@compr/opscontext-mcp@2.1.0 -- opscontext > /tmp/opscontext-mcp.log 2>&1 < /dev/null &` every reboot, plus hand-editing JSON for Claude Code hooks. Friction kills adoption.
+- After: `opscontext install-autostart && opscontext install-claude-hook`. Two commands, ever. Server auto-starts at login forever; terminal Claude Code sessions feed audit log automatically.
+
+### Architecture notes
+- Hook namespace stays `vscode.*` (not `claude_code.*`) so the published 2.1.0 detector heuristics fire today without a parallel namespace migration. `payload.surface = "claude-code"` disambiguates source for any caller that cares.
+- LaunchAgent uses `gui/$UID` domain (per-user, no root) — same pattern as the user's existing `com.invocme.backup-*` plists.
+- Hook deliberately emits on PostToolUse ONLY (not PreToolUse) — emitting both would double-count for the `stuck` heuristic and skew `silent_failure` counts.
+- All transport via HTTP `POST /events` not direct file writes — keeps event writes serialized through the running MCP server's single in-process chain cache, sidestepping the historic concurrent-write race (8 chain breaks on 2026-06-10/11, all `system` actor, all pre-flag-day; zero breaks since).
+
+### Known surface gaps still open
+- `Stop` hook event not emitted (would enable "assistant gave up mid-task" detection — Phase 3.1).
+- No Linux support yet for `install-autostart` (systemd --user unit equivalent is ~30 min of work).
+- No tool-result exit codes from VS Code extension yet (candidate for vscode-ext 0.10).
+
 ## [2.1.0] — 2026-06-23 — Phase 1: cross-surface capture + drift detector + local event ingest
 
 The first feature release after the OpsContext rebrand. Closes the wedge the audit identified: **no other tool captures AI interactions across browser + IDE + terminal and feeds them into a tamper-evident audit log with policy enforcement**. Now we do.
