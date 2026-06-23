@@ -36,6 +36,7 @@ import {
 } from "./sessions.js";
 import { verifyChain, readAuditLog, filterByRange } from "./audit.js";
 import { startEventIngestServer } from "./http-server.js";
+import { detect } from "./detector.js";
 import {
   saveLearning,
   searchLearnings,
@@ -774,6 +775,44 @@ server.tool(
       summary.push("break onward as unverified.");
     }
     return respond("audit_verify", summary.join("\n"));
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: drift_status (Detector — read current drift signals)
+// ---------------------------------------------------------------------------
+// Agents should call this between major task phases. If any 'critical' signal
+// is active, they should pause and surface to the human. The signals are also
+// appended to the audit log as drift.detected events so post-hoc review can
+// reconstruct what fired and when.
+server.tool(
+  "drift_status",
+  "Returns active drift / loop / stuck-tool / fabrication / silent-failure signals detected over the recent audit-log window. Use to self-check before starting a major task phase. If any 'critical' signal is active (fabrication_suspect or silent_failure), pause and surface to the human.",
+  {
+    windowSeconds: z.number().optional().describe("Look-back window in seconds. Default 300 (5 min)."),
+    minSeverity: z.enum(["info", "warn", "critical"]).optional().describe("Floor filter for severity. Default 'info' (everything)."),
+  },
+  async ({ windowSeconds, minSeverity }) => {
+    const signals = detect({ windowSeconds: windowSeconds ?? 300 });
+    const order = { info: 0, warn: 1, critical: 2 } as const;
+    const floor = order[minSeverity ?? "info"];
+    const filtered = signals.filter((s) => order[s.severity] >= floor);
+    const lines: string[] = [];
+    lines.push(`Drift signals: ${filtered.length} active (window=${windowSeconds ?? 300}s, minSeverity=${minSeverity ?? "info"}).`);
+    if (filtered.length === 0) {
+      lines.push("All clear.");
+    } else {
+      for (const s of filtered) {
+        const sev = s.severity.toUpperCase();
+        lines.push(`  [${sev}] ${s.kind}: ${s.reason}`);
+      }
+      const critical = filtered.filter((s) => s.severity === "critical");
+      if (critical.length > 0) {
+        lines.push("");
+        lines.push(`⛔ ${critical.length} CRITICAL signal(s) — pause the task and surface to the human.`);
+      }
+    }
+    return respond("drift_status", lines.join("\n"));
   }
 );
 

@@ -1,0 +1,3 @@
+{"ts":"2026-06-23T10:00:00.000Z","event":"browser.prompt","actor":"browser-ext","payload":{"surface":"claude.ai","conversation_id":"sess-1","text":"why is my deploy failing on the staging env please help"},"prev_hash":"0000000000000000000000000000000000000000000000000000000000000000","hash":"a1"}
+{"ts":"2026-06-23T10:01:30.000Z","event":"browser.prompt","actor":"browser-ext","payload":{"surface":"claude.ai","conversation_id":"sess-1","text":"why is my deploy failing on staging please help me understand"},"prev_hash":"a1","hash":"a2"}
+{"ts":"2026-06-23T10:03:00.000Z","event":"browser.prompt","actor":"browser-ext","payload":{"surface":"claude.ai","conversation_id":"sess-1","text":"my deploy is failing on staging — why? please help"},"prev_hash":"a2","hash":"a3"}

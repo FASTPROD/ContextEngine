@@ -1314,6 +1314,99 @@ tamper-evident audit log at ~/.contextengine/audit.log.`);
   process.exit(1);
 }
 
+async function cliWatch(args: string[]): Promise<void> {
+  const { watchAuditLog, detect } = await import("./detector.js");
+  let jsonMode = false;
+  let once = false;
+  let minSeverity: "info" | "warn" | "critical" = "info";
+  let windowSeconds = 300;
+
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--json") jsonMode = true;
+    else if (a === "--once") once = true;
+    else if (a === "--severity" && args[i + 1]) {
+      const sev = args[++i];
+      if (sev !== "info" && sev !== "warn" && sev !== "critical") {
+        console.error(`Unknown severity: ${sev}. Try info|warn|critical.`);
+        process.exit(1);
+      }
+      minSeverity = sev;
+    } else if (a === "--window" && args[i + 1]) {
+      windowSeconds = parseInt(args[++i], 10) || 300;
+    } else if (a === "-h" || a === "--help") {
+      console.log(`Usage: contextengine watch [--json] [--severity info|warn|critical] [--once] [--window SECONDS]
+
+Streams drift / hallucination / loop / stuck-tool / context-bloat alerts as
+they're detected in ~/.contextengine/audit.log.
+
+  --json              One line of NDJSON per alert (for log aggregators / jq).
+  --severity X        Floor filter. Default: info (everything).
+  --once              Run a single scan over the recent window and exit.
+                      Good for cron / health checks.
+  --window SECONDS    How far back to scan in --once mode. Default: 300.
+
+Exit codes:
+  0   clean (or --once found no critical signals)
+  2   --once found at least one critical signal — useful in CI pipelines
+
+Signals also append a 'drift.detected' record to the audit log (hash-chained)
+so the alerting itself is auditable.
+
+Status-bar / OS-notification integration is via the VS Code extension —
+this CLI is for terminal users, CI, and cron.`);
+      return;
+    }
+  }
+
+  const sevOrder = { info: 0, warn: 1, critical: 2 } as const;
+  const passesFilter = (s: { severity: keyof typeof sevOrder }) =>
+    sevOrder[s.severity] >= sevOrder[minSeverity];
+
+  const fmt = (s: import("./detector.js").DriftSignal): string => {
+    if (jsonMode) {
+      return JSON.stringify({
+        ts: new Date(s.detectedAt).toISOString(),
+        kind: s.kind,
+        severity: s.severity,
+        reason: s.reason,
+        payload: s.payload,
+      });
+    }
+    const sev = s.severity === "critical" ? "CRIT " : s.severity === "warn" ? "WARN " : "INFO ";
+    const t = new Date(s.detectedAt).toISOString().slice(11, 19);
+    return `[${t}] ${sev} ${s.kind.padEnd(20)} ${s.reason}`;
+  };
+
+  if (once) {
+    const signals = detect({ windowSeconds }).filter(passesFilter);
+    for (const s of signals) {
+      console.log(fmt(s));
+    }
+    const hasCritical = signals.some((s) => s.severity === "critical");
+    process.exit(hasCritical ? 2 : 0);
+  }
+
+  if (!jsonMode) {
+    console.error("[opscontext watch] streaming drift signals (Ctrl-C to exit)…");
+  }
+  const dispose = watchAuditLog(
+    (s) => {
+      if (passesFilter(s)) console.log(fmt(s));
+    },
+    { windowSeconds },
+  );
+
+  process.on("SIGINT", () => {
+    dispose();
+    if (!jsonMode) console.error("\n[opscontext watch] stopped.");
+    process.exit(0);
+  });
+  // Keep alive — the watcher uses internal timers, but a stdin listener also
+  // helps catch terminal closes.
+  process.stdin.resume();
+}
+
 async function cliInitExtensionSecret(args: string[]): Promise<void> {
   const force = args.includes("--force") || args.includes("-f");
   const help = args.includes("-h") || args.includes("--help");
@@ -1771,6 +1864,8 @@ Usage:
                                        Author + validate the declarative .contextengine/policy.json
   contextengine init-extension-secret [--force]
                                        Generate ~/.contextengine/extension-secret for the browser ext
+  contextengine watch [--json] [--severity info|warn|critical] [--once] [--window SECONDS]
+                                       Stream drift / loop / stuck-tool / fabrication alerts from the audit log
   contextengine hook <secret-scan|doc-coverage>
                                        Run policy-driven pre-commit checks against staged diff
                                        (exit 1 on blocking violation; CE_JSON=1 for CI output)
@@ -1943,6 +2038,11 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
     process.exit(result.success ? 0 : 1);
   }).catch((err) => {
     console.error("Activation error:", err);
+    process.exit(1);
+  });
+} else if (command === "watch") {
+  cliWatch(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
     process.exit(1);
   });
 } else if (command === "init-extension-secret") {

@@ -1,0 +1,42 @@
+{"ts":"2026-06-23T09:00:00.000Z","event":"learning.save","actor":"system","payload":{"id":"l1","category":"deployment","rule_length":42,"mode":"create"},"prev_hash":"0000000000000000000000000000000000000000000000000000000000000000","hash":"a0"}
+{"ts":"2026-06-23T09:05:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/a.ts"},"prev_hash":"a0","hash":"a1"}
+{"ts":"2026-06-23T09:05:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/b.ts"},"prev_hash":"a1","hash":"a2"}
+{"ts":"2026-06-23T09:06:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/c.ts"},"prev_hash":"a2","hash":"a3"}
+{"ts":"2026-06-23T09:06:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Grep","args_preview":"pattern=foo"},"prev_hash":"a3","hash":"a4"}
+{"ts":"2026-06-23T09:07:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/d.ts"},"prev_hash":"a4","hash":"a5"}
+{"ts":"2026-06-23T09:07:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/e.ts"},"prev_hash":"a5","hash":"a6"}
+{"ts":"2026-06-23T09:08:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Bash","args_preview":"npm test"},"prev_hash":"a6","hash":"a7"}
+{"ts":"2026-06-23T09:08:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/f.ts"},"prev_hash":"a7","hash":"a8"}
+{"ts":"2026-06-23T09:09:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/g.ts"},"prev_hash":"a8","hash":"a9"}
+{"ts":"2026-06-23T09:09:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Bash","args_preview":"git status"},"prev_hash":"a9","hash":"a10"}
+{"ts":"2026-06-23T09:10:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/h.ts"},"prev_hash":"a10","hash":"a11"}
+{"ts":"2026-06-23T09:10:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/i.ts"},"prev_hash":"a11","hash":"a12"}
+{"ts":"2026-06-23T09:11:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Bash","args_preview":"npm run build"},"prev_hash":"a12","hash":"a13"}
+{"ts":"2026-06-23T09:11:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/j.ts"},"prev_hash":"a13","hash":"a14"}
+{"ts":"2026-06-23T09:12:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/k.ts"},"prev_hash":"a14","hash":"a15"}
+{"ts":"2026-06-23T09:12:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/l.ts"},"prev_hash":"a15","hash":"a16"}
+{"ts":"2026-06-23T09:13:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/m.ts"},"prev_hash":"a16","hash":"a17"}
+{"ts":"2026-06-23T09:13:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Bash","args_preview":"npm test"},"prev_hash":"a17","hash":"a18"}
+{"ts":"2026-06-23T09:14:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/n.ts"},"prev_hash":"a18","hash":"a19"}
+{"ts":"2026-06-23T09:14:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/o.ts"},"prev_hash":"a19","hash":"a20"}
+{"ts":"2026-06-23T09:15:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/p.ts"},"prev_hash":"a20","hash":"a21"}
+{"ts":"2026-06-23T09:15:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/q.ts"},"prev_hash":"a21","hash":"a22"}
+{"ts":"2026-06-23T09:16:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Bash","args_preview":"git diff"},"prev_hash":"a22","hash":"a23"}
+{"ts":"2026-06-23T09:16:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/r.ts"},"prev_hash":"a23","hash":"a24"}
+{"ts":"2026-06-23T09:17:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/s.ts"},"prev_hash":"a24","hash":"a25"}
+{"ts":"2026-06-23T09:17:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/t.ts"},"prev_hash":"a25","hash":"a26"}
+{"ts":"2026-06-23T09:18:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/u.ts"},"prev_hash":"a26","hash":"a27"}
+{"ts":"2026-06-23T09:18:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/v.ts"},"prev_hash":"a27","hash":"a28"}
+{"ts":"2026-06-23T09:19:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/w.ts"},"prev_hash":"a28","hash":"a29"}
+{"ts":"2026-06-23T09:19:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/x.ts"},"prev_hash":"a29","hash":"a30"}
+{"ts":"2026-06-23T09:20:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/y.ts"},"prev_hash":"a30","hash":"a31"}
+{"ts":"2026-06-23T09:20:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/z.ts"},"prev_hash":"a31","hash":"a32"}
+{"ts":"2026-06-23T09:21:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Bash","args_preview":"npm run build"},"prev_hash":"a32","hash":"a33"}
+{"ts":"2026-06-23T09:21:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/aa.ts"},"prev_hash":"a33","hash":"a34"}
+{"ts":"2026-06-23T09:22:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/bb.ts"},"prev_hash":"a34","hash":"a35"}
+{"ts":"2026-06-23T09:22:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/cc.ts"},"prev_hash":"a35","hash":"a36"}
+{"ts":"2026-06-23T09:23:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Bash","args_preview":"npm test"},"prev_hash":"a36","hash":"a37"}
+{"ts":"2026-06-23T09:23:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/dd.ts"},"prev_hash":"a37","hash":"a38"}
+{"ts":"2026-06-23T09:24:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/ee.ts"},"prev_hash":"a38","hash":"a39"}
+{"ts":"2026-06-23T09:24:30.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Read","args_preview":"file=src/ff.ts"},"prev_hash":"a39","hash":"a40"}
+{"ts":"2026-06-23T09:25:00.000Z","event":"vscode.tool_call","actor":"vscode-ext","payload":{"tool":"Edit","args_preview":"file=src/gg.ts"},"prev_hash":"a40","hash":"a41"}

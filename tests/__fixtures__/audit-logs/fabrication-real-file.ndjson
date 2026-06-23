@@ -1,0 +1,1 @@
+{"ts":"2026-06-23T10:00:00.000Z","event":"browser.response","actor":"browser-ext","payload":{"surface":"claude.ai","conversation_id":"sess-x","text":"Refer to src/audit.ts:1 for the audit chain implementation."},"prev_hash":"0000000000000000000000000000000000000000000000000000000000000000","hash":"a1"}

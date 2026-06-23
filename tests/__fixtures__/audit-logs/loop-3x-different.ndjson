@@ -1,0 +1,3 @@
+{"ts":"2026-06-23T10:00:00.000Z","event":"browser.prompt","actor":"browser-ext","payload":{"surface":"claude.ai","conversation_id":"sess-1","text":"fix the login bug in auth.ts"},"prev_hash":"0000000000000000000000000000000000000000000000000000000000000000","hash":"a1"}
+{"ts":"2026-06-23T10:01:30.000Z","event":"browser.prompt","actor":"browser-ext","payload":{"surface":"claude.ai","conversation_id":"sess-1","text":"now update the README to mention the new flag"},"prev_hash":"a1","hash":"a2"}
+{"ts":"2026-06-23T10:03:00.000Z","event":"browser.prompt","actor":"browser-ext","payload":{"surface":"claude.ai","conversation_id":"sess-1","text":"can you write a unit test for the parser module"},"prev_hash":"a2","hash":"a3"}
