@@ -51,7 +51,20 @@ export type AuditEvent =
   | "activation.legacy_signature"
   | "firewall.escalate"
   | "hook.block"
-  | "hook.bypass";
+  | "hook.bypass"
+  // Cross-surface capture (Phase 1, added 2026-06-23)
+  | "browser.prompt"
+  | "browser.response"
+  | "browser.tool_call"
+  | "browser.session_start"
+  | "browser.session_end"
+  | "browser.capture_miss"
+  | "vscode.prompt_submit"
+  | "vscode.tool_call"
+  | "vscode.session_start"
+  // Detector outputs (Phase 3)
+  | "drift.detected"
+  | "notification.fired";
 
 export interface AuditRecord {
   ts: string;

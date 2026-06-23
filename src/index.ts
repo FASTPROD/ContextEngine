@@ -35,6 +35,7 @@ import {
   formatSessionList,
 } from "./sessions.js";
 import { verifyChain, readAuditLog, filterByRange } from "./audit.js";
+import { startEventIngestServer } from "./http-server.js";
 import {
   saveLearning,
   searchLearnings,
@@ -1366,6 +1367,16 @@ async function main() {
 
   // 5. Start file watchers
   startWatching();
+
+  // 6. Boot the local HTTP event-ingest endpoint for the browser extension.
+  // Local 127.0.0.1:7842 only; auth via shared secret at
+  // ~/.contextengine/extension-secret (see init-extension-secret CLI).
+  // No-op if secret is missing; the endpoint will refuse with 401 until
+  // a secret is configured. Failure to bind (port collision) logs and
+  // continues — the MCP server stays usable without browser capture.
+  startEventIngestServer().catch((err) => {
+    console.error("[ContextEngine] event-ingest start failed:", err);
+  });
 }
 
 main().catch((err) => {

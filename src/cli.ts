@@ -1314,6 +1314,60 @@ tamper-evident audit log at ~/.contextengine/audit.log.`);
   process.exit(1);
 }
 
+async function cliInitExtensionSecret(args: string[]): Promise<void> {
+  const force = args.includes("--force") || args.includes("-f");
+  const help = args.includes("-h") || args.includes("--help");
+  if (help) {
+    console.log(`Usage: contextengine init-extension-secret [--force]
+
+Generates a 32-byte hex token at ~/.contextengine/extension-secret (mode 0600)
+and prints it to stdout. The OpsContext browser extension reads the same
+token from its options page; both sides must match for events to flow.
+
+  --force, -f   Overwrite an existing secret. Default is to refuse if one
+                already exists (prevents accidental rotation that would
+                disconnect the extension until it's re-pasted).
+
+After running, paste the printed value into the extension's Options page
+(Cmd+Shift+P → "Open extension options" in Chrome, or click the extension
+icon → Options).`);
+    return;
+  }
+
+  const { randomBytes } = await import("crypto");
+  const { writeFileSync, existsSync, chmodSync, mkdirSync } = await import("fs");
+  const { join } = await import("path");
+  const { homedir } = await import("os");
+
+  const dir = join(homedir(), ".contextengine");
+  const path = join(dir, "extension-secret");
+
+  if (existsSync(path) && !force) {
+    console.error(
+      `❌ ${path} already exists. Re-running would invalidate any extension that already has the old value pasted in.\n` +
+        `\n` +
+        `   Pass --force to rotate (you'll need to re-paste the new value in the extension's Options page).\n` +
+        `   Or read the current secret with: cat ${path}`,
+    );
+    process.exit(1);
+  }
+
+  mkdirSync(dir, { recursive: true });
+  const secret = randomBytes(32).toString("hex");
+  writeFileSync(path, secret + "\n", { mode: 0o600 });
+  try { chmodSync(path, 0o600); } catch { /* best-effort */ }
+
+  console.log(`✅ Wrote ${path} (mode 600)\n`);
+  console.log(`Secret (paste this into the browser extension's Options page):\n`);
+  console.log(`  ${secret}\n`);
+  console.log(`Next steps:`);
+  console.log(`  1. Open Chrome → chrome://extensions → Find "OpsContext Browser Capture"`);
+  console.log(`  2. Click "Options" → paste the secret → Save`);
+  console.log(`  3. Visit https://claude.ai or https://chatgpt.com — events will flow.`);
+  console.log(`\nThe MCP server's event-ingest endpoint is at http://127.0.0.1:7842/events`);
+  console.log(`(GET /health to verify it's running).`);
+}
+
 async function cliPolicy(args: string[]): Promise<void> {
   const sub = args[0];
 
@@ -1715,6 +1769,8 @@ Usage:
   contextengine audit-verify           Verify audit log chain integrity (tamper detection)
   contextengine policy <validate|show> [args]
                                        Author + validate the declarative .contextengine/policy.json
+  contextengine init-extension-secret [--force]
+                                       Generate ~/.contextengine/extension-secret for the browser ext
   contextengine hook <secret-scan|doc-coverage>
                                        Run policy-driven pre-commit checks against staged diff
                                        (exit 1 on blocking violation; CE_JSON=1 for CI output)
@@ -1887,6 +1943,11 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
     process.exit(result.success ? 0 : 1);
   }).catch((err) => {
     console.error("Activation error:", err);
+    process.exit(1);
+  });
+} else if (command === "init-extension-secret") {
+  cliInitExtensionSecret(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
     process.exit(1);
   });
 } else if (command === "stats") {
