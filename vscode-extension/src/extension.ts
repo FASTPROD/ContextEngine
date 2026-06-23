@@ -684,6 +684,53 @@ function registerCommands(
       );
     }),
   );
+
+  // -----------------------------------------------------------------------
+  // contextengine.setup — One-click install for non-tech users.
+  // -----------------------------------------------------------------------
+  // Drops the three install commands into a fresh integrated-terminal so
+  // the user can see what's being installed + decide whether to continue.
+  // This is the single biggest adoption-friction reducer per the
+  // 2026-06-23 strategy decision: "vibe coders" already live in VS Code,
+  // so the lowest-friction install path is "click a button in your editor",
+  // not "open a terminal yourself and paste a command".
+  //
+  // We deliberately DO NOT execute the commands silently or in a
+  // background terminal — the user must SEE the npm install scroll past +
+  // the LaunchAgent boot + the hook splice so they trust what just
+  // happened to their machine.
+  context.subscriptions.push(
+    vscode.commands.registerCommand("contextengine.setup", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.setup", trigger: "command-palette" });
+
+      const confirm = await vscode.window.showInformationMessage(
+        "Set up OpsContext on this machine? This will:\n" +
+          "  1. npm install -g @compr/opscontext-mcp\n" +
+          "  2. Install a macOS LaunchAgent (auto-start at login)\n" +
+          "  3. Wire Claude Code hooks (capture terminal prompts)\n\n" +
+          "You'll see each step in a new terminal. Proceed?",
+        { modal: true },
+        "Install",
+        "Cancel",
+      );
+      if (confirm !== "Install") return;
+
+      const term = vscode.window.createTerminal({ name: "OpsContext Setup" });
+      term.show(true);
+
+      // Use && so a failure halts the chain. Append a friendly final
+      // message regardless of success so the user knows the script ended.
+      const cmd =
+        "npm install -g @compr/opscontext-mcp" +
+        " && opscontext install-autostart" +
+        " && opscontext install-claude-hook" +
+        " && echo '' && echo '✅ OpsContext setup complete.'" +
+        " && echo '   Next: install the Chrome extension when it lands on the Web Store.'" +
+        " && echo '   For now, see chrome-extension/ in the repo for unpacked install.'";
+
+      term.sendText(cmd);
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
