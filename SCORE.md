@@ -59,6 +59,17 @@
 - **Sourcemaps removed from tarball + obfuscation script deleted**: no scoring impact, but tarball is ~28% smaller and the "obfuscation defeated by shipped sourcemap" enterprise red flag is gone.
 - **PRO module list corrected**: `collectors` removed from `PREMIUM_MODULES` because collectors.ts runs for all users unconditionally. The 4 PRO tools that consume the data remain gated. No scoring impact; closes the freemium-theater gap.
 
+## 2026-06-22 (Session 09) — Strategic crossroads + SOC 2 foundations + overnight Phase 1 scaffold
+
+- **Strategic decisions locked into docs**:
+  - [docs/ROADMAP.md](docs/ROADMAP.md) — 5-phase plan with explicit anti-roadmap (no multi-LLM orchestration, no hosted SaaS dashboard, no mobile app, no custom vector DB, no price-undercutting, no auto-pause).
+  - [docs/architecture/shared-learnings-tiering.md](docs/architecture/shared-learnings-tiering.md) — community library is **PRO+ feature, free tier stays local**. The data network effect is the moat. Pricing rebalance proposed: CHF 2 → 5-9 / month for Pro.
+  - [docs/marketing/pitch-proposals.md](docs/marketing/pitch-proposals.md) — 4 pitch variants × EN + FR, surface-mapped, glossary, anti-patterns.
+- **SOC 2 foundations enabled at $0/mo** — CodeQL + Dependabot live on GitHub Actions; CC7.1 + CC7.2 evidence accruing from today. Type I audit deferred until a deal pipeline justifies the $30K-$40K spend (user explicitly said *"I will not pay for the trust certificate"* without an LOI).
+- **Prior-art check done** — 8 export-style Chrome extensions found; top 14⭐ MIT-licensed; NONE stream into a tamper-evident audit log. Wedge confirmed. Selectors usable with attribution.
+- **Overnight execution authorized + in progress** — user went to bed at session end; said *"don't wait for me, generate code and we'll test tomorrow"*. Phase 1 scaffold underway: chrome-extension/ + HTTP endpoint + heuristic detector + day-1 test plan. Reports back in NIGHTLY.md and SESSION_09's follow-up entry.
+- **No scoring impact** on the AI-readiness rubric from any of this — all additive code + docs, no breaking changes.
+
 ## 2026-06-11 (Session 08) — HTML score report UX close-out — npm 2.0.2 + ext 0.8.1
 
 - **Browser tab title now says "OpsContext Score Report"** — `src/agents.ts:1705` `<title>` tag rebrand shipped as `@compr/opscontext-mcp@2.0.2`. Single-line change, semver patch. No API change. Visible when a paying user (or the `score --html` CLI flag) generates the report.
