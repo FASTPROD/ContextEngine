@@ -14,7 +14,7 @@
     "directory": "chrome-extension"
   },
   "scripts": {
-    "build": "tsc && node scripts/bundle-content.mjs && node scripts/copy-static.mjs",
+    "build": "node scripts/sync-manifest-version.mjs && tsc && node scripts/bundle-content.mjs && node scripts/copy-static.mjs",
     "watch": "tsc --watch",
     "clean": "rm -rf dist",
     "package": "npm run clean && npm run build && cd dist && zip -r ../opscontext-chrome-$npm_package_version.zip ."
