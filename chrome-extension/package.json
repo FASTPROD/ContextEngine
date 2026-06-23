@@ -1,6 +1,6 @@
 {
   "name": "@compr/opscontext-chrome",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "description": "OpsContext Browser Capture \u2014 streams Claude.ai and ChatGPT prompt/response events to your local OpsContext audit log.",
   "license": "BSL-1.1",

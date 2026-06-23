@@ -9,7 +9,7 @@
  * easier to maintain than one over-clever one.
  */
 
-import { CHATGPT_SELECTORS as S, resolve } from "./shared/selectors.js";
+import { CHATGPT_SELECTORS as S, resolve, resolveAll } from "./shared/selectors.js";
 import { debounceSettle, conversationIdFromUrl } from "./shared/observer.js";
 import { redact, redactPii } from "./shared/redact.js";
 import { buildEvent, emitEvent } from "./shared/emit.js";
@@ -126,9 +126,10 @@ function attachPromptListeners() {
 
 function captureResponses() {
   if (!captureEnabled) return;
-  const blocks = document.querySelectorAll(
-    S.assistantMarkdown.primary + ", " + S.assistantMarkdown.fallback,
-  );
+  // Use resolveAll — primary-first, fallback-only-if-empty. The OR pattern
+  // double-matches when fallback is a descendant/ancestor of primary. See
+  // LOCK [RESPONSE-DEDUPE-CHATGPT] above, and the same fix in claude.ts.
+  const blocks = resolveAll(S.assistantMarkdown);
   if (blocks.length === 0) {
     consecutiveMisses++;
     return;
@@ -169,9 +170,7 @@ function captureResponses() {
 
 function captureToolCalls() {
   if (!captureEnabled) return;
-  const blocks = document.querySelectorAll(
-    S.toolCallBlock.primary + ", " + S.toolCallBlock.fallback,
-  );
+  const blocks = resolveAll(S.toolCallBlock);
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
     const text = (block as HTMLElement).innerText || "";

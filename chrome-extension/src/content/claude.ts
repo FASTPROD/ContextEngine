@@ -11,7 +11,7 @@
  * behave exactly like an idle user who happens to read text.
  */
 
-import { CLAUDE_SELECTORS as S, resolve } from "./shared/selectors.js";
+import { CLAUDE_SELECTORS as S, resolve, resolveAll } from "./shared/selectors.js";
 import { debounceSettle, conversationIdFromUrl } from "./shared/observer.js";
 import { redact, redactPii } from "./shared/redact.js";
 import { buildEvent, emitEvent } from "./shared/emit.js";
@@ -81,9 +81,11 @@ const emittedPrompts = new Set<string>();
 
 function capturePromptsFromDOM() {
   if (!captureEnabled) return;
-  const nodes = document.querySelectorAll(
-    S.userMessage.primary + ", " + S.userMessage.fallback,
-  );
+  // Use resolveAll (primary-first, fallback ONLY if primary empty) — NOT a
+  // single OR-selector. The OR pattern (`primary, fallback`) matches BOTH
+  // tiers at once, which double-emits when the fallback selector matches
+  // ancestors/descendants of primary matches. See [RESPONSE-DEDUPE] LOCK.
+  const nodes = resolveAll(S.userMessage);
   if (nodes.length === 0) {
     consecutiveMisses++;
     return;
@@ -166,9 +168,18 @@ function isBlockDone(block: Element): boolean {
 
 function captureResponses() {
   if (!captureEnabled) return;
-  const blocks = document.querySelectorAll(
-    S.assistantMarkdown.primary + ", " + S.assistantMarkdown.fallback,
-  );
+  // 🔒 LOCK [RESPONSE-DEDUPE] (continued): we CANNOT use
+  //   `querySelectorAll(primary + ", " + fallback)`
+  // because Anthropic's DOM nests:
+  //   <div class="font-claude-response">         ← primary match
+  //     <div class="standard-markdown">…</div>   ← fallback match (nested!)
+  //   </div>
+  // The OR-selector returns BOTH. For loop iterates twice. Different `i`,
+  // same text → different dedupe keys → both emit. That's the "response
+  // emits 2×" bug observed live on 2026-06-23.
+  // resolveAll() correctly tries primary first, falls back to fallback ONLY
+  // if primary returned zero matches.
+  const blocks = resolveAll(S.assistantMarkdown);
   if (blocks.length === 0) {
     consecutiveMisses++;
     return;
@@ -212,9 +223,8 @@ function captureToolCalls() {
   if (!captureEnabled) return;
   const list = resolve(S.messageList);
   if (!list) return;
-  const blocks = list.querySelectorAll(
-    S.toolCallBlock.primary + ", " + S.toolCallBlock.fallback,
-  );
+  // Same nested-selector hazard as captureResponses — use resolveAll, not OR.
+  const blocks = resolveAll(S.toolCallBlock, list);
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
     const text = (block as HTMLElement).innerText || "";
