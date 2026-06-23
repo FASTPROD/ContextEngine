@@ -1,0 +1,24 @@
+:root {
+  --bg: #0f172a; --surface: #1e293b; --border: #334155;
+  --text: #f1f5f9; --muted: #94a3b8; --accent: #3b82f6;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; padding: 24px; line-height: 1.5; }
+main { max-width: 720px; margin: 0 auto; }
+h1 { font-size: 22px; margin-bottom: 8px; }
+h2 { font-size: 14px; margin: 20px 0 8px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; }
+p { color: var(--muted); margin-bottom: 12px; }
+.lede { font-size: 14px; }
+section { background: var(--surface); padding: 16px; border-radius: 8px; margin-bottom: 12px; border: 1px solid var(--border); }
+.field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.field label { width: 80px; color: var(--muted); }
+.field input { flex: 1; padding: 8px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; font-family: "SF Mono", Menlo, monospace; font-size: 13px; }
+.field button { padding: 6px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+label { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+button.primary { padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px; }
+button.primary:hover { background: #2563eb; }
+.muted { color: var(--muted); font-size: 12px; margin-left: 12px; }
+.footer { background: transparent; border: none; padding: 16px 0 0; font-size: 12px; color: var(--muted); }
+.footer a { color: var(--accent); text-decoration: none; }
+code { background: var(--bg); padding: 2px 6px; border-radius: 3px; font-family: "SF Mono", Menlo, monospace; font-size: 12px; }

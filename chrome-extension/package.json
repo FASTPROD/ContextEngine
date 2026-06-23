@@ -1,0 +1,27 @@
+{
+  "name": "@compr/opscontext-chrome",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpsContext Browser Capture — streams Claude.ai and ChatGPT prompt/response events to your local OpsContext audit log.",
+  "license": "BSL-1.1",
+  "author": {
+    "name": "FASTPROD (PROD LLC)",
+    "url": "https://compr.fr"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FASTPROD/ContextEngine.git",
+    "directory": "chrome-extension"
+  },
+  "scripts": {
+    "build": "tsc && node scripts/copy-static.mjs",
+    "watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "package": "npm run clean && npm run build && cd dist && zip -r ../opscontext-chrome-$npm_package_version.zip ."
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.297",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}

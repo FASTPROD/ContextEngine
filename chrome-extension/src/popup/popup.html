@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpsContext Capture</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span id="dot" class="dot dot--unknown"></span>
+    <strong>OpsContext Capture</strong>
+    <span id="version" class="version"></span>
+  </header>
+
+  <section id="status-pane">
+    <div class="row"><span>Status:</span><span id="state">loading…</span></div>
+    <div class="row"><span>Queued:</span><span id="queue">—</span></div>
+    <div class="row"><span>Last send:</span><span id="lastSend">—</span></div>
+    <div id="error" class="error" hidden></div>
+  </section>
+
+  <section id="actions">
+    <button id="flushBtn">Flush now</button>
+    <button id="optionsBtn">Open options</button>
+  </section>
+
+  <section id="recent">
+    <strong>Recent events</strong>
+    <ul id="recentList"><li class="muted">No events yet.</li></ul>
+  </section>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

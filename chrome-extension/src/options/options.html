@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpsContext Capture — Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>OpsContext Browser Capture</h1>
+    <p class="lede">
+      Captures your Claude.ai and ChatGPT prompts + responses and streams them to the
+      OpsContext audit log running on your local machine. Nothing leaves your machine.
+    </p>
+
+    <section>
+      <h2>1. Connection secret</h2>
+      <p>
+        Paste the secret printed by <code>opscontext init-extension-secret</code>.
+        The OpsContext MCP server reads the same secret from
+        <code>~/.contextengine/extension-secret</code>; both must match for events to flow.
+      </p>
+      <div class="field">
+        <label for="secret">Secret:</label>
+        <input
+          id="secret"
+          type="password"
+          placeholder="32 hex chars"
+          autocomplete="off"
+        />
+        <button id="reveal" type="button" title="Show/hide">👁</button>
+      </div>
+      <div class="field">
+        <label for="endpoint">Endpoint:</label>
+        <input id="endpoint" type="url" placeholder="http://127.0.0.1:7842/events" />
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Per-domain capture</h2>
+      <label><input id="captureClaudeAi" type="checkbox"> Capture from <code>claude.ai</code></label>
+      <label><input id="captureChatGptCom" type="checkbox"> Capture from <code>chatgpt.com</code></label>
+    </section>
+
+    <section>
+      <h2>3. Redaction (runs in the content script — before events leave)</h2>
+      <label>
+        <input id="redactSecrets" type="checkbox">
+        Strip known secret shapes (AWS / Stripe / JWT / Anthropic / OpenAI / GitHub / SSH keys)
+      </label>
+      <label>
+        <input id="redactPii" type="checkbox">
+        Also strip emails, phone-shaped digits, credit-card-shaped digits (opt-in)
+      </label>
+    </section>
+
+    <section>
+      <button id="save" class="primary">Save</button>
+      <span id="savedAt" class="muted"></span>
+    </section>
+
+    <section class="footer">
+      Built by FASTPROD / OpsContext. BSL-1.1 license. Source:
+      <a href="https://github.com/FASTPROD/ContextEngine/tree/main/chrome-extension" target="_blank">github</a>
+    </section>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

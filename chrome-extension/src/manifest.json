@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "OpsContext Browser Capture",
+  "version": "0.1.0",
+  "description": "Streams Claude.ai and ChatGPT prompt/response events to your local OpsContext audit log. Local-first; no data leaves your machine.",
+  "minimum_chrome_version": "110",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chatgpt.com/*",
+    "http://127.0.0.1:7842/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["content/claude.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["content/chatgpt.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "OpsContext Capture — click for status"
+  },
+  "options_page": "options/options.html"
+}
