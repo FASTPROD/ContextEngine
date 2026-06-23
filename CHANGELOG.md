@@ -19,6 +19,7 @@ Closes the last surface gap from 2.1.0. Before this patch, "use OpsContext" mean
 
 ### Fixed
 - **`chrome-extension/src/options/options.html`** — Secret field placeholder said `32 hex chars` but the actual secret is 64 hex (256-bit). Updated to `64 hex chars` to match what `init-extension-secret` writes. No backwards-compat issue — placeholder text only, not validation.
+- **`chrome-extension` content scripts now bundled as IIFE** (companion `@compr/opscontext-chrome@0.1.1`). The MV3 manifest can't put `"type": "module"` on `content_scripts` entries — only on `background`. The previous build shipped `dist/content/claude.js` with top-level `import` statements which Chrome silently rejected, dark-launching the entire capture surface (Options page still saved the secret fine because popup/options DO support modules via inline `<script type="module">`). New `scripts/bundle-content.mjs` runs esbuild after `tsc` to inline all `./shared/*` and `../lib/*` imports into a single IIFE per content entry. LOCK `[CONTENT-SCRIPT-BUNDLE]`. Reload the unpacked extension after rebuild for the fix to take effect.
 
 ### Why this matters
 - Before: `nohup npx -y --package=@compr/opscontext-mcp@2.1.0 -- opscontext > /tmp/opscontext-mcp.log 2>&1 < /dev/null &` every reboot, plus hand-editing JSON for Claude Code hooks. Friction kills adoption.
