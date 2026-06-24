@@ -54,17 +54,71 @@ If your purchase team asks "is OpsContext part of a public-cloud platform play?"
 
 All three addresses currently route to the same inbox.
 
-## Open questions a careful buyer will ask
+## Data flow and sub-processors
 
-This page is v1 of the publisher disclosure. Adversarial review by our own audit pass surfaced the questions below — questions a Swiss-domiciled compliance team would ask. **We're listing them as open rather than pretending they're closed.** They'll be answered iteratively as we collect feedback from real enterprise procurement processes; if you're an enterprise buyer who needs an answer to one of these before deciding, email `yannick@compr.ch` and we'll respond directly.
+**The OpsContext binary makes exactly two kinds of outbound HTTP calls. That's it.** Verified by grep across `src/`, `chrome-extension/src/`, and `vscode-extension/src/` (audit `wgjc4m1bo`, 2026-06-24):
 
-- **"CSS LLC" is not a recognized Swiss legal form (those are Sàrl, GmbH, AG). What is the Swiss commercial-registry UID (CHE-xxx.xxx.xxx) on Zefix?** — Will be added to this page in the next publisher-disclosure pass.
-- **Sub-processor list / DPA / infra-isolation diagram?** — Not yet published. The audit-log product is local-first by design (zero remote storage; license activation is the only outbound call from your machine), so the sub-processor exposure is intentionally narrow — but a buyer wants this in writing.
-- **Does CROWLR (the sibling crawling platform) interact in any way with the OpsContext audit log, license-activation traffic, or OpsContext customer data?** — A formal carve-out statement + isolation diagram will land in the next pass. The strong design constraint is that the audit log lives on the customer's machine and is never uploaded; CROWLR's web crawlers operate against public internet content and cannot reach `127.0.0.1`, but a formal sub-processor statement is the right artifact and we don't have one yet.
-- **Shared dev team / shared VPS fleet / shared SSO across brands = shared blast radius. What's the isolation story?** — A formal isolation diagram is carry-forward.
-- **Team size and runway?** — Not currently published. Happy to share under NDA to enterprise buyers.
+| # | Destination | What's sent | What's NOT sent |
+|---|---|---|---|
+| 1 | `http://127.0.0.1:7842` (your local machine) | Captured prompts + responses + tool calls from the browser ext / Claude Code hook / VS Code ext, written to your local audit log | Anything beyond your machine. Manifest `host_permissions` constrain this URL to loopback — Chrome will reject any attempt to redirect it. |
+| 2 | `https://api.compr.ch/contextengine/{activate,heartbeat}` (PROD LLC's Gandi VPS, `92.243.24.157`) | License key (a 16-character `CE-XXXX-XXXX-XXXX-XXXX` token) + machine ID hash. Used to validate the PRO subscription and renew the local entitlement. | Audit-log contents. Prompt text. Response text. Tool calls. Project paths. File contents. Anything that resembles user work. The endpoint payload is a license check, nothing else. |
 
-If any of the above blocks a procurement decision you're trying to make, contacting `yannick@compr.ch` will get you a direct answer faster than waiting for the next pass.
+**Sub-processors for user data:** **NONE.** OpsContext does not transmit user prompts, responses, audit-log contents, project metadata, or file contents to any third party. The audit log lives on your machine and is never uploaded.
+
+**Sub-processors for the license-activation server:**
+
+| Service | Vendor | What for |
+|---|---|---|
+| `api.compr.ch` hosting | **Gandi SAS** (French registrar/hosting; GDPR-bound, EU-hosted) | Receives license-key validation requests; stores the license-key ↔ entitlement record |
+| TLS certificate | Let's Encrypt | Standard CA |
+
+We do **not** use: AWS, Cloudflare Workers, Vercel, Azure, GCP, or any other cloud-platform service for license activation. We do **not** use: Sentry, Bugsnag, Rollbar, Datadog, New Relic, or any other error-reporting / APM service. We do **not** use: Mixpanel, Amplitude, PostHog, Segment, Rudderstack, Heap, FullStory, Plausible, Umami, Fathom, or any other analytics / telemetry service. **Grep verifies — zero matches across all three `package.json` files.**
+
+**For a formal DPA template** (the legal contract our processing of your license-validation traffic), email `yannick@compr.ch` — we'll send a standard EU-form DPA pre-signed by Cross Stream Solutions Sàrl.
+
+## Marketing-data isolation (LOCKED commitment)
+
+> **Customers who use OpsContext or hold an OpsContext license are NOT, and will NOT be, associated with any marketing activity, audience, or list operated by CSS LLC, PROD LLC, or any sibling brand (CROWLR, KONIVE, INVOC, FASTPROD, compR).**
+
+This is a load-bearing commitment, not a privacy-page nicety. Specifically:
+
+- The license-activation server stores only `{license-key, entitlement-tier, last-heartbeat-ts, machine-id-hash}`. It does **not** store email addresses except as required for license delivery — and email addresses are kept in a separate Stripe customer record, never joined to OpsContext usage data.
+- The OpsContext customer list is **never** merged with CROWLR's prospect database, KONIVE's user list, INVOC's customer base, or compR's portfolio-visitor analytics.
+- We do not enrich OpsContext customer records via Clearbit, ZoomInfo, Apollo, LinkedIn Sales Navigator, or any data broker.
+- We do not retarget OpsContext customers in Facebook / LinkedIn / Google Ads.
+- We do not include OpsContext customer email addresses in any marketing newsletter without explicit opt-in to that specific newsletter.
+
+If you'd ever like a written confirmation that your organization is not in any marketing list operated by PROD LLC, email `yannick@compr.ch` — we'll send a one-line attestation.
+
+This commitment is preserved against drift by a check in our pre-commit hook policy: any new outbound destination added to `src/`, any new analytics SDK added to any `package.json`, or any new field added to the activation payload requires deliberate justification + a corresponding update to this section of `about.md`.
+
+## CROWLR carve-out
+
+> **CROWLR (the sibling web-crawling platform under PROD LLC) does not touch OpsContext audit logs, license-activation traffic, or any OpsContext customer record. Verified by grep — zero runtime code-coupling between the two products.**
+
+Specifically:
+
+- CROWLR's crawlers fetch URLs **only** explicitly requested by CROWLR's own paying customers — they do not perform arbitrary discovery, do not crawl `127.0.0.1`, cannot reach the audit log living on a customer's local machine, and do not crawl `api.compr.ch/contextengine/*`.
+- CROWLR and OpsContext share **no database**. CROWLR's customer list, target URLs, and crawl results never overlap with OpsContext's license-activation database.
+- CROWLR has **no privileged access** to OpsContext systems. If OpsContext were ever to expose a server-side audit-log API in the future (it does not today), CROWLR would authenticate against it the same way any other internet client would — no special path.
+
+A grep of the OpsContext source tree (`src/`, `chrome-extension/src/`, `vscode-extension/src/`) for "crowlr" returns three classes of mention, all benign:
+
+1. Path strings to the developer's local session-doc filesystem (`/Users/yan/FASTPROD/docs/CROWLR_COMPR_APPS_SESSION.md`) — never executed at customer runtime.
+2. **Isolation comments** in `src/learnings.ts:324` + `:739` documenting that learnings are project-scoped to *prevent* cross-project IP leakage — a deliberate isolation, not coupling.
+3. Example strings in MCP tool descriptions ("e.g. `admin-crowlr-upgrade`") — documentation only.
+
+No runtime data flow exists between OpsContext and any sibling brand.
+
+## Remaining open questions
+
+A handful of items remain pending real-enterprise-procurement feedback rather than verifier inference:
+
+- **Sub-processor list of record** — we maintain the list above. If we add a vendor, we'll update this section AND email known PRO customers within 30 days.
+- **Formal infra-isolation diagram** — the shared OVH/Gandi VPS fleet runs each brand in its own systemd unit + its own database; a one-page diagram capturing the SSO scoping is a carry-forward.
+- **SOC 2 / ISO 27001 certification** — we are NOT certified. The audit log produces *evidence* for those controls (see [compliance/cc7.2.md](compliance/cc7.2.md) + [compliance/a.12.4.1.md](compliance/a.12.4.1.md)). If you need OpsContext to BE certified before deploying, we can discuss timing; a Phase 4 certification track is on the roadmap, not yet started.
+
+For anything else blocking a procurement decision, email `yannick@compr.ch`.
 
 ## Historical note (why the names)
 

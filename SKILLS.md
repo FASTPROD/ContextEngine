@@ -111,7 +111,7 @@
 - **Three free tiers** unlock paid tools: PREMIUM_TOOLS = `score_project`, `run_audit`, `check_ports`, `list_projects`. Everything else is free.
 - **PREMIUM_MODULES = `agents` + `search-adv`** only. Collectors deliberately ship to free users (the docstring at the top of `src/activation.ts` documents this — alignment with reality landed in the 2026-06 hygiene pass).
 - **Activation flow** (`activate(key, email)`):
-  1. POSTs `{key, email, machineId, version, platform, arch}` to `api.compr.ch/contextengine/activate`.
+  1. POSTs `{key, email, machineId, version, platform, arch}` to `api.compr.ch/contextengine/activate`. **🔒 LOCK `[ACTIVATION-PAYLOAD-NO-USAGE-DATA]` (2026-06-24)** — these 6 fields are the COMPLETE payload, by deliberate product commitment. Adding a 7th field that reflects user usage (project paths, prompt text, tool inventory, learning IDs) breaks the marketing-data-isolation promise enshrined in `docs/about.md`. Any future feature that genuinely needs server-side telemetry MUST use a separate per-user opt-in endpoint, never bundle into this hot path.
   2. Server validates the license against `licenses.db`, increments activation count, returns `{license, delta}` with the delta modules encrypted (AES-256-CBC; key = SHA-256(licenseKey + machineId), IV per-activation).
   3. Server signs the canonical license payload with **Ed25519** (LOCK `[LICENSE-SIG-SERVER]`); signature is 88-char base64.
   4. Client decrypts + installs delta modules under `~/.contextengine/delta/`, saves the license to `~/.contextengine/license.json`.

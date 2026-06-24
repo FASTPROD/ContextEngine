@@ -179,6 +179,27 @@ function saveLicense(license: LicenseInfo): void {
 // Activation flow
 // ---------------------------------------------------------------------------
 
+// 🔒 LOCKED [ACTIVATION-PAYLOAD-NO-USAGE-DATA] — 2026-06-24
+// ⛔ NEVER add fields to the activation POST body that reflect user
+//    USAGE — no project paths, no prompt text, no response text, no
+//    tool-call inventory, no file lists, no learning IDs, no audit-log
+//    sample, no anything that describes what the customer is doing with
+//    OpsContext. The activation server's job is license validation,
+//    nothing else.
+// ⛔ NEVER share this list with marketing tools (Stripe customer record
+//    is the ONLY place email lands; never join it to usage data).
+// WHY: This is the LOAD-BEARING commitment of docs/about.md §
+//    "Marketing-data isolation". Customers using OpsContext are NOT and
+//    WILL NOT be associated with any marketing audience operated by
+//    PROD LLC or any sibling brand (CROWLR, KONIVE, INVOC, FASTPROD,
+//    compR). Adding a single usage field here breaks that contract
+//    silently and starts a slow drift toward telemetry — exactly the
+//    posture this product was designed to NOT have.
+// FIX: If a future feature legitimately needs server-side telemetry
+//    (e.g. a "drift alerts emailed daily" subscription), it requires
+//    EXPLICIT per-user opt-in via a separate endpoint with its own
+//    payload schema — NOT bundling fields into the license-activation
+//    path that every PRO customer hits unconditionally.
 export async function activate(licenseKey: string, email: string): Promise<{
   success: boolean;
   message: string;
@@ -186,11 +207,13 @@ export async function activate(licenseKey: string, email: string): Promise<{
 }> {
   try {
     const machineId = getMachineId();
-    
+
     const response = await fetch(ACTIVATION_API, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        // The 6 fields below are the COMPLETE set the activation server
+        // ever sees. Read the LOCK above before adding a 7th.
         key: licenseKey,
         email,
         machineId,
