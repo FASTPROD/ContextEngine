@@ -79,5 +79,8 @@ LICENSE_THIRD_PARTY artifact.)
 
 Everything in `src/background/`, `src/popup/`, `src/options/`, `src/lib/`,
 `src/content/shared/{observer,redact,emit}.ts`, `manifest.json`,
-`scripts/copy-static.mjs`, and the test fixtures is original work by FASTPROD
-under the BSL-1.1 license at the root of this package.
+`scripts/copy-static.mjs`, and the test fixtures is original work by
+**PROD LLC** (operating brand of **CSS LLC**, Swiss company incorporated 2005),
+licensed under BSL-1.1 at the root of this package. See
+[docs/about.md](https://github.com/FASTPROD/ContextEngine/blob/main/docs/about.md)
+for full publisher disclosure.

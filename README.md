@@ -150,7 +150,7 @@ The extension reads live metrics from the MCP server (via `~/.contextengine/sess
 
 ## ⭐ PRO Features
 
-ContextEngine is **free and open-core**. The free tier covers everything agents need — search, memory, sessions, and compliance enforcement. PRO adds **team and ops intelligence** across multiple projects:
+OpsContext is **source-available with a free tier**. The free tier covers everything agents need — search, memory, sessions, and compliance enforcement. PRO adds **team and ops intelligence** across multiple projects. Licensed under [BSL-1.1](LICENSE), which is *not* OSI-approved open source (converts to AGPL-3.0 on 2030-02-22). See [docs/about.md](docs/about.md) for the full publisher disclosure and licensing intent.
 
 | Feature | Free | PRO |
 |---------|------|-----|
@@ -464,7 +464,21 @@ For commercial licensing: [yannick@compr.ch](mailto:yannick@compr.ch)
 
 ---
 
-## Built by [PROD LLC](https://compr.fr)
+## Publisher
 
-ContextEngine is built by the team behind
-[compr.app](https://compr.app) · [crowlr.io](https://crowlr.io) · [crowlr.com](https://crowlr.com) · [invoc.io](https://invoc.io) · [plank.io](https://plank.io) · [konive.com](https://konive.com) · [invoc.me](https://invoc.me)
+**OpsContext is built by PROD LLC**, an operating brand of **[CSS LLC](https://compr.fr)** — a Swiss company incorporated in 2005.
+
+The VS Code Marketplace lists the extension under the legal-parent publisher ID `css-llc`; the npm package is published under the `@compr` scope. Both belong to the same entity.
+
+PROD LLC also operates these product brands:
+
+| Brand | What it does | Site |
+|---|---|---|
+| **FASTPROD** | DevOps + sysadmin operator (the team behind this project) | [fast-prod.com](https://fast-prod.com) |
+| **CROWLR** | Crawling + monitoring platform | [crowlr.io](https://crowlr.io) · [admin.crowlr.com](https://admin.crowlr.com) |
+| **KONIVE** | (product) | [konive.com](https://konive.com) |
+| **INVOC** | (product) | [invoc.io](https://invoc.io) · [invoc.me](https://invoc.me) |
+| **PLANK** | (product) | [plank.io](https://plank.io) |
+| **compR** | Portfolio + benchmark widget | [compr.fr](https://compr.fr) · [compr.app](https://compr.app) |
+
+Contact: [yannick@compr.ch](mailto:yannick@compr.ch). Full corporate disclosure at [docs/about.md](docs/about.md).

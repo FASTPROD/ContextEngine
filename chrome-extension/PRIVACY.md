@@ -38,7 +38,9 @@ Retention is fully under your control. The extension persists an in-flight queue
 - `host_permissions: https://claude.ai/*` and `https://chatgpt.com/*` — to inject the content scripts that read the conversation DOM.
 - `host_permissions: http://127.0.0.1:7842/*` — to POST events to the local OpsContext server. **No non-loopback host is granted.**
 
-## 7. Contact
+## 7. Contact and publisher
+
+Publisher: **PROD LLC**, an operating brand of **CSS LLC** (Swiss company, incorporated 2005). The VS Code Marketplace publisher ID `css-llc` and the npm `@compr` scope both belong to this single entity. Full corporate disclosure: [docs/about.md](https://github.com/FASTPROD/ContextEngine/blob/main/docs/about.md).
 
 Questions: yannick@compr.ch
 Source: https://github.com/FASTPROD/ContextEngine

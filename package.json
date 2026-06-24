@@ -44,8 +44,9 @@
     "developer-tools"
   ],
   "author": {
-    "name": "FASTPROD (PROD LLC)",
-    "url": "https://compr.fr"
+    "name": "PROD LLC (operating brand of CSS LLC, Swiss, est. 2005)",
+    "email": "yannick@compr.ch",
+    "url": "https://github.com/FASTPROD/ContextEngine/blob/main/docs/about.md"
   },
   "license": "BSL-1.1",
   "repository": {

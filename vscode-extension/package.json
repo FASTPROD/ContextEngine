@@ -4,6 +4,11 @@
   "description": "Protocol Firewall + durable memory for AI coding agents. Your AI sessions end clean, not chaotic — OpsContext ensures agents save learnings, commit code, and update docs.",
   "version": "0.10.0",
   "publisher": "css-llc",
+  "author": {
+    "name": "PROD LLC (operating brand of CSS LLC, Swiss, est. 2005)",
+    "email": "yannick@compr.ch",
+    "url": "https://github.com/FASTPROD/ContextEngine/blob/main/docs/about.md"
+  },
   "license": "BSL-1.1",
   "icon": "media/icon.png",
   "repository": {

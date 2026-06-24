@@ -2,6 +2,8 @@
   "manifest_version": 3,
   "name": "OpsContext Browser Capture",
   "version": "0.1.4",
+  "author": "PROD LLC, an operating brand of CSS LLC (Swiss company, incorporated 2005). Contact: yannick@compr.ch",
+  "homepage_url": "https://github.com/FASTPROD/ContextEngine/blob/main/docs/about.md",
   "description": "Streams Claude.ai and ChatGPT prompt/response events to your local OpsContext audit log. Local-first; no data leaves your machine.",
   "minimum_chrome_version": "110",
   "permissions": [

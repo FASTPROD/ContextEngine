@@ -5,8 +5,9 @@
   "description": "OpsContext Browser Capture \u2014 streams Claude.ai and ChatGPT prompt/response events to your local OpsContext audit log.",
   "license": "BSL-1.1",
   "author": {
-    "name": "FASTPROD (PROD LLC)",
-    "url": "https://compr.fr"
+    "name": "PROD LLC (operating brand of CSS LLC, Swiss, est. 2005)",
+    "email": "yannick@compr.ch",
+    "url": "https://github.com/FASTPROD/ContextEngine/blob/main/docs/about.md"
   },
   "repository": {
     "type": "git",
