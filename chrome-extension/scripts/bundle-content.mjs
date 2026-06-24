@@ -25,10 +25,18 @@ import { createRequire } from "module";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
-// Resolve esbuild from the parent ContextEngine node_modules so the
-// chrome-extension package doesn't need to duplicate the dep.
-const requireFromParent = createRequire(join(ROOT, "..", "package.json"));
-const esbuildPath = requireFromParent.resolve("esbuild");
+// 🔒 LOCKED [SELF-CONTAINED-ESBUILD] — 2026-06-24
+// ⛔ NEVER reach into ../package.json or ../node_modules to resolve esbuild.
+// WHY: The original lookup (createRequire rooted at ../package.json) silently
+//    broke fresh clones — the parent package.json did NOT list esbuild as a
+//    direct devDep (it only existed transitively via vitest), so users who
+//    skipped `npm install` in the parent got `Cannot find module 'esbuild'`
+//    the moment they ran `npm run build` in chrome-extension. Audit blocker B1.
+// FIX: esbuild is now a direct devDependency of chrome-extension/package.json.
+//    Resolve from this script's own package context so the extension builds
+//    standalone with only `cd chrome-extension && npm install && npm run build`.
+const requireFromHere = createRequire(import.meta.url);
+const esbuildPath = requireFromHere.resolve("esbuild");
 const { build } = await import(esbuildPath);
 
 const CONTENT_SCRIPTS = ["claude", "chatgpt"];
