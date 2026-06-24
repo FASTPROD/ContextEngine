@@ -19,6 +19,23 @@
 //    (add a "v":2 field) and keep verifyChain() backward-compatible by
 //    dispatching on the v field. Don't mutate the v=1 contract.
 //
+// 🔒 LOCKED [AUDIT-001-WRITE-RACE-FIX] — 2026-06-24
+// ⛔ NEVER remove the file-lock acquisition in appendAudit(). The chain
+//    was broken at index 2826 (Sessions 11-13) by concurrent writers
+//    (activation server + main MCP) reading the same prev_hash before
+//    either had flushed. The lock serializes the read-then-write
+//    window across processes.
+// ⛔ NEVER trust cachedLastHash without verifying file size hasn't
+//    grown since cachedSize. Another process may have written between
+//    OUR last write and OUR next read.
+// WHY: audit-001-write-race documented in Session 11 SCORE.md. The
+//    in-process chain cache is a perf optimization, NOT a correctness
+//    guarantee — correctness comes from the lock + the size-mismatch
+//    re-read.
+// FIX: To raise throughput further (if profiling proves the stat() per
+//    append is hot), batch appends within a process behind a single
+//    lock acquisition. Don't remove the lock.
+//
 // Tamper-evident audit log — hash-chained JSONL at ~/.contextengine/audit.log.
 //
 // Compliance: produces evidence aligned with SOC 2 CC7.2 + ISO 27001 A.12.4.1
@@ -28,12 +45,97 @@
 // of the previous line's canonical content, so mutation of any historical
 // record breaks chain verification at that index.
 
-import { existsSync, mkdirSync, readFileSync, appendFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  appendFileSync,
+  openSync,
+  closeSync,
+  unlinkSync,
+  statSync,
+  writeSync,
+  constants,
+} from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { createHash } from "crypto";
 
 const GENESIS_HASH = "0".repeat(64);
+
+// ─── File lock primitives ───────────────────────────────────────────────────
+// O_EXCL + O_CREAT is atomic across processes on POSIX and on Windows NTFS,
+// so creating the lockfile is the synchronization primitive. Stale-lock
+// recovery: if the lockfile is older than STALE_LOCK_MS, treat it as
+// orphaned (process crashed mid-append) and unlink it.
+
+const LOCK_TIMEOUT_MS = 2000;   // total wait before giving up
+const LOCK_RETRY_MS = 5;        // poll interval
+const STALE_LOCK_MS = 10_000;   // lockfile older than this = orphan
+
+function lockPath(): string {
+  return join(auditDir(), "audit.lock");
+}
+
+/** Synchronous sleep that doesn't burn CPU — uses Atomics.wait on a
+ *  throwaway SharedArrayBuffer. Accurate to ~1ms. */
+function syncSleep(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** Acquire an exclusive file lock. Returns a release function. Throws if
+ *  unable to acquire within LOCK_TIMEOUT_MS. */
+function acquireLockSync(): () => void {
+  const path = lockPath();
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      // O_EXCL fails atomically if the file already exists.
+      const fd = openSync(
+        path,
+        // eslint-disable-next-line no-bitwise
+        constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY,
+        0o600,
+      );
+      // Write PID + ts so a debugger can see who's holding the lock.
+      try {
+        writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
+      } catch {
+        /* lock file is what matters; the contents are nice-to-have */
+      }
+      closeSync(fd);
+      return () => {
+        try {
+          unlinkSync(path);
+        } catch {
+          /* already gone — another cleaner won the race */
+        }
+      };
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") throw e;
+      // Lockfile exists. Check if it's stale.
+      try {
+        const st = statSync(path);
+        if (Date.now() - st.mtimeMs > STALE_LOCK_MS) {
+          // Orphaned — force-unlink and retry.
+          try {
+            unlinkSync(path);
+          } catch {
+            /* another process just cleaned it; retry */
+          }
+          continue;
+        }
+      } catch {
+        /* lockfile vanished between check and stat; just retry */
+      }
+      syncSleep(LOCK_RETRY_MS);
+    }
+  }
+  throw new Error(
+    `Failed to acquire audit lock at ${path} within ${LOCK_TIMEOUT_MS}ms`,
+  );
+}
 
 function auditDir(): string {
   // CONTEXTENGINE_HOME lets tests run against a temp dir without touching ~/.contextengine
@@ -116,6 +218,9 @@ function computeHash(
 }
 
 let cachedLastHash: string | null = null;
+/** File size at our last successful write. If statSync(path).size differs
+ *  on the next call, another process wrote in between → invalidate cache. */
+let cachedSize = 0;
 
 export function appendAudit(
   event: AuditEvent,
@@ -123,13 +228,35 @@ export function appendAudit(
   actor = "system",
 ): AuditRecord {
   ensureDir();
-  if (cachedLastHash === null) cachedLastHash = readLastHash();
-  const ts = new Date().toISOString();
-  const hash = computeHash(cachedLastHash, ts, event, actor, payload);
-  const record: AuditRecord = { ts, event, actor, payload, prev_hash: cachedLastHash, hash };
-  appendFileSync(auditPath(), JSON.stringify(record) + "\n");
-  cachedLastHash = hash;
-  return record;
+  const release = acquireLockSync();
+  try {
+    const path = auditPath();
+    // Cache validity check: if file size grew since OUR last write, another
+    // process appended → re-read prev hash from disk (the cache is stale).
+    // Also handles first-ever call (cachedLastHash === null).
+    const currentSize = existsSync(path) ? statSync(path).size : 0;
+    if (cachedLastHash === null || currentSize !== cachedSize) {
+      cachedLastHash = readLastHash();
+      cachedSize = currentSize;
+    }
+    const ts = new Date().toISOString();
+    const hash = computeHash(cachedLastHash, ts, event, actor, payload);
+    const record: AuditRecord = {
+      ts,
+      event,
+      actor,
+      payload,
+      prev_hash: cachedLastHash,
+      hash,
+    };
+    const line = JSON.stringify(record) + "\n";
+    appendFileSync(path, line);
+    cachedLastHash = hash;
+    cachedSize += Buffer.byteLength(line, "utf-8");
+    return record;
+  } finally {
+    release();
+  }
 }
 
 export function readAuditLog(): AuditRecord[] {
@@ -216,6 +343,7 @@ export function toCsv(records: AuditRecord[]): string {
 // Test-only — flush in-memory chain cache so a fresh path is re-read.
 export function resetCacheForTest(): void {
   cachedLastHash = null;
+  cachedSize = 0;
 }
 
 // Safe wrapper that never throws into hot paths. Use this from production

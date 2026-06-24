@@ -242,3 +242,61 @@ describe("genesis hash + canonical serialization", () => {
     expect(typeof firstHash).toBe("string");
   });
 });
+
+describe("concurrent-writer race (audit-001-write-race fix)", () => {
+  it("serializes concurrent appends via file lock + size-mismatch re-read", async () => {
+    // Simulate the race: spawn two child processes that each fire 20 appends
+    // in parallel against the SAME audit.log file. Without the lock, the
+    // chain would break at the first interleaved write (as it did at
+    // index 2826 in the wild, Sessions 11-13). With the lock + cache
+    // invalidation on size mismatch, the chain must verify clean.
+    const { execFileSync } = await import("node:child_process");
+    const { writeFileSync: write } = await import("node:fs");
+
+    const workerScript = `
+import { appendAudit, resetCacheForTest } from "${process.cwd()}/dist/audit.js";
+process.env.CONTEXTENGINE_HOME = "${tempHome}";
+resetCacheForTest();
+const label = process.argv[2];
+for (let i = 0; i < 20; i++) {
+  appendAudit("learning.save", { id: label + "-" + i });
+}
+`;
+    const workerPath = join(tempHome, "race-worker.mjs");
+    write(workerPath, workerScript);
+
+    // Launch both workers in parallel — Promise.all so they actually contend.
+    await Promise.all([
+      new Promise<void>((resolve, reject) => {
+        try {
+          execFileSync("node", [workerPath, "A"], { stdio: "pipe" });
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      }),
+      new Promise<void>((resolve, reject) => {
+        try {
+          execFileSync("node", [workerPath, "B"], { stdio: "pipe" });
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      }),
+    ]);
+
+    // Chain must verify clean — no prev_hash mismatch, no hash tampering.
+    resetCacheForTest();
+    const report = verifyChain();
+    expect(report.ok).toBe(true);
+    expect(report.breakAtIndex).toBeNull();
+    expect(report.total).toBe(40); // 20 from worker A + 20 from worker B
+
+    // Both workers' records must be present (no event lost to lock timeout).
+    const records = readAuditLog();
+    const idsA = records.filter((r) => String(r.payload.id).startsWith("A-")).length;
+    const idsB = records.filter((r) => String(r.payload.id).startsWith("B-")).length;
+    expect(idsA).toBe(20);
+    expect(idsB).toBe(20);
+  }, 30_000); // 30s timeout — the workers themselves take a few seconds
+});
