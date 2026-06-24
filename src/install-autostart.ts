@@ -19,6 +19,23 @@ import { existsSync, writeFileSync, mkdirSync, readlinkSync } from "fs";
 import { join, dirname } from "path";
 import { homedir, platform } from "os";
 import { execSync } from "child_process";
+import { createRequire } from "module";
+import { fileURLToPath } from "url";
+
+// 🔒 LOCKED [M2-ESM-FILENAME-FIX] — 2026-06-24
+// ⛔ NEVER reference bare `__filename` in this file — the package is
+//    `"type": "module"` so __filename is `undefined` at runtime and
+//    `dirname(__filename || "")` was returning dirname("") = "." which
+//    silently broke the dev-tree fallback. Audit FRESH_USER_AUDIT_
+//    2026-06-23.md finding M2.
+// FIX: Resolve module path via fileURLToPath(import.meta.url). For
+//    cross-package resolution (e.g. when running via npx and the
+//    @compr/opscontext-mcp tarball is in npx's transient cache), also
+//    try createRequire(import.meta.url).resolve("@compr/opscontext-mcp/
+//    dist/index.js") which works inside npx.
+const __filename_esm = fileURLToPath(import.meta.url);
+const __dirname_esm = dirname(__filename_esm);
+const requireFromHere = createRequire(import.meta.url);
 
 const LABEL = "com.opscontext.mcp";
 const PLIST_FILE = join(homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
@@ -37,8 +54,8 @@ function detectNodePath(): string {
  *  upgrades. Order: (1) globally installed bin → resolve symlink to real path;
  *  (2) ./dist/index.js next to this module (dev tree). Falls through with
  *  null if neither is found. */
-function detectOpscontextEntry(): { kind: "global" | "devtree"; path: string } | null {
-  // Try global install via `npm root -g`
+function detectOpscontextEntry(): { kind: "global" | "devtree" | "npx"; path: string } | null {
+  // (1) Try global install via `npm root -g`
   try {
     const globalRoot = execSync("npm root -g 2>/dev/null", { encoding: "utf-8" }).trim();
     const candidate = join(globalRoot, "@compr", "opscontext-mcp", "dist", "index.js");
@@ -46,16 +63,26 @@ function detectOpscontextEntry(): { kind: "global" | "devtree"; path: string } |
   } catch {
     /* no npm root available; fall through */
   }
-  // Try dev tree relative to this module's location (dist/install-autostart.js)
-  // → __dirname/.. would be dist/, then ../ would be repo root, then dist/index.js
+  // (2) Try dev tree relative to this module's location (dist/install-autostart.js)
+  // → __dirname_esm IS dist/, so dist/index.js is a sibling. ESM-safe (uses
+  // fileURLToPath(import.meta.url), not the broken `__filename` reference
+  // that the M2 audit caught).
   try {
-    // import.meta.url style would be nicer but cli.ts is CommonJS-ish; use __dirname
-    // via require.resolve fallback. We're loaded from dist/, so look at sibling.
-    const here = dirname(__filename || "");
-    const candidate = join(here, "index.js");
+    const candidate = join(__dirname_esm, "index.js");
     if (existsSync(candidate)) return { kind: "devtree", path: candidate };
   } catch {
     /* ignore */
+  }
+  // (3) NEW: Try resolve via createRequire (works inside npx's transient
+  // install — when the user runs `npx -y @compr/opscontext-mcp
+  // install-autostart` the package is in npx's cache, not npm's global root,
+  // so step (1) misses. createRequire walks Node's resolution algorithm and
+  // finds the cache copy. Audit M2 fix.
+  try {
+    const resolved = requireFromHere.resolve("@compr/opscontext-mcp/dist/index.js");
+    if (existsSync(resolved)) return { kind: "npx", path: resolved };
+  } catch {
+    /* not resolvable — caller will print the install-globally hint */
   }
   return null;
 }
@@ -170,12 +197,40 @@ To view server logs:        tail -f ~/.contextengine/logs/mcp-stderr.log
     process.exit(1);
   }
 
+  // Allow operator to pin the entry path explicitly — escape hatch when
+  // detection fails (e.g. monorepo / private registry / unconventional layout).
+  // Audit M2 follow-up: was originally a CLI flag suggestion.
+  const entryFlagIdx = args.findIndex((a) => a === "--entry" || a.startsWith("--entry="));
+  let entry: { kind: "global" | "devtree" | "npx" | "manual"; path: string } | null = null;
+  if (entryFlagIdx >= 0) {
+    const raw = args[entryFlagIdx].includes("=")
+      ? args[entryFlagIdx].split("=")[1]
+      : args[entryFlagIdx + 1];
+    if (!raw) {
+      console.error(`❌ --entry requires a path. Usage: --entry=/path/to/dist/index.js`);
+      process.exit(1);
+    }
+    if (!existsSync(raw)) {
+      console.error(`❌ --entry path does not exist: ${raw}`);
+      process.exit(1);
+    }
+    entry = { kind: "manual", path: raw };
+  }
+
   const nodePath = detectNodePath();
-  const entry = detectOpscontextEntry();
+  if (!entry) entry = detectOpscontextEntry();
   if (!entry) {
-    console.error(`❌ Could not locate opscontext entrypoint.`);
-    console.error(`   Either install globally:  npm install -g @compr/opscontext-mcp`);
+    console.error(`❌ Could not locate opscontext entrypoint. Tried 3 paths:`);
+    console.error(`     (1) npm global root → @compr/opscontext-mcp/dist/index.js`);
+    console.error(`     (2) dev tree sibling (this script's dist/ dir)`);
+    console.error(`     (3) Node resolution of "@compr/opscontext-mcp/dist/index.js" via createRequire (npx cache)`);
+    console.error(``);
+    console.error(`   If you installed with npx, install globally first:`);
+    console.error(`     npm install -g @compr/opscontext-mcp`);
+    console.error(``);
     console.error(`   Or run from a clone:      cd .../ContextEngine && npm run build`);
+    console.error(``);
+    console.error(`   Or pin a path explicitly: opscontext install-autostart --entry=/full/path/to/dist/index.js`);
     process.exit(1);
   }
 

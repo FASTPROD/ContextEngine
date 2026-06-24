@@ -147,8 +147,19 @@ async function flush() {
 async function persistStatus(config: ExtensionConfig) {
   const queueLength = (await loadQueue()).length;
   const state: CaptureStatus["state"] = (() => {
+    // 🔒 LOCKED [H2-STATE-MACHINE] — 2026-06-24
+    // Audit FRESH_USER_AUDIT_2026-06-23.md H2 caught the original dead
+    // ternary `queueLength > 0 ? 'error' : 'error'`. State machine now:
+    //   no secret               → "unauthenticated" (blue dot, info text)
+    //   error + queued backlog  → "error" (red dot, queue count visible)
+    //   error + no backlog      → "error" (red dot, last-error visible)
+    //   queued, no error        → "queued" (amber dot)
+    //   nothing pending         → "ok" (green dot)
+    // The two error branches LOOK identical today but are kept separate
+    // so popup can disambiguate ("backlog still building" vs "stalled")
+    // without re-introducing a dead ternary if the messaging diverges.
     if (!config.secret) return "unauthenticated";
-    if (lastError) return queueLength > 0 ? "error" : "error";
+    if (lastError) return "error";
     if (queueLength > 0) return "queued";
     return "ok";
   })();
