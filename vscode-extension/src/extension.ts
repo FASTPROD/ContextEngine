@@ -33,6 +33,7 @@ import { registerChatParticipant } from "./chatParticipant";
 import { InfoStatusBarController, showInfoPanel, updateInfoPanel } from "./infoPanel";
 import { TerminalWatcher } from "./terminalWatcher";
 import { StatsPoller } from "./statsPoller";
+import { DriftAlertPoller } from "./driftAlertPoller";
 import { LoggedOutputChannel } from "./outputLogger";
 import * as client from "./contextEngineClient";
 
@@ -46,6 +47,7 @@ let infoBar: InfoStatusBarController;
 let notifications: NotificationManager;
 let terminalWatcher: TerminalWatcher;
 let statsPoller: StatsPoller;
+let driftAlertPoller: DriftAlertPoller;
 const disposables: vscode.Disposable[] = [];
 
 // ---------------------------------------------------------------------------
@@ -135,6 +137,19 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // -----------------------------------------------------------------------
+  // 3b. Drift Alert Poller — tail audit log for `drift.detected` events
+  //     L1 (CLI `opscontext watch` → audit.log) → L2 (this poller) → L3
+  //     (NotificationManager.showDriftAlert → VS Code UI). Closes the
+  //     L2 → in-extension-UI gap from vscode-ext 0.10.
+  // -----------------------------------------------------------------------
+  driftAlertPoller = new DriftAlertPoller(
+    notifications,
+    outputChannel,
+    context.workspaceState
+  );
+  disposables.push(driftAlertPoller);
+
+  // -----------------------------------------------------------------------
   // 4. Chat Participant
   // -----------------------------------------------------------------------
   const chatDisposable = registerChatParticipant(gitMonitor);
@@ -208,9 +223,11 @@ export function activate(context: vscode.ExtensionContext): void {
   // -----------------------------------------------------------------------
   gitMonitor.start();
   statsPoller.start(15_000); // poll every 15s
+  driftAlertPoller.start(15_000); // tail audit.log every 15s
 
   outputChannel.appendLine(`Git monitor started (interval: ${vscode.workspace.getConfiguration("contextengine").get<number>("gitCheckInterval", 120)}s)`);
   outputChannel.appendLine(`Stats poller started (interval: 15s, path: ~/.contextengine/session-stats.json)`);
+  outputChannel.appendLine(`Drift alert poller started (interval: 15s, path: ~/.contextengine/audit.log)`);
 
   // Register all disposables with the context
   for (const d of disposables) {
@@ -427,6 +444,30 @@ function registerCommands(
           }
         }
       );
+    })
+  );
+
+  // -----------------------------------------------------------------------
+  // contextengine.showDriftLog — Show drift.detected entries in Output
+  // -----------------------------------------------------------------------
+  // Wired as the target for the "Show Audit Log" action on the drift alert
+  // popup fired by NotificationManager.showDriftAlert(). Functionally
+  // identical to contextengine.alertHistory; kept as a distinct command id
+  // so the notification action and the palette entry can evolve separately.
+  context.subscriptions.push(
+    vscode.commands.registerCommand("contextengine.showDriftLog", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.showDriftLog", trigger: "notification-action" });
+      await showDriftLog(outputChannel);
+    })
+  );
+
+  // -----------------------------------------------------------------------
+  // contextengine.alertHistory — Palette-driven drift history viewer
+  // -----------------------------------------------------------------------
+  context.subscriptions.push(
+    vscode.commands.registerCommand("contextengine.alertHistory", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.alertHistory", trigger: "command-palette" });
+      await showDriftLog(outputChannel);
     })
   );
 
@@ -731,6 +772,80 @@ function registerCommands(
       term.sendText(cmd);
     }),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Drift Log Helper — read audit.log tail, filter to drift.detected, render
+// ---------------------------------------------------------------------------
+
+async function showDriftLog(
+  outputChannel: vscode.OutputChannel
+): Promise<void> {
+  // Inline-imported to avoid a top-level dependency on `fs` from the
+  // extension entry point (matches existing pattern — fs is only imported
+  // by the modules that need it).
+  const fs = await import("fs");
+  const path = await import("path");
+  const os = await import("os");
+
+  const auditPath = path.join(
+    process.env.CONTEXTENGINE_HOME || path.join(os.homedir(), ".contextengine"),
+    "audit.log"
+  );
+
+  outputChannel.clear();
+  outputChannel.appendLine("═══════════════════════════════════════");
+  outputChannel.appendLine("  OpsContext — Drift Alert History");
+  outputChannel.appendLine("═══════════════════════════════════════");
+  outputChannel.appendLine("");
+
+  if (!fs.existsSync(auditPath)) {
+    outputChannel.appendLine(`  (no audit log yet at ${auditPath})`);
+    outputChannel.appendLine("");
+    outputChannel.appendLine("═══════════════════════════════════════");
+    outputChannel.show();
+    return;
+  }
+
+  const raw = fs.readFileSync(auditPath, "utf-8");
+  const lines = raw.split("\n").filter((l) => l.length > 0);
+  const drifts: Array<{ ts: string; kind: string; severity: string; reason: string }> = [];
+  for (const line of lines) {
+    try {
+      const rec = JSON.parse(line) as {
+        ts: string;
+        event: string;
+        payload: { kind: string; severity: string; reason: string };
+      };
+      if (rec.event !== "drift.detected") continue;
+      drifts.push({
+        ts: rec.ts,
+        kind: rec.payload.kind,
+        severity: rec.payload.severity,
+        reason: rec.payload.reason,
+      });
+    } catch {
+      // Skip non-JSON / partial lines.
+    }
+  }
+
+  if (drifts.length === 0) {
+    outputChannel.appendLine("  ✅ No drift events recorded.");
+  } else {
+    // Show most-recent first, cap to 200 for sanity.
+    const recent = drifts.slice(-200).reverse();
+    outputChannel.appendLine(`  ${recent.length} drift event(s) (most recent first):`);
+    outputChannel.appendLine("");
+    for (const d of recent) {
+      const icon = d.severity === "critical" ? "🚨" : d.severity === "warn" ? "⚠️" : "ℹ️";
+      outputChannel.appendLine(`  ${icon} ${d.ts}  [${d.kind}]  ${d.severity}`);
+      outputChannel.appendLine(`     ${d.reason}`);
+      outputChannel.appendLine("");
+    }
+  }
+
+  outputChannel.appendLine("═══════════════════════════════════════");
+  outputChannel.show();
 }
 
 // ---------------------------------------------------------------------------

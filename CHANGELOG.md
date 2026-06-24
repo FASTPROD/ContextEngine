@@ -2,6 +2,36 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
+## [vscode-ext 0.11.0] — 2026-06-24 — Drift alerts surfaced in VS Code UI (L2 → in-editor gap closed)
+
+Closes the last gap in the L1→L2→L3 drift pipeline:
+
+- **L1 (already shipped, 2.1.0):** `opscontext watch` CLI runs the 8-heuristic drift detector against the live `~/.contextengine/audit.log` and writes `drift.detected` records back into the same log (`src/detector.ts:387` → `safeAppend("drift.detected", ...)`).
+- **L2 (NEW — this release):** `vscode-extension/src/driftAlertPoller.ts` tails the audit log on a 15s interval, parses each new `drift.detected` record, dedupes by byte-offset cursor + per-record hash LRU + per-kind time throttle, and forwards survivors to the notification layer.
+- **L3 (NEW — this release):** `NotificationManager.showDriftAlert()` routes severity → VS Code dialog tier: `info` → info popup, `warn` → non-modal warning, `critical` → MODAL warning (OS-level interrupt). Each notification offers **Show Audit Log** / **Mute this kind** / **Dismiss** actions.
+
+Before 0.11.0, drift signals fired by the CLI watcher were visible only in the terminal (`opscontext watch --json | log-aggregator`) or via the `drift_status` MCP tool. The VS Code extension had a perfectly good `NotificationManager` for git-dirty escalations and stale-doc warnings, but no surface for drift alerts. So a user with the extension running and the CLI watcher running could have a `silent_failure` or `fabrication_suspect` signal sitting in their audit log for 20 minutes and never see a popup. That's the gap this release closes.
+
+### Added
+- **`vscode-extension/src/driftAlertPoller.ts`** — new `vscode.Disposable` that tails `~/.contextengine/audit.log` (resolution mirrors `src/audit.ts auditDir()` — `process.env.CONTEXTENGINE_HOME || homedir()/.contextengine`). Polls every 15 s (mirroring `StatsPoller`'s interval). Persists byte-offset cursor + mute list in `vscode.ExtensionContext.workspaceState` (falls back to `~/.contextengine/vscode-drift-cursor.json` when run outside an extension host — keeps tests + integration scripts honest). Handles audit-log truncation / rotation by resetting the cursor when the file shrinks. Tracks the last 500 seen record hashes as a bounded-LRU safety net for fs-watcher races + partial-line reads.
+- **`NotificationManager.showDriftAlert(rec, opts)`** — added to `vscode-extension/src/notifications.ts`. Gated by `contextengine.enableNotifications` (master switch) AND `contextengine.enableDriftAlerts` (new, defaults true — gives users a single-toggle opt-out for drift specifically without losing git-dirty warnings).
+- **`contextengine.showDriftLog`** command — registered as the click target for the "Show Audit Log" action on drift-alert popups. Reads `~/.contextengine/audit.log`, filters to `event === "drift.detected"`, renders the last 200 records to the OpsContext output channel newest-first.
+- **`contextengine.alertHistory`** command — palette-driven entry point to the same drift history viewer. Two commands, one implementation, so the notification action and the user-facing palette entry can evolve independently.
+- **`contextengine.enableDriftAlerts`** setting — boolean, default `true`. Disables ONLY drift surfacing; the poller still tails the log and the in-extension EventEmitter still fires (so future surfaces — info panel, future webview — keep working), but no popups appear.
+- **`vscode-extension/src/driftAlertPoller.test.ts`** — first test file inside `vscode-extension/`. Uses a tiny in-file `vscode` mock + Node's built-in `node:assert/strict` + `node:test` so we don't pull a new dev dependency. Covers the four invariants from the spec: (1) synthetic `drift.detected` line → `NotificationManager.showDriftAlert` fired with correct severity + message; (2) second poll on the same line does NOT re-fire (hash dedup); (3) muting a kind suppresses subsequent popups; (4) `dispose()` is clean (timer stopped, cursor persisted, no throws).
+
+### Dedup strategy (in priority order)
+1. **Byte-offset cursor** (primary, persisted). Stat the file, read only the tail bytes added since last poll, advance cursor to the last full newline so records never split. Reset to 0 on truncation.
+2. **Per-record hash LRU** (in-memory, bounded at 500). Catches fs-watch double-fire + the rare "poll saw a partial line then re-saw the same record after the newline arrived" race.
+3. **Per-kind time throttle** (5 min, mirroring `NotificationManager.MIN_INTERVAL_MS`). Non-critical alerts of the same kind within the window are suppressed at the popup layer but still fire the `onDrift` EventEmitter (so the info panel / future webview still updates). `severity === "critical"` bypasses — those are OS-level interrupts.
+4. **User mute list** (persisted). Clicking "Mute this kind" on a popup adds the `DriftKind` to a mute set; that kind never surfaces a popup again on this machine until the user removes it (still logged to output channel for auditability).
+
+### No conflict with `terminalWatcher.ts`
+The existing `terminalWatcher.ts` notifies on consecutive terminal-command exit-code failures inside the VS Code process. It does NOT read `audit.log` and does NOT write `drift.detected`. The new `DriftAlertPoller` exclusively consumes `event === "drift.detected"` records written by the separate `opscontext watch` CLI. Disjoint event sources, disjoint UI paths, no dedup needed between them.
+
+### Why minor (0.10 → 0.11)
+Net-new in-editor capability: a surface that previously had no drift-alert UI now has popup notifications + audit-log viewer commands. No breaking changes — existing commands, settings, chat handle behave identically.
+
 ## [chrome-ext 0.1.3] — 2026-06-23 — streaming-dedupe polish (response over-emit fix)
 
 Companion to 2.1.1. Chrome-ext-only release; not on Web Store yet — users reload the unpacked dir.

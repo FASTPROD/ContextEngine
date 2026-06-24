@@ -2,6 +2,47 @@
 
 All notable changes to the OpsContext VS Code Extension (previously ContextEngine).
 
+## [0.11.0] — 2026-06-24 — Drift alerts surfaced in VS Code UI (L2 → in-editor gap closed)
+
+Closes the last gap in the L1→L2→L3 drift pipeline. Before 0.11.0, drift signals
+fired by the CLI watcher were visible only in the terminal or via the
+`drift_status` MCP tool. The VS Code extension had no surface for them. Now it
+does.
+
+### Added
+- **`src/driftAlertPoller.ts`** — new `vscode.Disposable` that tails
+  `~/.contextengine/audit.log` on a 15 s interval, parses every new
+  `drift.detected` record (the same record `opscontext watch` writes via the
+  detector's `safeAppend` call), and forwards survivors to
+  `NotificationManager.showDriftAlert`. Three-layer dedup: byte-offset cursor
+  (persisted in `workspaceState`) → per-record hash LRU (in-memory, 500) →
+  per-kind 5 min throttle (critical bypasses).
+- **`NotificationManager.showDriftAlert`** — added to `src/notifications.ts`.
+  Routes severity → VS Code dialog tier: `info` → info popup, `warn` →
+  warning popup, `critical` → modal warning. Actions: **Show Audit Log** /
+  **Mute this kind** / **Dismiss**.
+- **`contextengine.showDriftLog`** command — target for the "Show Audit Log"
+  action; renders the last 200 `drift.detected` records to the OpsContext
+  output channel, newest first.
+- **`contextengine.alertHistory`** command — palette-driven entry to the same
+  drift history viewer.
+- **`contextengine.enableDriftAlerts`** setting (boolean, default `true`) —
+  drift-specific opt-out. When disabled, the poller still tails (EventEmitter
+  still fires for future surfaces like the info panel) but no popups appear.
+- **`src/driftAlertPoller.test.ts`** — first test file inside
+  `vscode-extension/`, using Node's built-in `node:test` + `node:assert` (no
+  new dev dependencies).
+
+### Layer story
+- L1 (since 2.1.0): `opscontext watch` CLI runs the 8-heuristic detector and
+  writes `drift.detected` records into `~/.contextengine/audit.log`.
+- L2 (NEW — 0.11.0): `DriftAlertPoller` tails that log and forwards records.
+- L3 (NEW — 0.11.0): `NotificationManager.showDriftAlert` surfaces them as
+  in-editor popups.
+
+### Why minor (0.10 → 0.11)
+Net-new in-editor capability. No breaking changes.
+
 ## [0.9.0] — 2026-06-23 — Cross-surface event emitters → OpsContext audit log
 
 ### Added

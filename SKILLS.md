@@ -83,7 +83,7 @@
 - After deploy: `npx pm2 restart ecosystem.config.cjs && npx pm2 save`
 
 ### VS Code Extension
-- Source: `vscode-extension/` — 10 TypeScript files
+- Source: `vscode-extension/` — 11 TypeScript files (added `driftAlertPoller.ts` in 0.11.0)
 - Publisher: `css-llc` (Azure DevOps PAT, `ymolinier@hotmail.com`)
 - Package: `npx @vscode/vsce package` → `.vsix`
 - Publish: `echo '<PAT>' | npx @vscode/vsce publish`
@@ -93,6 +93,14 @@
 - Pre-commit hook: `hooks/pre-commit` — **BLOCKS** (exit 1) when CE docs stale >4h. Bypass exists at git level but is intentionally not advertised in hook output (anti-marketing).
 - Terminal watcher: `terminalWatcher.ts` — 9 categories (git, npm, build, deploy, test, database, python, ssh, other), 10 credential redaction patterns, stuck-pattern detection
 - Multi-window output.log: `outputLogger.ts` tags lines with `[wsTag]` (workspace name) to disambiguate shared log across windows
+
+#### Drift alert layer (v0.11.0)
+- `driftAlertPoller.ts` is a `vscode.Disposable` that tails `~/.contextengine/audit.log` (path resolved exactly like `src/audit.ts auditDir()` — env `CONTEXTENGINE_HOME` override + `homedir()/.contextengine` fallback) on a 15 s interval. Mirrors the `StatsPoller` pattern: immediate-first-poll then `setInterval`, EventEmitter for downstream consumers, dispose-stops-timer-and-emitter.
+- Filters to `event === "drift.detected"` records (the same records `opscontext watch` writes via `safeAppend` in `src/detector.ts:387`). For each survivor, calls `NotificationManager.showDriftAlert(rec, opts)` which routes severity → VS Code dialog tier: `info` → info popup, `warn` → warning popup, `critical` → MODAL warning. Three actions: "Show Audit Log" → `contextengine.showDriftLog`, "Mute this kind" → adds `DriftKind` to a persisted mute set, "Dismiss" → no-op.
+- Three-layer dedup (priority order): (1) byte-offset cursor persisted in `vscode.ExtensionContext.workspaceState` survives extension reload; (2) per-record hash LRU bounded at 500 catches fs-watch double-fires; (3) per-kind 5 min throttle suppresses non-critical repeats at the popup layer (critical always fires). Setting `contextengine.enableDriftAlerts` (boolean, default `true`) is the drift-specific opt-out — when disabled the poller still tails (EventEmitter still fires for future surfaces) but no popups appear.
+- New commands: `contextengine.showDriftLog` (target for the popup's "Show Audit Log" action) + `contextengine.alertHistory` (palette entry, same implementation). Both render the last 200 drift records newest-first to the output channel.
+- L1 (CLI watch → audit log) → L2 (this poller) → L3 (NotificationManager → VS Code UI). Before 0.11.0, drift signals were terminal-only or MCP-tool-only.
+- **NEVER** touch `terminalWatcher.ts` when editing the drift surface — it observes a disjoint event source (terminal exit codes inside the VS Code process) and never reads `audit.log`. No dedup needed between the two; worst case is a user gets two related popups, which is acceptable.
 
 ### MCP Configuration Per Workspace
 - VS Code DEPRECATED MCP in user `settings.json` AND global `mcp.json` — use `.vscode/mcp.json` per workspace

@@ -2,7 +2,7 @@
   "name": "contextengine",
   "displayName": "OpsContext — AI Agent Compliance",
   "description": "Protocol Firewall + durable memory for AI coding agents. Your AI sessions end clean, not chaotic — OpsContext ensures agents save learnings, commit code, and update docs.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "publisher": "css-llc",
   "author": {
     "name": "PROD LLC (operating brand of CSS LLC, Swiss, est. 2005)",
@@ -81,6 +81,16 @@
         "command": "contextengine.setup",
         "title": "OpsContext: Set up OpsContext (one-click install)",
         "icon": "$(rocket)"
+      },
+      {
+        "command": "contextengine.showDriftLog",
+        "title": "OpsContext: Show Drift Audit Log",
+        "icon": "$(warning)"
+      },
+      {
+        "command": "contextengine.alertHistory",
+        "title": "OpsContext: Show Drift Alert History",
+        "icon": "$(history)"
       }
     ],
     "chatParticipants": [
@@ -141,6 +151,11 @@
           "type": "number",
           "default": 5,
           "description": "Number of uncommitted files before showing a warning"
+        },
+        "contextengine.enableDriftAlerts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Surface drift.detected events (loop, stuck, fabrication_suspect, silent_failure, etc.) from ~/.contextengine/audit.log as in-editor notifications"
         }
       }
     }

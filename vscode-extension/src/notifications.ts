@@ -13,6 +13,7 @@
 
 import * as vscode from "vscode";
 import { type GitSnapshot } from "./gitMonitor";
+import type { DriftAuditRecord, DriftKind } from "./driftAlertPoller";
 
 // ---------------------------------------------------------------------------
 // Notification Manager
@@ -138,6 +139,56 @@ export class NotificationManager implements vscode.Disposable {
     }
 
     this._lastDocStaleNotificationTime = now;
+  }
+
+  /**
+   * Show a drift alert notification — surfaces a `drift.detected` audit-log
+   * record to the user via the appropriate VS Code dialog tier:
+   *   - severity: "info"     → status-bar-style info popup
+   *   - severity: "warn"     → non-modal warning popup
+   *   - severity: "critical" → MODAL warning (OS-level interrupt)
+   *
+   * Gated by `contextengine.enableNotifications` (master switch) AND
+   * `contextengine.enableDriftAlerts` (drift-specific opt-out). Actions:
+   *   - "Show Audit Log"  → opens the drift-filtered audit log
+   *   - "Mute this kind"  → adds the kind to the poller's mute list
+   *   - "Dismiss"         → close (default)
+   */
+  async showDriftAlert(
+    rec: DriftAuditRecord,
+    opts: { onMuteKind: (k: DriftKind) => void }
+  ): Promise<void> {
+    if (this._disposed) return;
+
+    const config = vscode.workspace.getConfiguration("contextengine");
+    if (!config.get<boolean>("enableNotifications", true)) return;
+    if (!config.get<boolean>("enableDriftAlerts", true)) return;
+
+    const { kind, severity, reason } = rec.payload;
+    const title = `OpsContext drift [${kind}]: ${reason}`;
+    const showAuditLog = "Show Audit Log";
+    const muteKind = "Mute this kind";
+    const dismiss = "Dismiss";
+    const actions = [showAuditLog, muteKind, dismiss];
+
+    let action: string | undefined;
+    if (severity === "critical") {
+      action = await vscode.window.showWarningMessage(
+        title,
+        { modal: true },
+        ...actions
+      );
+    } else if (severity === "warn") {
+      action = await vscode.window.showWarningMessage(title, ...actions);
+    } else {
+      action = await vscode.window.showInformationMessage(title, ...actions);
+    }
+
+    if (action === showAuditLog) {
+      await vscode.commands.executeCommand("contextengine.showDriftLog");
+    } else if (action === muteKind) {
+      opts.onMuteKind(kind);
+    }
   }
 
   /**
