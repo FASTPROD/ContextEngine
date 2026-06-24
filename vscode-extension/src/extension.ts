@@ -35,6 +35,7 @@ import { TerminalWatcher } from "./terminalWatcher";
 import { StatsPoller } from "./statsPoller";
 import { DriftAlertPoller } from "./driftAlertPoller";
 import { LoggedOutputChannel } from "./outputLogger";
+import { runSetup, runUninstall } from "./setupOrchestrator";
 import * as client from "./contextEngineClient";
 
 // ---------------------------------------------------------------------------
@@ -729,47 +730,48 @@ function registerCommands(
   // -----------------------------------------------------------------------
   // contextengine.setup — One-click install for non-tech users.
   // -----------------------------------------------------------------------
-  // Drops the three install commands into a fresh integrated-terminal so
-  // the user can see what's being installed + decide whether to continue.
-  // This is the single biggest adoption-friction reducer per the
-  // 2026-06-23 strategy decision: "vibe coders" already live in VS Code,
-  // so the lowest-friction install path is "click a button in your editor",
-  // not "open a terminal yourself and paste a command".
+  // Refactored 2026-06-24 (audit B2): previously dispatched a single
+  // `npm && opscontext && opscontext` chain into a fresh terminal with
+  // zero pre-checks, no per-step error capture, and no rollback. That
+  // dumped non-tech users at a `$` prompt with red text whenever Node
+  // was missing, npm hit EACCES, or a partial re-run tripped over an
+  // existing LaunchAgent. The new flow lives in `setupOrchestrator.ts`
+  // and runs every step as its own `cp.execFile` with output streaming
+  // into a dedicated "OpsContext Setup" output channel.
   //
-  // We deliberately DO NOT execute the commands silently or in a
-  // background terminal — the user must SEE the npm install scroll past +
-  // the LaunchAgent boot + the hook splice so they trust what just
-  // happened to their machine.
+  // On non-darwin platforms we still surface a friendly modal explaining
+  // the LaunchAgent step will be skipped — preserves the prior behaviour
+  // contract of "setup at least informs you on Linux/Windows" while
+  // letting Mac users (the target persona) get the full happy path.
+  //
+  // 🔒 LOCKED [B2-SETUP-EXECFILE] — 2026-06-24
+  // ⛔ NEVER replace this with a terminal.sendText chain again — that
+  //     was the user-trust regression the 2026-06-23 audit flagged as
+  //     blocker B2. cp.execFile + OutputChannel is the path.
+  // WHY: terminal.sendText has no exit-code visibility, no per-step
+  //      progress, no idempotency, and surfaces npm WARN spam that
+  //      non-tech users read as "something broke".
+  // FIX: route every step through runStep() in setupOrchestrator.ts.
   context.subscriptions.push(
     vscode.commands.registerCommand("contextengine.setup", async () => {
       void client.emitEvent("vscode.tool_call", { tool: "contextengine.setup", trigger: "command-palette" });
+      await runSetup(outputChannel);
+    }),
+  );
 
-      const confirm = await vscode.window.showInformationMessage(
-        "Set up OpsContext on this machine? This will:\n" +
-          "  1. npm install -g @compr/opscontext-mcp\n" +
-          "  2. Install a macOS LaunchAgent (auto-start at login)\n" +
-          "  3. Wire Claude Code hooks (capture terminal prompts)\n\n" +
-          "You'll see each step in a new terminal. Proceed?",
-        { modal: true },
-        "Install",
-        "Cancel",
-      );
-      if (confirm !== "Install") return;
-
-      const term = vscode.window.createTerminal({ name: "OpsContext Setup" });
-      term.show(true);
-
-      // Use && so a failure halts the chain. Append a friendly final
-      // message regardless of success so the user knows the script ended.
-      const cmd =
-        "npm install -g @compr/opscontext-mcp" +
-        " && opscontext install-autostart" +
-        " && opscontext install-claude-hook" +
-        " && echo '' && echo '✅ OpsContext setup complete.'" +
-        " && echo '   Next: install the Chrome extension when it lands on the Web Store.'" +
-        " && echo '   For now, see chrome-extension/ in the repo for unpacked install.'";
-
-      term.sendText(cmd);
+  // -----------------------------------------------------------------------
+  // contextengine.uninstall — Clean-slate reset.
+  // -----------------------------------------------------------------------
+  // Added 2026-06-24 (audit B2 follow-up). Users hitting a half-installed
+  // state need a single command to wipe the LaunchAgent + Claude hook +
+  // npm package so the next `OpsContext: Set up` runs from zero. The old
+  // flow had nothing here — users had to know to run `opscontext
+  // uninstall-autostart` etc. manually, which is exactly the gap the
+  // one-click install was meant to close.
+  context.subscriptions.push(
+    vscode.commands.registerCommand("contextengine.uninstall", async () => {
+      void client.emitEvent("vscode.tool_call", { tool: "contextengine.uninstall", trigger: "command-palette" });
+      await runUninstall(outputChannel);
     }),
   );
 }

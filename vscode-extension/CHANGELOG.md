@@ -2,14 +2,68 @@
 
 All notable changes to the OpsContext VS Code Extension (previously ContextEngine).
 
-## [0.11.0] — 2026-06-24 — Drift alerts surfaced in VS Code UI (L2 → in-editor gap closed)
+## [0.11.0] — 2026-06-24 — Drift alerts in VS Code UI + robust one-click setup (audit B2)
 
-Closes the last gap in the L1→L2→L3 drift pipeline. Before 0.11.0, drift signals
-fired by the CLI watcher were visible only in the terminal or via the
-`drift_status` MCP tool. The VS Code extension had no surface for them. Now it
-does.
+Folded two features into one 0.11.0 release because neither shipped before
+the 2026-06-23 fresh-user audit:
+1. L1→L2→L3 drift-pipeline surface in the editor (was the original 0.11.0
+   scope).
+2. A robust one-click setup that doesn't dump non-tech users at a `$`
+   prompt with red text when Node is missing or a re-run trips over an
+   existing LaunchAgent. The previous "Set up" command (introduced in
+   0.10.0) chained `npm install -g … && opscontext install-autostart &&
+   opscontext install-claude-hook` straight to `terminal.sendText` with
+   zero pre-checks, no per-step exit-code capture, no rollback, and no
+   idempotency — the audit's blocker B2.
 
-### Added
+### Added — Setup hardening (audit B2)
+- **`src/setupOrchestrator.ts`** — new module owning `runSetup` and
+  `runUninstall`. Every step runs as its own `cp.execFile` (no terminal,
+  no shell) with stdout/stderr streamed into a dedicated
+  **"OpsContext Setup"** output channel.
+- **Pre-flight: Node toolchain check** — `which node` + `which npm`
+  (uses `where` on Windows) before kicking off step 1. If either is
+  missing, surfaces a modal with **[Open Download Page]** that calls
+  `vscode.env.openExternal('https://nodejs.org/en/download')` instead of
+  letting npm fail with `zsh: command not found`.
+- **Pre-flight: daemon health probe** — hits
+  `http://127.0.0.1:7842/health` with a 1-second timeout (uses Node's
+  built-in `http` module — no new deps). On HTTP 200, modal-prompts
+  "OpsContext server is already running. Run setup anyway?" If the user
+  cancels, the next-steps modal still appears so they get the
+  **[Open claude.ai]** / **[Try @contextengine in Copilot Chat]**
+  buttons.
+- **Per-step progress** — three sequential `execFile` invocations under
+  one `vscode.window.withProgress` with messages "Downloading OpsContext
+  server (1/3)…", "Setting up auto-start (2/3)…", "Wiring Claude Code
+  hook (3/3)…".
+- **Idempotency heuristics** — step 2 (install-autostart) and step 3
+  (install-claude-hook) recognise "already exists" / "already installed"
+  / "plist already" in stderr and surface a friendly "no changes
+  needed" line in the output channel instead of escalating to an error.
+- **Per-step failure UX** — on any hard failure, a single notification
+  fires with **[Open Output]** + **[Dismiss]** actions; the [Open
+  Output] action focuses the "OpsContext Setup" channel rather than
+  leaving the user staring at a notification that lost context.
+- **macOS gating** — `install-autostart` is skipped with a friendly note
+  on non-darwin platforms. Steps 1 and 3 still run.
+- **Success modal** — replaces the old "wait for the Web Store" dead-end
+  echo with a single modal: **[Open claude.ai]** /
+  **[Try @contextengine in Copilot Chat]** / **[Done]**.
+- **`contextengine.uninstall` command** — registered in `extension.ts`
+  + `package.json` `contributes.commands`. Confirmation modal →
+  `opscontext uninstall-autostart` → `opscontext uninstall-claude-hook`
+  → `npm uninstall -g @compr/opscontext-mcp`, each tolerating
+  already-removed pieces. Final modal surfaces "OpsContext uninstalled".
+
+### Why fold instead of bumping to 0.12.0
+0.11.0 was not yet published to the marketplace at the time of the audit
+fix (no `contextengine-0.11.0.vsix` artefact, no `vscode:publish` run).
+Bundling the setup hardening into 0.11.0 saves the marketplace
+ceremony of two back-to-back releases without breaking any contract
+(both changes are additive; nothing existing was removed or renamed).
+
+### Added — Drift alerts (original 0.11.0 scope, unchanged)
 - **`src/driftAlertPoller.ts`** — new `vscode.Disposable` that tails
   `~/.contextengine/audit.log` on a 15 s interval, parses every new
   `drift.detected` record (the same record `opscontext watch` writes via the

@@ -83,6 +83,11 @@
         "icon": "$(rocket)"
       },
       {
+        "command": "contextengine.uninstall",
+        "title": "OpsContext: Uninstall OpsContext",
+        "icon": "$(trash)"
+      },
+      {
         "command": "contextengine.showDriftLog",
         "title": "OpsContext: Show Drift Audit Log",
         "icon": "$(warning)"
