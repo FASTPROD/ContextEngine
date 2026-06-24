@@ -10,6 +10,8 @@
 
 OpsContext is an [MCP](https://modelcontextprotocol.io) server. It runs locally, snapshots your live infra (PM2 processes, nginx config, Docker containers, git status, cron jobs, redacted env), and exposes it via tools your AI coding agents (Claude Code, Cursor, Copilot, Windsurf, OpenClaw) can call in real time. Everything stays on your machine — no telemetry, no code uploads.
 
+> **🌐 Browser Capture (Phase 1, shipped 2026-06):** OpsContext now captures prompts + assistant responses + tool calls from **Claude.ai**, **ChatGPT.com**, *and* your **Claude Code** terminal sessions into the same hash-chained audit log. Cross-surface drift detection becomes possible (e.g. catch when a model says one thing in the browser and another in the terminal). See [Step 3](#3-capture-browser--claude-code-events-optional) below.
+
 ## Why
 
 Claude Code already reads your `CLAUDE.md`, `copilot-instructions.md`, and source files. It has hooks, skills, and native memory. It does not — and structurally cannot — see what's running on your servers. Live process state, nginx routes, port conflicts across fleets, git working-tree drift across 30+ repos — that's the operational context AI agents lack.
@@ -121,7 +123,54 @@ cp -r node_modules/@compr/opscontext-mcp/skills/contextengine ~/.openclaw/worksp
 }
 ```
 
-### 3. Pin your config (recommended)
+### 3. Capture browser + Claude Code events (optional)
+
+Phase-1 browser capture wires Claude.ai / ChatGPT.com / Claude Code into the same hash-chained audit log the MCP server already writes to. Three small commands; each one is independent.
+
+**3a. Generate the browser extension secret**
+
+```bash
+npx @compr/opscontext-mcp init-extension-secret
+```
+
+Writes a 32-byte hex token to `~/.contextengine/extension-secret` (mode `0600`). The Chrome extension authenticates to your local MCP server with this secret — nobody else on your network can post events.
+
+Verify:
+```bash
+ls -la ~/.contextengine/extension-secret    # → -rw------- (0600)
+```
+
+Then load the unpacked extension and paste the secret into its Options page. Full install steps (build, load unpacked, paste secret): [chrome-extension/README.md](chrome-extension/README.md). *(Chrome Web Store listing coming.)*
+
+**3b. Auto-start the local server (macOS)**
+
+```bash
+npx @compr/opscontext-mcp install-autostart
+```
+
+Installs a LaunchAgent so OpsContext binds `127.0.0.1:7842` on every login — that's the port the browser extension and the Claude Code hook both post to.
+
+Verify:
+```bash
+curl http://127.0.0.1:7842/health           # → {"ok":true,...}
+```
+
+Companion commands: `uninstall-autostart`, `autostart-status`.
+
+**3c. Wire Claude Code terminal sessions**
+
+```bash
+npx @compr/opscontext-mcp install-claude-hook
+```
+
+Adds `UserPromptSubmit`, `PostToolUse`, and `SessionStart` hook entries to `~/.claude/settings.json` so every Claude Code prompt + tool call lands in the same audit log as the browser events.
+
+Verify:
+```bash
+npx @compr/opscontext-mcp watch --once       # → tails recent events; should show claude_code_* kinds after one prompt
+```
+
+### 4. Pin your config (recommended)
 
 If you have a `contextengine.json` with custom sources, add this to your shell profile (`~/.zshrc` or `~/.bashrc`):
 

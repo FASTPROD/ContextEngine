@@ -531,6 +531,13 @@ async function runInit(): Promise<void> {
     console.log("  2. Start a Copilot chat — ContextEngine tools are now available");
     console.log("  3. Run `contextengine score` to get your AI-readiness baseline");
     console.log("");
+
+    // Browser-capture nudge — fires once, never blocks init
+    const extensionSecretPath = join(homedir(), ".contextengine", "extension-secret");
+    if (!existsSync(extensionSecretPath)) {
+      console.log("  💡 Next: run `opscontext init-extension-secret` to enable browser capture from Claude.ai and ChatGPT.");
+      console.log("");
+    }
   } finally {
     rl.close();
   }
