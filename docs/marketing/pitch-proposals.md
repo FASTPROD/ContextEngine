@@ -23,7 +23,7 @@ The OpsContext "one true sentence" we're translating:
 
 ### D. Enterprise-buyer  *(use on the sales-deck / DSI-pitch page)*
 
-> AI agents touch your code through Claude.ai, Cursor, Copilot, and the terminal — four blind spots for your compliance team. OpsContext captures all four with a single tamper-evident log (SOC2-ready), enforced by policy you author in version control, with zero data leaving your network.
+> AI agents touch your code through Claude.ai, Cursor, Copilot, and the terminal — four blind spots for your compliance team. OpsContext captures all four with a single tamper-evident log that produces evidence aligned with SOC 2 CC7.2 + ISO 27001 A.12.4.1 (evidence for *your* auditor — OpsContext itself is not certified), enforced by policy you author in version control, with zero data leaving your network.
 
 ---
 
@@ -43,7 +43,7 @@ The OpsContext "one true sentence" we're translating:
 
 ### D. Enterprise FR  *(pitch DSI / direction des systèmes d'information)*
 
-> Les agents IA modifient votre code via Claude.ai, Cursor, Copilot et le terminal — quatre angles morts pour votre conformité. OpsContext capture les quatre dans un journal infalsifiable unique (compatible SOC 2), appliqué par des politiques versionnées dans Git, et sans qu'aucune donnée ne quitte votre réseau.
+> Les agents IA modifient votre code via Claude.ai, Cursor, Copilot et le terminal — quatre angles morts pour votre conformité. OpsContext capture les quatre dans un journal infalsifiable unique produisant des éléments probants alignés sur SOC 2 CC7.2 et ISO 27001 A.12.4.1 (éléments probants pour *votre* auditeur — OpsContext lui-même n'est pas certifié), appliqué par des politiques versionnées dans Git, et sans qu'aucune donnée ne quitte votre réseau.
 
 ---
 

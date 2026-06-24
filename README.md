@@ -17,7 +17,7 @@ Claude Code already reads your `CLAUDE.md`, `copilot-instructions.md`, and sourc
 OpsContext fills that gap, plus two compliance layers regulated industries demand from any agent stack:
 
 1. **Operational visibility (the moat)** — collectors for PM2 / nginx / Docker / git / cron / .env (redacted) / composer / systemd. Cross-project + check_ports + fleet HTML scoring. Claude Code can't see this; we feed it cleanly.
-2. **Tamper-evident audit log (compliance)** — hash-chained JSONL at `~/.contextengine/audit.log`. Every state change recorded with `prev_hash`/`hash`. SOC2 CC7.2 and ISO 27001 A.12.4.1 evidence out of the box.
+2. **Tamper-evident audit log (compliance)** — hash-chained JSONL at `~/.contextengine/audit.log`. Every state change recorded with `prev_hash`/`hash`. Designed to produce evidence aligned with [SOC 2 CC7.2 (change monitoring)](docs/compliance/cc7.2.md) and [ISO 27001 A.12.4.1 (event logging)](docs/compliance/a.12.4.1.md). **These are evidence artifacts, not a certification.** OpsContext is not itself SOC 2– or ISO 27001–certified; the audit log helps *your* org's auditor satisfy *those* controls.
 3. **Policy-as-code hooks (enforcement)** — declarative `.contextengine/policy.json` for secret patterns (with `paths` scoping), diff-aware doc coverage (replaces the workaround-y 4-hour staleness gate), deploy-verify hosts, and signed bypass tokens. Runs as a pre-commit hook layer alongside gitleaks.
 
 Plus the persistent-memory + search features carried forward from the contextengine era:
@@ -241,7 +241,7 @@ CLI mode uses keyword search (BM25) which is instant — no model loading requir
 | `list_learnings` | List all permanent learnings, optionally by category | Free |
 | `delete_learning` | Remove a learning by ID | Free |
 | `import_learnings` | Bulk-import learnings from Markdown or JSON files | Free |
-| `audit_verify` | Verify tamper-evident audit log chain (SOC2 CC7.2, ISO 27001 A.12.4.1) | Free |
+| `audit_verify` | Verify tamper-evident audit log chain (evidence aligned with [SOC 2 CC7.2](docs/compliance/cc7.2.md), [ISO 27001 A.12.4.1](docs/compliance/a.12.4.1.md) — not a certification) | Free |
 | `activate` | Activate a PRO license on this machine | Free |
 | `activation_status` | Check current license status | Free |
 | `list_projects` | Discover and analyze all projects (tech stack, git, docker) | PRO |

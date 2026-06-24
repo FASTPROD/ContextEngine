@@ -6,17 +6,23 @@
 // ⛔ NEVER catch errors inside appendAudit() — silent failures defeat the
 //    entire compliance story. Use safeAppend() at call sites if you need
 //    failure isolation; appendAudit() must surface problems loudly.
-// WHY: This is the SOC2 CC7.2 / ISO 27001 A.12.4.1 compliance bedrock. The
-//    audit log is the foundation that licence-signature verification,
-//    compliance reporting, and enforcement telemetry all build on. Any
-//    silent break here destroys evidence value across years of records.
+// WHY: This is the bedrock for evidence aligned with SOC 2 CC7.2 (change
+//    monitoring) and ISO 27001 A.12.4.1 (event logging). These are
+//    EVIDENCE ARTIFACTS — OpsContext is NOT itself SOC 2– or ISO 27001–
+//    certified; the chain helps a deploying org's auditor satisfy those
+//    controls. See docs/compliance/cc7.2.md + docs/compliance/a.12.4.1.md.
+//    Any silent break here destroys evidence value across years of
+//    records and invalidates the chain integrity property downstream
+//    code (verifyChain, license signatures, enforcement telemetry)
+//    depends on.
 // FIX: If you need to evolve the record format, version the chain
 //    (add a "v":2 field) and keep verifyChain() backward-compatible by
 //    dispatching on the v field. Don't mutate the v=1 contract.
 //
 // Tamper-evident audit log — hash-chained JSONL at ~/.contextengine/audit.log.
 //
-// Compliance basis: SOC2 CC7.2 (audit logging), ISO 27001 A.12.4.1 (event logs).
+// Compliance: produces evidence aligned with SOC 2 CC7.2 + ISO 27001 A.12.4.1
+// (evidence artifacts, not certifications — see docs/compliance/).
 //
 // Records every state-changing operation. Each line carries the SHA-256 hash
 // of the previous line's canonical content, so mutation of any historical

@@ -1050,7 +1050,7 @@ async function cliAuditExport(args: string[]): Promise<void> {
       continue;
     }
     if (a === "-h" || a === "--help") {
-      console.log(`Usage: contextengine audit-export [--since ISO_DATE] [--until ISO_DATE] [--format jsonl|csv]\n\nExports the hash-chained audit log from ~/.contextengine/audit.log.\nCompliance use: SOC2 CC7.2, ISO 27001 A.12.4.1.`);
+      console.log(`Usage: contextengine audit-export [--since ISO_DATE] [--until ISO_DATE] [--format jsonl|csv]\n\nExports the hash-chained audit log from ~/.contextengine/audit.log.\nCompliance use: produces evidence aligned with SOC 2 CC7.2 + ISO 27001 A.12.4.1\n(evidence artifacts — OpsContext is not itself certified; see docs/compliance/).`);
       return;
     }
   }
@@ -1910,7 +1910,8 @@ Usage:
   contextengine delete-session <name>  Delete a saved session
   contextengine end-session            Pre-flight checklist (uncommitted changes, doc freshness)
   contextengine audit-export [--since DATE] [--until DATE] [--format jsonl|csv]
-                                       Export hash-chained audit log (SOC2/ISO27001 evidence)
+                                       Export hash-chained audit log (evidence aligned with
+                                       SOC 2 CC7.2 + ISO 27001 A.12.4.1 — not a certification)
   contextengine audit-verify           Verify audit log chain integrity (tamper detection)
   contextengine policy <validate|show> [args]
                                        Author + validate the declarative .contextengine/policy.json

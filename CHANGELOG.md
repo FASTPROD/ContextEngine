@@ -253,7 +253,7 @@ Highlights, in dependency order:
 
 ### Added (audit log workstream — P0 #3, part 1 of 2)
 - **`src/audit.ts`** — hash-chained JSONL audit log at `~/.contextengine/audit.log`. Every state-changing operation appends one canonically-serialized record with `{ts, event, actor, payload, prev_hash, hash}`. The chain is rooted at a 64-zero genesis hash; each record's hash covers the canonical bytes of itself plus its `prev_hash`, so any historical mutation breaks chain verification at the mutated index.
-  - Compliance basis: SOC2 CC7.2 (audit logging), ISO 27001 A.12.4.1 (event logs).
+  - Compliance: produces evidence aligned with SOC 2 CC7.2 (change monitoring) + ISO 27001 A.12.4.1 (event logging). **Evidence artifacts, not a certification** — OpsContext is not itself SOC 2– or ISO 27001–certified. (Wording updated 2026-06-23, Session 12 H4 sweep.)
   - Privacy: records carry **metadata only** — IDs, categories, projects, lengths. Never the rule text, session value content, or license signature.
   - `safeAppend()` wrapper isolates audit failures from production hot paths (failed appends log to stderr only — they cannot break a learning save or session write).
   - Paths injectable via `CONTEXTENGINE_HOME` env var so tests run against `mkdtempSync` without touching real `~/.contextengine`.

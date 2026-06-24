@@ -167,6 +167,22 @@ async function persistStatus(config: ExtensionConfig) {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "opscontext.event" && msg.event) {
     (async () => {
+      // 🔒 LOCKED [DROP-PRE-CONSENT] — 2026-06-23
+      // ⛔ NEVER enqueue an event when config.secret is null. The pre-consent
+      //    queue would silently transmit weeks-old captures the moment the
+      //    user pastes a secret — a privacy surprise + CWS User Data Policy
+      //    violation. See FRESH_USER_AUDIT_2026-06-23.md finding H1.
+      // FIX: Drop the event, surface the reason in lastError so the popup
+      //    explains "Capture paused — paste secret in Options to enable."
+      //    Belt-and-braces with DEFAULT_CONFIG.captureClaudeAi=false so the
+      //    content script also won't capture in the first place.
+      const config = await getConfig();
+      if (!config.secret) {
+        lastError = "Capture paused — paste your secret in Options to enable. (No events are stored.)";
+        await persistStatus(config);
+        sendResponse({ ok: false, reason: "no-secret" });
+        return;
+      }
       await enqueue(msg.event as BrowserEvent);
       // Opportunistic immediate flush — alarms are coarse.
       void flush();
@@ -196,10 +212,22 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // ─── Alarms ─────────────────────────────────────────────────────────────────
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   chrome.alarms.create(FLUSH_ALARM_NAME, {
     periodInMinutes: PROD_FLUSH_INTERVAL_MIN,
   });
+  // 🔒 LOCKED [FIRST-RUN-NUDGE] — 2026-06-23
+  // ⛔ NEVER drop the on-install Options-page open. Audit
+  //   FRESH_USER_AUDIT_2026-06-23.md H1 caught this regression: with
+  //   capture defaulting to OFF, a brand-new user lands on claude.ai,
+  //   types a prompt, sees nothing happen, and has no signpost to the
+  //   Options page. Opening Options on install IS the signpost.
+  // FIX: If a future packaging surface (e.g. enterprise managed install)
+  //   needs to suppress the popup, gate on details.reason === 'install'
+  //   AND a chrome.storage.managed flag — don't just remove this block.
+  if (details.reason === "install") {
+    void chrome.runtime.openOptionsPage();
+  }
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -208,5 +236,31 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
-// One flush at SW wakeup, in case there's a queue from the prior session.
-void flush();
+// 🔒 LOCKED [STARTUP-STATUS] — 2026-06-23
+// ⛔ NEVER skip the startup persistStatus call. With capture defaulting
+//   to OFF (H1), content scripts no longer trigger the SW onMessage path
+//   for a fresh user, so the lastError fallback never sets a useful
+//   message. Without this startup write, the popup shows state=null →
+//   grey dot → "loading…" forever. The user has no signpost.
+// WHY: Audit FRESH_USER_AUDIT_2026-06-23.md H1 verifier round-2 caught
+//   the dead-lastError defect introduced by the original H1 fix.
+// FIX: On SW wakeup, publish an honest initial status:
+//   - no secret           → "Capture paused — paste your secret in Options."
+//   - secret but capture off for both domains → "Capture is paused on
+//                                                claude.ai AND chatgpt.com.
+//                                                Enable in Options."
+//   - otherwise           → normal flow takes over
+async function publishStartupStatus() {
+  const config = await getConfig();
+  if (!config.secret) {
+    lastError = "Capture paused — paste your secret in Options to enable.";
+  } else if (!config.captureClaudeAi && !config.captureChatGptCom) {
+    lastError = "Capture is off for both Claude.ai and ChatGPT.com. Enable per-domain in Options.";
+  }
+  await persistStatus(config);
+}
+void publishStartupStatus().then(() => {
+  // After publishing initial state, attempt one flush in case a prior
+  // session left a queue. flush() is a no-op if !secret or queue empty.
+  void flush();
+});

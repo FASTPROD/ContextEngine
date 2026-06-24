@@ -2,7 +2,7 @@
 
 > Created: 2026-02-27 (as ContextEngine) | Repositioned 2026-06-10 as OpsContext for AI Agents
 >
-> Positioning: **"Claude Code sees the code. OpsContext sees the infra that runs it."** Read-only fleet visibility (PM2/nginx/Docker/git/cron) + tamper-evident audit log (SOC2 CC7.2 / ISO 27001 A.12.4.1) + policy-as-code git hooks. The ops + compliance layer Claude Code can't grow natively.
+> Positioning: **"Claude Code sees the code. OpsContext sees the infra that runs it."** Read-only fleet visibility (PM2/nginx/Docker/git/cron) + tamper-evident audit log designed to produce evidence aligned with [SOC 2 CC7.2](docs/compliance/cc7.2.md) and [ISO 27001 A.12.4.1](docs/compliance/a.12.4.1.md) (evidence artifacts — OpsContext is not itself certified) + policy-as-code git hooks. The ops + compliance layer Claude Code can't grow natively.
 >
 > Old npm package `@compr/contextengine-mcp` is the 1.x line; new identity `@compr/opscontext-mcp` ships at 2.0.0. The historical "ContextEngine" name is retained in this doc where it captures the v1 framing — not because it's authoritative, but because the migration story is itself part of the positioning.
 
@@ -73,7 +73,7 @@ So I built **OpsContext for AI Agents** — an MCP server that runs locally and 
 
 **The three pillars:**
 - 🔭 **Operational visibility** — read-only collectors for PM2 / nginx / Docker / git / cron / `.env` (redacted). Cross-project + port-conflict detection + fleet HTML scoring. Your agent finally answers "what's running on prod?" with reality, not guesses.
-- 🧾 **Tamper-evident audit log** — hash-chained JSONL at `~/.contextengine/audit.log`. SOC2 CC7.2 / ISO 27001 A.12.4.1 evidence out of the box. `audit_verify` walks the chain; mutating any record breaks verification at the mutated index.
+- 🧾 **Tamper-evident audit log** — hash-chained JSONL at `~/.contextengine/audit.log`. Produces evidence aligned with [SOC 2 CC7.2](docs/compliance/cc7.2.md) and [ISO 27001 A.12.4.1](docs/compliance/a.12.4.1.md) — **evidence artifacts, not a certification**; OpsContext is not itself SOC 2– or ISO 27001–certified. `audit_verify` walks the chain; mutating any record breaks verification at the mutated index.
 - 🛡️ **Policy-as-code git hooks** — declarative `.contextengine/policy.json` with secret_patterns (with `paths` scoping — e.g. JWT pattern only in `docs/sessions/**`), diff-aware doc_coverage (replaces wall-clock staleness gates), deploy_verify_hosts, and bypass_tokens. Layered with gitleaks (~150 patterns) when installed.
 
 Plus the persistent-memory + search layer carried over from the v1 line:
@@ -116,7 +116,7 @@ I built **OpsContext for AI Agents** to fill that gap, designed specifically to 
 **OpsContext as Claude Code's ops + compliance backend:**
 
 1. **Operational collectors** — PM2 / nginx / Docker / git / cron / `.env` (redacted) — read-only, all local. Your agent answers infra questions with reality.
-2. **Tamper-evident audit log** — hash-chained JSONL covering every state change. `audit_verify` walks the chain. SOC2/ISO27001 evidence ready.
+2. **Tamper-evident audit log** — hash-chained JSONL covering every state change. `audit_verify` walks the chain. Produces evidence aligned with [SOC 2 CC7.2](docs/compliance/cc7.2.md) and [ISO 27001 A.12.4.1](docs/compliance/a.12.4.1.md) — not a certification of OpsContext itself.
 3. **Policy-as-code hooks** — `.contextengine/policy.json` with diff-aware doc coverage (replaces 4-hour staleness gates), scoped secret patterns, deploy-verify hosts.
 4. **Native Claude Code integration** (new in 2.0):
    - `opscontext install-skill --global` → adds an `opscontext` skill to `~/.claude/skills/`; Claude Code surfaces it via native skills loading.
@@ -172,7 +172,7 @@ I built a VS Code extension that pairs with an MCP server to give Copilot Chat (
 **The MCP server underneath** (`@compr/opscontext-mcp`, just hit 2.0) provides:
 
 - Read-only operational collectors (PM2/nginx/Docker/git/cron) so the agent sees what's actually running
-- Hash-chained tamper-evident audit log (SOC2 CC7.2 / ISO 27001 A.12.4.1)
+- Hash-chained tamper-evident audit log producing evidence aligned with SOC 2 CC7.2 and ISO 27001 A.12.4.1 (evidence, not a certification — see `docs/compliance/`)
 - Declarative `.contextengine/policy.json` consumed by a CLI-driven pre-commit hook (gitleaks + scoped patterns + diff-aware doc coverage)
 - 1,000+ persistent learnings that auto-surface in search
 - Ed25519-signed PRO licenses
@@ -234,7 +234,7 @@ Sharing my MCP server, just hit 2.0 with a strategic pivot to "the ops + complia
 - `list_sources` / `read_source` / `reindex` — knowledge-base inspection
 - `save_session` / `load_session` / `list_sessions` / `delete_session` / `end_session` — session continuity + pre-flight checklist
 - `save_learning` / `list_learnings` / `delete_learning` / `import_learnings` — persistent operational rules
-- `audit_verify` — hash-chained audit log (SOC2 CC7.2, ISO 27001 A.12.4.1). Tamper / splice / forgery detected at the mutated index.
+- `audit_verify` — hash-chained audit log; produces evidence aligned with SOC 2 CC7.2 and ISO 27001 A.12.4.1 (not a certification of OpsContext itself — see `docs/compliance/`). Tamper / splice / forgery detected at the mutated index.
 - `list_projects` / `check_ports` / `run_audit` / `score_project` — cross-project tooling (PRO)
 - `activate` / `activation_status` — Ed25519-signed PRO license management
 
@@ -266,7 +266,7 @@ Previously published as `@compr/contextengine-mcp` — that name is now deprecat
 **Screen**: Show Screenshot 1 (search results in Copilot Chat showing operational data)
 
 ### Scene 2 (15-30s) — Key Features
-**Avatar says**: "Operational collectors snapshot your live infra. A hash-chained audit log gives SOC2 and ISO 27001 evidence out of the box. Policy-as-code git hooks block secrets and stale docs before they hit your branches. And native Claude Code integration drops a skill into your skills directory and a managed block into your CLAUDE.md — so the snapshot reaches the agent at every session start."
+**Avatar says**: "Operational collectors snapshot your live infra. A hash-chained audit log produces evidence aligned with SOC 2 CC7.2 and ISO 27001 A.12.4.1 — that's evidence for your auditor, not a certification of OpsContext itself. Policy-as-code git hooks block secrets and stale docs before they hit your branches. And native Claude Code integration drops a skill into your skills directory and a managed block into your CLAUDE.md — so the snapshot reaches the agent at every session start."
 
 **Screen**: Show Screenshot 4 (firewall nudge) → Screenshot 5 (score report) → Screenshot 2 (status bar)
 

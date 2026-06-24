@@ -13,7 +13,7 @@ The privacy policy has been **corrected** based on the adversarial audit finding
 
 - [x] Icons created (16/48/128 px PNG + SVG sources at `chrome-extension/icons/`)
 - [x] Privacy policy text written at `chrome-extension/PRIVACY.md` — see § "Privacy policy" below
-- [x] Short description (124 chars, under the 132-char limit)
+- [x] Short description (129 chars, under the 132-char limit)
 - [x] Detailed description (corrected — original draft referenced VS-Code-only features that don't apply to the Chrome ext; corrected version below)
 - [ ] Privacy policy hosted as HTML at `https://compr.fr/privacy-opscontext.html` (manual deploy step)
 - [ ] Screenshots captured (5 max, 1280×800 or 640×400 — see § "Screenshot plan")
@@ -35,50 +35,59 @@ Source: [`chrome-extension/PRIVACY.md`](../chrome-extension/PRIVACY.md) — corr
 ## 3. Short description (paste into Store form)
 
 ```
-Local-first browser capture for OpsContext: tamper-evident audit log, drift detection, MCP companion. Zero cloud, zero keys.
+Captures your Claude.ai and ChatGPT prompts and responses to a local audit log on your machine. Local-first. No cloud, no signup.
 ```
 
-124 chars. Limit is 132.
+**129 chars** (CWS hard limit = 132; verify with `wc -c` before pasting). **(Revised 2026-06-23 — previous draft advertised "drift detection, MCP companion" which the chrome ext does NOT ship; those live in the companion npm package. CWS reviewers flag "describes features it doesn't ship" under Single Purpose + Deceptive Behavior. Audit B4. The first rewrite ran 133 chars — one over the limit — caught by adversarial verification before commit.)**
 
 ---
 
 ## 4. Detailed description (paste into Store form)
 
-**Capture Claude.ai and ChatGPT.com conversations into your own tamper-evident audit log — entirely on your machine.**
+**Capture Claude.ai and ChatGPT.com conversations to a local endpoint on your machine.**
 
-OpsContext Browser Capture reads your prompts and assistant responses from the rendered page DOM and streams them to a local server running on your computer. Nothing leaves your machine. No telemetry, no cloud account, no signup.
+OpsContext Browser Capture reads your prompts and assistant responses from the rendered page DOM and POSTs them to a local server (the separately-installed `@compr/opscontext-mcp` companion) running on your computer. The browser extension's single purpose is *capture*; the companion server handles storage, the hash chain, and downstream features. Nothing leaves your machine. No telemetry, no cloud account, no signup.
 
-### What it captures
+### What this extension captures (and sends to the local companion)
 - Prompts you submit (with optional secret + PII redaction)
 - Assistant responses (after streaming completes)
 - Tool-use blocks the assistant invokes (web search, file actions, etc.)
 - Session-start markers when you navigate between chats
 
-### Why
-- **Audit trail** — every interaction gets a tamper-evident, hash-chained record (SOC 2 CC7.2 / ISO 27001 A.12.4.1 grade).
-- **Drift detection** — when paired with the OpsContext MCP server, heuristics fire on hallucination, prompt loops, stuck tool calls, and silent failures.
-- **Local-first** — your AI conversations never go to a third-party cloud. The extension's manifest constrains its delivery URL to `127.0.0.1`.
+### Why use the pair (extension + companion)
+- **A record of what your AI told you** — once the companion server is installed, every captured prompt and reply lands in `~/.contextengine/audit.log` on your own machine, so a later "did the AI hallucinate that?" question has a definitive answer. (The chain integrity and tamper-evidence are properties added by the companion server — see § "Companion server" below for the exact split.)
+- **Local-first** — your AI conversations never go to a third-party cloud. The extension's `host_permissions` constrain its delivery URL to `127.0.0.1`; the receiving server runs on your own machine.
+- **Compliance evidence aligned with SOC 2 CC7.2 + ISO 27001 A.12.4.1 (read carefully)** — the companion's hash-chained log is structured to produce *evidence* aligned with SOC 2 CC7.2 (change monitoring) and ISO 27001 A.12.4.1 (event logging). **These are evidence artifacts, not certifications.** OpsContext is not itself SOC 2– or ISO 27001–certified; the log helps *your* org's auditor satisfy *those* controls. See [docs/compliance/cc7.2.md](https://github.com/FASTPROD/ContextEngine/blob/main/docs/compliance/cc7.2.md) and [docs/compliance/a.12.4.1.md](https://github.com/FASTPROD/ContextEngine/blob/main/docs/compliance/a.12.4.1.md).
 
-### Setup
-Install the companion OpsContext MCP server (open-source, npm):
+### Setup (you must install the companion server first)
+This extension is the **capture half only** — it needs a small local server to receive the events. Install it once:
 ```
 npm install -g @compr/opscontext-mcp
 opscontext install-autostart        # auto-start server at every macOS login
 opscontext init-extension-secret    # generate the shared secret
 ```
-Paste the generated secret into the extension's Options page. Done.
+Paste the generated secret into the extension's Options page. Done. **For developers — requires Node.js and a terminal.**
+
+### Companion server (separate install, separate package)
+The features below live in `@compr/opscontext-mcp` on npm, NOT in this Chrome extension:
+- Tamper-evident hash chain over the event log (the chrome ext sends events; the server adds the chain)
+- Drift / hallucination heuristics when reading the log back
+- MCP server interface for Claude Code, Cursor, Copilot Chat, etc.
+- VS Code companion extension (`css-llc.contextengine` on the Marketplace)
+
+The Chrome extension's single purpose is *DOM capture from claude.ai and chatgpt.com to a local endpoint.*
 
 ### Privacy posture
 - Manifest `host_permissions` allows only `claude.ai`, `chatgpt.com`, and `127.0.0.1:7842/*`
 - Constant-time secret compare on the local endpoint
-- Opt-in per-domain capture (Claude.ai and ChatGPT.com toggle independently)
+- **Opt-in per-domain capture** — both Claude.ai and ChatGPT.com toggles **default to OFF**. You must enable each in the Options page before capture begins.
 - Default-on secret redaction before any event leaves the page (toggleable from Options)
 
 ### Links
 - [npm package](https://www.npmjs.com/package/@compr/opscontext-mcp) — `@compr/opscontext-mcp`
-- [GitHub source](https://github.com/FASTPROD/ContextEngine)
+- [GitHub source](https://github.com/FASTPROD/ContextEngine) — source-available under BSL-1.1 (not OSI-approved open source)
 - [Privacy policy](https://compr.fr/privacy-opscontext.html)
-- License: BSL-1.1
+- License: BSL-1.1 (Business Source License)
 
 ### Not covered by this extension
 The browser extension only captures from claude.ai and chatgpt.com web UIs. It does not capture from Claude Code CLI sessions, Cursor, Copilot Chat, or other AI tools — for those, install the OpsContext MCP server and its Claude Code hook (`opscontext install-claude-hook`).

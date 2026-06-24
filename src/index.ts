@@ -749,7 +749,7 @@ server.tool(
 // ---------------------------------------------------------------------------
 server.tool(
   "audit_verify",
-  "Verify the integrity of the local audit log chain. Returns OK + record count, or BROKEN + break index when a record has been edited or the chain otherwise diverges. Compliance basis: SOC2 CC7.2, ISO 27001 A.12.4.1. The audit log lives at ~/.contextengine/audit.log and records every state-changing operation (learning save/delete/import, session save/delete, activation activate/deactivate) as a hash-chained JSONL line.",
+  "Verify the integrity of the local audit log chain. Returns OK + record count, or BROKEN + break index when a record has been edited or the chain otherwise diverges. Produces evidence aligned with SOC 2 CC7.2 (change monitoring) and ISO 27001 A.12.4.1 (event logging) — evidence artifacts, not a certification (OpsContext is not itself SOC 2– or ISO 27001–certified; see docs/compliance/). The audit log lives at ~/.contextengine/audit.log and records every state-changing operation (learning save/delete/import, session save/delete, activation activate/deactivate) as a hash-chained JSONL line.",
   {
     since: z.string().optional().describe("ISO date — restrict integrity report counters to records on/after this timestamp (chain still verified end-to-end)"),
     until: z.string().optional().describe("ISO date — restrict counters to records on/before this timestamp"),

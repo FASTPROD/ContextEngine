@@ -128,7 +128,7 @@
 ### Audit log (`src/audit.ts`)
 - **Hash-chained JSONL** at `~/.contextengine/audit.log`. Each record `{ts, event, actor, payload, prev_hash, hash}`. Genesis hash is 64 zeros.
 - **SHA-256 over canonical serialization** `{prev_hash, ts, event, actor, payload}` in that fixed key order. Any historical mutation breaks verification at the mutated index.
-- **Compliance basis**: SOC2 CC7.2 (audit logging), ISO 27001 A.12.4.1 (event logs). The audit log is the bedrock for the compliance-report PDF/A export that's coming in P1 #5.
+- **Compliance basis**: produces evidence aligned with [SOC 2 CC7.2 (change monitoring)](docs/compliance/cc7.2.md) and [ISO 27001 A.12.4.1 (event logging)](docs/compliance/a.12.4.1.md). **Evidence artifacts, not a certification** — OpsContext is not itself SOC 2– or ISO 27001–certified; the log helps a deploying organization's auditor satisfy those controls. The audit log is the bedrock for the compliance-report PDF/A export that's coming in P1 #5.
 - **Privacy by construction**: records carry metadata only — IDs, categories, projects, lengths. Never the rule text, session value content, or license signature.
 - **Wired at boundaries** of LOCKED files (didn't touch the locked algorithms): `learnings.ts` save/delete/import, `sessions.ts` save/delete, `activation.ts` activate/deactivate, `loadLicense()` signature_reject + legacy_signature.
 - **`safeAppend()` isolates** audit failures from production hot paths — a failed append logs to stderr only, never throws upward.

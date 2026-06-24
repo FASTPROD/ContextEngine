@@ -51,11 +51,23 @@ export interface ExtensionConfig {
   popupQueueCap: number;
 }
 
+// 🔒 LOCKED [CAPTURE-OPT-IN] — 2026-06-23
+// ⛔ NEVER flip captureClaudeAi or captureChatGptCom default to `true`.
+// WHY: Audit FRESH_USER_AUDIT_2026-06-23.md finding H1 (CWS deceptive-
+//   description + privacy surprise). The Web Store listing says "opt-in
+//   per-domain capture" — that promise requires both toggles default OFF.
+//   Capturing-before-consent is a User Data Policy violation AND surprises
+//   users who paste a secret weeks later (queued pre-consent events would
+//   transmit). Defense in depth: service-worker.ts ALSO drops events at
+//   onMessage when no secret is set.
+// FIX: If a future feature wants capture-by-default, the consent UX must
+//   move into install — first-run popup with explicit per-domain checkboxes
+//   pre-checked, NOT a silent default-on in this file.
 export const DEFAULT_CONFIG: ExtensionConfig = {
   secret: null,
   endpoint: "http://127.0.0.1:7842/events",
-  captureClaudeAi: true,
-  captureChatGptCom: true,
+  captureClaudeAi: false,
+  captureChatGptCom: false,
   redactSecrets: true,
   redactPii: false,
   popupQueueCap: 25,
