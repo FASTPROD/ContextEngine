@@ -14,11 +14,11 @@ If your compliance team is evaluating whether to allow OpsContext on the enginee
 
 | Layer | Name | What it is |
 |---|---|---|
-| Legal entity (parent) | **CSS LLC** | Swiss company, incorporated **2005**. The legal vehicle for all product work. |
+| Legal entity (parent) | **CSS LLC** = **Cross Stream Solutions Sàrl** | Swiss company, operating since **2005**. The "LLC" suffix is the English label for the Swiss Sàrl legal form (the equivalent of an LLC in Anglophone jurisdictions). Registered with the Swiss commercial registry; UID available on request. |
 | Operating brand | **PROD LLC** | The brand under which the OpsContext development team operates. Carries the engineering, marketing, and product responsibilities. |
 | Product imprint | **OpsContext** | The product itself. Formerly `ContextEngine` (rebranded 2026-06-11). Distributed as `@compr/opscontext-mcp` on npm + `css-llc.contextengine` on VS Code Marketplace + a Chrome Web Store submission in flight. |
 
-The VS Code Marketplace publisher ID is **`css-llc`** — that is the *legal parent* name, not a typo or a legacy ID. Marketplace publisher names must map to a registered legal entity; CSS LLC is ours. The npm scope is **`@compr`** — referencing the `compr.fr` portfolio domain that CSS LLC owns. Both `css-llc` and `@compr` resolve to the same single legal entity.
+The VS Code Marketplace publisher ID is **`css-llc`** — that is the *legal parent* name (Cross Stream Solutions Sàrl), not a typo or a legacy ID. Marketplace publisher names must map to a registered legal entity; CSS LLC = Cross Stream Solutions Sàrl is ours. The npm scope is **`@compr`** — referencing the `compr.fr` portfolio domain that CSS LLC owns. Both `css-llc` and `@compr` resolve to the same single legal entity.
 
 ## Sibling brands under PROD LLC
 
@@ -63,14 +63,12 @@ This page is v1 of the publisher disclosure. Adversarial review by our own audit
 - **Does CROWLR (the sibling crawling platform) interact in any way with the OpsContext audit log, license-activation traffic, or OpsContext customer data?** — A formal carve-out statement + isolation diagram will land in the next pass. The strong design constraint is that the audit log lives on the customer's machine and is never uploaded; CROWLR's web crawlers operate against public internet content and cannot reach `127.0.0.1`, but a formal sub-processor statement is the right artifact and we don't have one yet.
 - **Shared dev team / shared VPS fleet / shared SSO across brands = shared blast radius. What's the isolation story?** — A formal isolation diagram is carry-forward.
 - **Team size and runway?** — Not currently published. Happy to share under NDA to enterprise buyers.
-- **The 2005–2014 history is missing — what was happening?** — Will be expanded in the next pass.
 
 If any of the above blocks a procurement decision you're trying to make, contacting `yannick@compr.ch` will get you a direct answer faster than waiting for the next pass.
 
 ## Historical note (why the names)
 
-- **2005** — CSS LLC incorporated in Switzerland.
-- **2014–2024** — PROD LLC (and earlier FASTPROD branding) operated the DevOps/sysadmin consultancy that paid for the product work.
+- **2005 → present** — Cross Stream Solutions Sàrl ("CSS LLC") has been the continuously-operating Swiss legal entity. PROD LLC is the product/engineering brand under it; FASTPROD, CROWLR, KONIVE, INVOC, and compR are product imprints, each launched on its own timeline as the team's focus evolved across roughly two decades.
 - **2026-02** — `@compr/contextengine-mcp` 1.x line on npm. First public release of the persistent-memory + search product.
 - **2026-06-11** — Rebrand to **OpsContext** to reflect the broader ops + compliance positioning. `@compr/contextengine-mcp` → `@compr/opscontext-mcp`; VS Code Marketplace publisher kept as `css-llc` (legal parent, doesn't change with product rename).
 - **2026-06** onward — Cross-surface capture (browser ext + Claude Code hook + VS Code ext) closes the "agent saw / did what?" gap.
