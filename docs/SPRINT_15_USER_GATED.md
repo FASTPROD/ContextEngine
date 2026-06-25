@@ -162,14 +162,104 @@ Google's review window is 14 days. You'll get email updates. **If they reject:**
 
 ---
 
-## 4. ⚠️ `ssh gandi` rsync of `compR.fr` — **CAREFUL: live external site**
+## 4. `compR.fr/deploy.sh` — **uses the deploy script, not manual rsync**
 
-**Blast radius:** the Gandi server at `92.243.24.157` hosts **3 production sites**:
-- `compr.fr` (the portfolio we're updating)
-- `admin.CROWLR` (admin panel for CROWLR)
-- `compr.app` (the benchmark widget PWA)
+> 🔧 **2026-06-25 update (post-Session-14):** the original §4 walkthrough below was a manual rsync recipe with safety-belt instructions. After the user asked "are those rules?", we **codified the safety belts into a script** at `~/Projects/compR.fr/deploy.sh` + added a global CLAUDE.md rule (`## Multi-Tenant VPS Deploy — Canonical Pattern`) forbidding bare-rsync deploys to multi-tenant VPSes. **Use the script.** Manual rsync from this section is reserved for the case where the script itself is broken.
 
-A bad rsync could wipe one of the OTHER two if the rsync target path is wrong. **The safety belt is to push only specific files, not a whole tree.**
+**Blast radius:** the Gandi server at `92.243.24.157` hosts **3 production sites** (compr.fr / admin.CROWLR / compr.app). The script's whitelist + dry-run-by-default + auto-rollback design eliminates the "bad rsync wipes a sibling" scenario.
+
+### The 4-command path (replaces the entire old § 4)
+
+```bash
+cd ~/Projects/compR.fr
+
+# 1. Dry-run — see what WOULD change. Default mode; safe to run.
+./deploy.sh
+
+# Read the dry-run output. If it shows changes you expect (index.html + terms.html
+# updated, no deletions), continue. If anything looks wrong, STOP.
+
+# 2. Real deploy. Snapshots remote state to ~/.compr-fr-deploy-rollback/<ts>/
+#    BEFORE writing anything. Auto-rolls back if post-deploy curl fails.
+./deploy.sh --really-deploy
+
+# 3. Visit the live site to eyeball
+open https://compr.fr/
+
+# 4. If something looks wrong, rollback to the snapshot:
+./deploy.sh --rollback
+# (will prompt you for which snapshot timestamp to restore)
+```
+
+That's it. The script handles: ssh pre-flight + jump-host fallback hints, whitelist-only file selection, dry-run mandatory, snapshot before write, post-deploy HTTP-200 check + marker-string verify ("OpsContext" must appear in the rendered HTML — otherwise auto-rollback), and rollback-from-snapshot.
+
+### What the script REFUSES to do (for future-you's safety)
+
+- Push files NOT in the explicit `DEPLOY_FILES` whitelist (edit the script + commit the change first if you need a new file)
+- Pass `--delete` to rsync (would wipe server-side files not in local tree)
+- Proceed without `--really-deploy` (default is dry-run; the gate is explicit)
+- Continue if dry-run output contains any "deleting" lines
+- Declare success if post-deploy curl returns non-200 or the marker string is missing
+
+### The original manual safety walkthrough (kept for the very-unlikely "the script is broken" case)
+
+<details>
+<summary>Click to expand the pre-script manual recipe</summary>
+
+(Original 4a → 4e procedure preserved here in case the script itself ever needs debugging. Use this ONLY if `./deploy.sh` is broken AND you need to deploy NOW. Otherwise: fix the script first, commit, then use the script.)
+
+#### 4a-legacy. Pre-flight — what's in the compR.fr commit we're deploying
+
+```bash
+cd /Users/yan/Projects/compR.fr
+git log --oneline -3
+# 0ad942c should be the most recent — that's the OpsContext card refresh + terms.html
+
+git diff-tree --no-commit-id --name-only -r 0ad942c
+# expect: index.html, terms.html, SCORE.md, SKILLS.md, copilot-instructions.md
+```
+
+#### 4b-legacy. SSH alive + jump-host fallback
+
+```bash
+ssh -o ConnectTimeout=5 admin@92.243.24.157 'echo "direct ssh ok"'
+# If timeout / refused (fail2ban?), use the jump host:
+ssh -J debian@51.178.19.190 admin@92.243.24.157 'echo "via OVH-Ollama-VPS ok"'
+ssh -J debian@217.182.204.86 admin@92.243.24.157 'echo "via Konive OVH ok"'
+```
+
+#### 4c-legacy. Confirm the production target path BEFORE pushing
+
+```bash
+ssh admin@92.243.24.157 'ls -la /var/www/comprfr/ | head -10'
+```
+
+#### 4d-legacy. Rsync ONLY the changed files (whitelist, not full tree)
+
+```bash
+cd /Users/yan/Projects/compR.fr
+
+rsync -avn --no-perms --no-owner --no-group \
+    index.html terms.html \
+    admin@92.243.24.157:/var/www/comprfr/
+
+# If dry-run looks right, drop the -n:
+rsync -av --no-perms --no-owner --no-group \
+    index.html terms.html \
+    admin@92.243.24.157:/var/www/comprfr/
+
+curl -s https://compr.fr/ | grep -A1 "OpsContext\|@compr/opscontext-mcp" | head -10
+```
+
+#### 4e-legacy. Rollback if something looks wrong
+
+```bash
+cd /Users/yan/Projects/compR.fr
+git checkout HEAD~1 -- index.html terms.html
+# Then rsync the OLD versions back to the server (same command as 4d-legacy).
+```
+
+</details>
 
 ### 4a. Pre-flight — what's in the compR.fr commit we're deploying
 
