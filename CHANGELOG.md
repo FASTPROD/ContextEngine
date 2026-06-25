@@ -2,6 +2,51 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
+## [2.1.2] — 2026-06-25 — Audit-chain race fix + cliInit nudge + ESM install-autostart bug + LOCKED marketing-isolation + shared-learnings v1
+
+Overnight pass on the Session 13 carry-forward queue. Several user-visible bug fixes + a load-bearing compliance hardening + Sprint-5's shared-learnings hybrid landing as v1.
+
+### Fixed
+
+- **`audit-001-write-race` chain corruption** (carry-forward from Sessions 11–13 where the local audit log was broken at index 2826). `src/audit.ts` now uses file-lock + size-mismatch cache invalidation. Concurrent writers (activation server + main MCP) no longer race on `cachedLastHash`. LOCK `[AUDIT-001-WRITE-RACE-FIX]` documents the invariants. NEW test "concurrent-writer race" spawns 2 Node child processes that fire 20 appends each via `Promise.all` — without the lock the chain breaks at the first interleave; with the lock, verifyChain() stays clean (40 records, both workers represented). 197 → 276 tests after the shared-learnings additions; all green. Does NOT retroactively heal the existing broken chain (by design — tamper-evident); operators who need a clean anchor will get an `opscontext audit-rotate` subcommand in a follow-up.
+
+- **`install-autostart` silent failure under ESM + npx** (audit M2). Package is `"type": "module"` so bare `__filename` was `undefined`; `dirname(__filename || "")` returned ".", silently breaking the dev-tree fallback. Users running `npx -y @compr/opscontext-mcp install-autostart` hit "Could not locate opscontext entrypoint" with no useful diagnostic. Fixed via `fileURLToPath(import.meta.url)` plus a NEW third resolver branch using `createRequire(import.meta.url).resolve("@compr/opscontext-mcp/dist/index.js")` (works inside npx's transient install cache). NEW `--entry=/path/to/dist/index.js` flag as explicit override for monorepo / private-registry / unconventional layouts. When all 3 detection paths fail, the error message now enumerates each path tried + suggests 3 user fixes (install globally, build a clone, pin `--entry`). LOCK `[M2-ESM-FILENAME-FIX]`.
+
+### Added
+
+- **`opscontext export-learnings --tier <A|B>` + `opscontext sync-community-rules`** (Sprint-5 shared-learnings hybrid). The cross-machine learning-sharing pipeline:
+  - Tier A: free, MIT-licensed, ~100 sanitized "general-developer-pain" rules fetched from the future `github.com/FASTPROD/opscontext-community-rules` repo. Loss-leader for adoption.
+  - Tier B: PRO-gated, proprietary corpus daily-fetched from `api.compr.ch/contextengine/community-rules/fetch` using the existing Ed25519 license heartbeat. Subscription cancel → cache stales within 24h.
+  - `src/community-export.ts`: 13 sensitive-shape patterns + PII + personal-identifier + brand-name + path scrubbing. Tier A allow-list of categories (rejects security/deployment/infrastructure by default). Deterministic sha256 IDs for public stability. LOCK `[COMMUNITY-EXPORT-SAFETY]` guards the redactor coverage.
+  - `src/community-sync.ts`: Node built-in https. Tier A respects ETag/304. Tier B verifies Ed25519 signature + binds to `licenseToken` + `getMachineId()` + 36h freshness ceiling — closes the captured-once-replay-forever surface. LOCK `[COMMUNITY-SYNC-REPLAY-GUARD]`.
+  - `server/src/community-rules-server.ts`: POST endpoint with the same auth pattern as `/heartbeat` against `licenses.db`. Free-tier returns 403. Rate-limited 10/day/machine. **NOT YET DEPLOYED** to `api.compr.ch` — server code is in `server/src/` and requires manual rsync; until deployed, Tier B fetches fall back to cached store (graceful degradation by design).
+  - 75 new tests across the 3 components.
+
+- **`opscontext init` cliInit nudge** (audit B3): when the existing init body completes, prints `💡 Next: run \`opscontext init-extension-secret\` to enable browser capture` if the secret file is missing. Doesn't fail init; just informs. Closes the README → Step-3 funnel without requiring the user to read the README first.
+
+- **`learning.export` event kind** in the `AuditEvent` union. Every `opscontext export-learnings` invocation appends a `learning.export` record (tier, count, dropped, output-path-hash) so exports are themselves auditable — useful for the deploying org's compliance team.
+
+### Changed
+
+- **`README.md`**: added a "Browser Capture" teaser callout near the top + a NEW "### 3. Capture browser + Claude Code events (optional)" section in Quick Start. Three subsections (browser secret, autostart, claude-code hook) with concrete commands and verification steps. Audit B3.
+
+- **`src/audit.ts`** module banner reworded: SOC 2 / ISO 27001 framing now uses the "evidence aligned with..., not a certification" hedge (Session 13 H4 sweep follow-through into the comments + LOCK rationale).
+
+- **`src/cli.ts`** `audit-export --help`: SOC 2 / ISO 27001 references hedged per the H4 sweep.
+
+- **`src/index.ts`**: `audit_verify` MCP tool description hedged per the H4 sweep. Every connected AI agent at tool-discovery time now sees the "evidence artifacts, not a certification" framing.
+
+### Security
+
+- **`src/activation.ts` LOCK `[ACTIVATION-PAYLOAD-NO-USAGE-DATA]`** (Session 13, included in this release): explicit forbiddance on adding a 7th field to the activation POST body. The 6 fields (`key, email, machineId, version, platform, arch`) are the COMPLETE set by deliberate product commitment. Marketing-isolation enforcement at the most likely silent-drift attack surface. Documented publicly in `docs/about.md § "Marketing-data isolation (LOCKED commitment)"`.
+
+### Known limitations (intentional carry-forward)
+
+- The pre-existing audit-chain break at index 2826 is NOT retroactively healed (tamper-evident property must be preserved). `opscontext audit-rotate` is a follow-up.
+- `learning.export`'s output JSON shape may evolve in a future release; the v1 schema is documented in `src/community-export.ts`.
+- Server-side ETag/If-None-Match response support for the community-rules endpoint is not yet wired (the client respects ETag/304 from any server that sends it).
+- The `chrome-extension/src/content/shared/redact.ts` redactor is not yet mirrored with the new PROJECT_BRAND_NAMES + CONTACT_IDENTIFIERS lists. Filed as a follow-up.
+
 ## [vscode-ext 0.11.0] — 2026-06-24 — Drift alerts surfaced in VS Code UI (L2 → in-editor gap closed)
 
 Closes the last gap in the L1→L2→L3 drift pipeline:
