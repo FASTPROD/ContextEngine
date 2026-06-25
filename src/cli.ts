@@ -591,6 +591,15 @@ import {
   gateCheck,
 } from "./activation.js";
 import {
+  syncTierA,
+  syncTierB,
+  syncAll,
+  loadCommunityStore,
+  communityRulesToChunks,
+  mergeWithDedup,
+  STORE_PATH as COMMUNITY_STORE_PATH,
+} from "./community-sync.js";
+import {
   readAuditLog,
   verifyChain,
   filterByRange,
@@ -639,7 +648,7 @@ interface EngineState {
  */
 async function initEngine(): Promise<EngineState> {
   const sources = loadSources();
-  const chunks = ingestSources(sources);
+  let chunks = ingestSources(sources);
 
   const config = loadConfig();
   const projectDirs = loadProjectDirs();
@@ -673,6 +682,17 @@ async function initEngine(): Promise<EngineState> {
   const projectNames = projectDirs.map((d) => d.name);
   const learningChunks = learningsToChunks(projectNames);
   chunks.push(...learningChunks);
+
+  // Inject community rules (Tier A public + Tier B Pro), deduped against
+  // the local Learnings Store so identical content doesn't double-emit.
+  // Network is NOT touched here — only the cached store at
+  // ~/.contextengine/community-learnings.json is read. Use the
+  // `sync-community-rules` subcommand to refresh the cache.
+  const communityChunks = communityRulesToChunks();
+  if (communityChunks.length > 0) {
+    const localChunks = chunks;
+    chunks = mergeWithDedup(localChunks, communityChunks);
+  }
 
   return { sources, chunks };
 }
@@ -954,6 +974,9 @@ async function cliExportLearnings(args: string[]): Promise<void> {
   let category: string | undefined;
   let format: "json" | "markdown" = "json";
   let universalToo = false;
+  let tier: "A" | "B" | undefined;
+  let outputPath: string | undefined;
+  let review = false;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -969,24 +992,109 @@ async function cliExportLearnings(args: string[]): Promise<void> {
       continue;
     }
     if (a === "--include-universal") { universalToo = true; continue; }
+    if (a === "--tier" && args[i + 1]) {
+      const t = args[++i];
+      if (t !== "A" && t !== "B") {
+        console.error(`Unknown tier: ${t}. Supported: A, B.`);
+        process.exit(1);
+      }
+      tier = t;
+      continue;
+    }
+    if ((a === "--output" || a === "-o") && args[i + 1]) { outputPath = args[++i]; continue; }
+    if (a === "--review") { review = true; continue; }
     if (a === "-h" || a === "--help") {
-      console.log(`Usage: contextengine export-learnings [--project NAME] [--category CAT] [--format json|markdown] [--include-universal]
+      console.log(`Usage: contextengine export-learnings [--tier A|B] [--output PATH] [--review]
+                                       [--project NAME] [--category CAT]
+                                       [--format json|markdown] [--include-universal]
 
-Exports learnings as JSON or Markdown. Use --project to scope to a single
-project's learnings (essential for consultants who share artifacts with
-clients — the universal store mixes all projects together by default).
+TWO MODES:
 
-  --project NAME         Only learnings tagged with this project (case-insensitive)
+  1) Legacy raw export — no --tier flag. Writes the raw, unredacted store
+     filtered by --project / --category. Use only for personal backups or
+     when sharing inside a trusted team. NOT safe for public distribution.
+
+  2) Tier-aware redacted export — pass --tier A or --tier B.
+
+       --tier A   MIT-publishable subset. Pipeline:
+                    a) Reuses the secret/PII patterns from
+                       chrome-extension/src/content/shared/redact.ts
+                       (cloud-vendor credential shapes, JWT, bearer
+                       tokens, SSH private-key blocks, generic
+                       credential-assignment patterns).
+                    b) Strips PII: emails → [EMAIL], phone digits →
+                       [PHONE], credit-card-shape → [CC].
+                    c) Strips personal identifiers ("yannick", "yan",
+                       "compr.ch/.fr") and project brand names
+                       (CROWLR / KONIVE / INVOC / PLANK / COMPR / FASTPROD)
+                       → [project]. Local /Users/yan/Projects/* paths
+                       become /workspace/*. api.compr.ch → [SERVER].
+                    d) Filters to allow-list categories
+                       (debugging / tooling / git / frontend / testing /
+                       dependencies / performance / other). Drops
+                       security / deployment / infrastructure / devops
+                       unless the entry is tagged 'safe' (manual vet).
+                    e) Hashes IDs and project names — co-clustering
+                       survives but local UUIDs and brand names do not.
+                  Safety contract enforced by the LOCK comment block at
+                  the top of src/community-export.ts. Do NOT relax the
+                  redactor without re-running the full test suite.
+
+       --tier B   Full corpus for PRO subscribers (api.compr.ch heartbeat).
+                  Still redacted for secrets + PII (the redactor handles
+                  that), but security/deployment learnings are INCLUDED
+                  and original IDs are preserved (authenticated surface).
+
+       --output PATH   Where to write the JSON. Default:
+                       ./learnings-export-tierA.json / -tierB.json.
+       --review        Open \$EDITOR (or vi) on the export JSON for a
+                       manual trim before final write. Skipped if stdin
+                       is not a TTY.
+
+Legacy flags (no --tier):
+  --project NAME         Only learnings tagged with this project
   --category CAT         Only this category (deployment, security, etc.)
   --format json|markdown Output format (default: json)
-  --include-universal    Also include unscoped learnings (project=undefined)
-                         alongside the project-filtered ones
+  --include-universal    Also include unscoped learnings
 
-Cross-client confidentiality: without --project, this exports the FULL store.
-Always use --project NAME when sharing exported learnings with anyone outside
-the owning project's team.`);
+Cross-client confidentiality: without --tier and without --project, this
+exports the FULL raw store. Always use --tier A for public sharing, or
+--project NAME for trusted-team sharing inside one engagement.`);
       return;
     }
+  }
+
+  // Tier-aware sanitized export path.
+  if (tier) {
+    const { exportLearnings, reviewLoop } = await import("./community-export.js");
+    const out = outputPath || join(process.cwd(), `learnings-export-tier${tier}.json`);
+    let result = exportLearnings({ tier, outputPath: out, review });
+
+    if (review) {
+      const edited = await reviewLoop(result.rules);
+      const payload = {
+        version: 1,
+        tier,
+        generatedAt: new Date().toISOString(),
+        count: edited.length,
+        dropped: result.dropped + (result.count - edited.length),
+        rules: edited,
+      };
+      writeFileSync(out, JSON.stringify(payload, null, 2) + "\n", "utf-8");
+      result = { ...result, count: edited.length, rules: edited };
+    }
+
+    console.log(`✅ Tier ${tier} export written to ${out}`);
+    console.log(`   Included: ${result.count}`);
+    console.log(`   Dropped:  ${result.dropped}`);
+    if (tier === "A") {
+      console.log(`   Note: Tier A is MIT-publishable. Safety guarantees enforced by`);
+      console.log(`         the LOCK [COMMUNITY-EXPORT-SAFETY] block in src/community-export.ts.`);
+    } else {
+      console.log(`   Note: Tier B is PRO-only. Distribute via the api.compr.ch`);
+      console.log(`         license heartbeat, never via a public mirror.`);
+    }
+    return;
   }
 
   let all = listLearnings(category);
@@ -1852,6 +1960,104 @@ async function cliImportLearnings(args: string[]): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// CLI: sync-community-rules — fetch + cache community learnings
+// ---------------------------------------------------------------------------
+
+async function cliSyncCommunityRules(args: string[]): Promise<void> {
+  let force = false;
+  let tier: "A" | "B" | "all" = "all";
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--force" || a === "-f") { force = true; continue; }
+    if (a === "--tier" && args[i + 1]) {
+      const t = args[++i];
+      if (t !== "A" && t !== "B" && t !== "all") {
+        console.error(`Unknown tier: ${t}. Try A | B | all.`);
+        process.exit(1);
+      }
+      tier = t;
+      continue;
+    }
+    if (a === "-h" || a === "--help") {
+      console.log(`Usage: opscontext sync-community-rules [--force] [--tier A|B|all]
+
+Fetches community-contributed learnings into the local cache at
+${COMMUNITY_STORE_PATH}.
+
+Two tiers:
+  Tier A (public)   raw.githubusercontent.com — no license required
+  Tier B (pro)      api.compr.ch — requires an activated Pro license
+
+Behavior:
+  - Daily run recommended. Cron / launchd / periodic CI all fine — the
+    sync is idempotent and ETag-guarded (304 = cheap no-op).
+  - Network failures NEVER crash the search engine. On any HTTP error
+    (timeout, DNS, 5xx, malformed JSON), the cached store is preserved
+    and search continues to work offline.
+  - Tier B is best-effort: with no license loaded (free tier) it is
+    skipped silently with a note on stderr. On HTTP 401 / 403 the
+    error is logged but no exception is thrown — your existing search
+    keeps working.
+  - Tier B responses are Ed25519-signed; an invalid signature causes
+    the fetched payload to be discarded.
+
+Flags:
+  --force, -f         Bypass the ETag cache; always re-fetch.
+  --tier A|B|all      Restrict the sync to one tier. Default: all.
+
+After sync, the new rules are picked up automatically by search_context
+the next time the MCP server (re)indexes. Restart the server or run
+'opscontext reindex' to force an immediate pickup.`);
+      return;
+    }
+  }
+
+  console.log(`\n🌐 Sync community rules (tier=${tier}, force=${force})\n`);
+
+  if (tier === "A" || tier === "all") {
+    const r = await syncTierA({ force });
+    if (r.cached) {
+      console.log(`  Tier A — cached (no changes since last fetch)`);
+    } else {
+      console.log(`  Tier A — fetched ${r.fetched} rule(s)`);
+    }
+  }
+
+  if (tier === "B" || tier === "all") {
+    // Resolve license through the activation module to keep auth shape
+    // identical to /heartbeat — same machineId, same key.
+    const licenseFile = join(homedir(), ".contextengine", "license.json");
+    let token: string | null = null;
+    if (existsSync(licenseFile)) {
+      try {
+        const data = JSON.parse(readFileSync(licenseFile, "utf-8"));
+        token = typeof data.key === "string" ? data.key : null;
+      } catch { /* malformed — treat as no license */ }
+    }
+    if (!token) {
+      if (tier === "B") {
+        console.error(`  Tier B — no license loaded. Activate with: opscontext activate <key> <email>`);
+      } else {
+        console.log(`  Tier B — skipped (no license loaded)`);
+      }
+    } else {
+      const r = await syncTierB(token, { force });
+      if (r.cached) {
+        console.log(`  Tier B — cached (no changes since last fetch)`);
+      } else if (r.fetched === 0) {
+        console.log(`  Tier B — 0 rules (auth rejected or empty payload — see stderr)`);
+      } else {
+        console.log(`  Tier B — fetched ${r.fetched} rule(s)`);
+      }
+    }
+  }
+
+  const store = loadCommunityStore();
+  console.log(`\n  Store now holds ${store.rules.length} total community rule(s).`);
+  console.log(`  Path: ${COMMUNITY_STORE_PATH}\n`);
+}
+
+// ---------------------------------------------------------------------------
 // CLI: stats — show live session stats from MCP server
 // ---------------------------------------------------------------------------
 
@@ -1909,8 +2115,10 @@ Usage:
   contextengine save-learning <text> -c <category>  Save a learning
   contextengine delete-learning <id>   Delete a learning by ID
   contextengine import-learnings <file> [-c cat] [-p project]  Bulk-import learnings
-  contextengine export-learnings [--project NAME] [--category CAT] [--format json|markdown] [--include-universal]
-                                       Export learnings (scope to one project for safe sharing)
+  contextengine export-learnings [--tier A|B] [--output PATH] [--review] [--project NAME] [--category CAT] [--format json|markdown] [--include-universal]
+                                       Export learnings. --tier A → MIT-publishable redacted subset (LOCKed safety pipeline).
+                                                         --tier B → full PRO corpus (still redacted; original IDs preserved).
+                                                         (no --tier) → legacy raw export, NOT safe for public distribution.
   contextengine save-session <name> <key> <value>   Save session context
   contextengine load-session <name>    Restore session context
   contextengine list-sessions          List all saved sessions
@@ -1941,6 +2149,10 @@ Usage:
   contextengine sync-claude-md [--path CLAUDE.md] [--dry-run]
                                        Refresh the OpsContext-managed block in CLAUDE.md
                                        (top learnings + policy summary + recent hook blocks)
+  contextengine sync-community-rules [--force] [--tier A|B|all]
+                                       Fetch community-contributed learnings (Tier A = GitHub
+                                       public, Tier B = api.compr.ch Pro). Daily run recommended.
+                                       Network failures fall back to cached store.
   contextengine score [project] [--html] [--no-save] AI-readiness score (Pro, writes SCORE.md)
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
@@ -2155,6 +2367,11 @@ npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
     m.cliUninstallClaudeHook(process.argv.slice(3)),
   ).catch((err) => {
     console.error("Error:", err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+} else if (command === "sync-community-rules") {
+  cliSyncCommunityRules(process.argv.slice(3)).catch((err) => {
+    console.error("Error:", err);
     process.exit(1);
   });
 } else if (command === "stats") {

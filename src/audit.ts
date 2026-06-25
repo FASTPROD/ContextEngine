@@ -150,6 +150,7 @@ export type AuditEvent =
   | "learning.save"
   | "learning.delete"
   | "learning.import"
+  | "learning.export"
   | "session.save"
   | "session.delete"
   | "activation.activate"
@@ -172,7 +173,10 @@ export type AuditEvent =
   | "vscode.session_start"
   // Detector outputs (Phase 3)
   | "drift.detected"
-  | "notification.fired";
+  | "notification.fired"
+  // Community-rules sync client (shared learnings hybrid, Phase 1)
+  | "community.sync_ok"
+  | "community.sync_error";
 
 export interface AuditRecord {
   ts: string;

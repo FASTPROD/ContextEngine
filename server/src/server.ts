@@ -30,6 +30,7 @@ import {
   sendLicenseEmail,
 } from "./stripe.js";
 import { loadPrivateKey, signLicensePayload } from "./license-sig.js";
+import { createCommunityRulesRouter } from "./community-rules-server.js";
 
 // Load the Ed25519 private key once at startup. Fail loud if missing —
 // never silently degrade to "no signature" mode.
@@ -517,6 +518,21 @@ app.post("/contextengine/heartbeat", (req, res) => {
     return res.status(500).json({ valid: false, error: "Internal server error" });
   }
 });
+
+// ---------------------------------------------------------------------------
+// POST /contextengine/community-rules/fetch
+//   Mounted AFTER /heartbeat (which it mirrors for auth) and BEFORE the
+//   static / catch-all routes below. Tier B PRO benefit — returns the
+//   curated, Ed25519-signed community-rules corpus.
+// ---------------------------------------------------------------------------
+app.use(
+  createCommunityRulesRouter({
+    db,
+    privateKey: PRIVATE_KEY,
+    logAudit: (event, key, machineId, ip, details) =>
+      logAudit(db, event, key, machineId, ip, details),
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // POST /contextengine/create-checkout-session (Stripe)

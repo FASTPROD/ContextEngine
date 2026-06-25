@@ -49,6 +49,11 @@ import {
   autoImportFromSources,
   LEARNING_CATEGORIES,
 } from "./learnings.js";
+import {
+  communityRulesToChunks,
+  mergeWithDedup,
+  loadCommunityStore,
+} from "./community-sync.js";
 import { readFileSync, existsSync, watch, statSync } from "fs";
 import { basename, join, dirname } from "path";
 import { execSync } from "child_process";
@@ -178,6 +183,22 @@ async function reindex(): Promise<void> {
     chunks.push(...learningChunks);
     console.error(
       `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index (scoped to ${activeProjectNames.length} projects)`
+    );
+  }
+
+  // Inject community rules from the cached store (best-effort — no network
+  // touched here; the daily `sync-community-rules` CLI keeps the cache fresh).
+  // Deduped against the local learnings so identical content never double-emits.
+  const communityChunks = communityRulesToChunks();
+  if (communityChunks.length > 0) {
+    const before = chunks.length;
+    chunks = mergeWithDedup(chunks, communityChunks);
+    const added = chunks.length - before;
+    const skipped = communityChunks.length - added;
+    const store = loadCommunityStore();
+    console.error(
+      `[ContextEngine] 🌐 Injected ${added} community rule chunks ` +
+      `(${skipped} dedup'd vs local; ${store.rules.length} total in cache)`
     );
   }
 
