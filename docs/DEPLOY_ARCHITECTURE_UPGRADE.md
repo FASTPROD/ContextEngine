@@ -98,6 +98,26 @@ curl -s https://compr.fr/ | grep "$HEALTH_MARKER"
 
 ---
 
+## ⚠️ Option B status: **DEFERRED 2026-06-25** — multi-agent diagnostic flagged 5 design errors + 2 structural blockers
+
+The design below is **NOT shippable as-written.** A multi-agent root-cause pass (workflow `wdcraou93`, Agent A code-audit + Agent B adversarial + foreground probe-list) caught the following before implementation:
+
+| # | What's broken | Severity |
+|---|---|---|
+| 1 | `server.ts:46` reads only `ACTIVATION_PORT` env — does NOT read `--port` argv NOR `PORT` env. Design's `pm2 start ... -- --port $INACTIVE_PORT` is ignored; both instances bind 8010 → second crashes. | Blocker |
+| 2 | Port 3000 below collides with PLANK.io's documented backend (CLAUDE.md project table) | Blocker |
+| 3 | Three conflicting PM2 process names across the repo (`contextengine-mcp` / `contextengine-api` / `contextengine-server`) | High |
+| 4 | `nginx -s reload` step has no `nginx -t` gate; broken upstream block could break sibling sites | High |
+| 5 | `server/deploy.sh:22` targets Gandi (92.243.24.157) but session docs name konive-ovh (217.182.204.86) for `api.compr.ch`. **Don't know which is correct without `dig`.** | Blocker (factual) |
+| 6 | `licenses.db` SQLite WAL — single-writer; dual pm2 instances would hit `SQLITE_BUSY` | Structural |
+| 7 | Stripe webhook double-provisioning risk during blue+green overlap | Structural |
+
+**Action required before this section is trusted again:** run the 8 read-only ssh probes in [SPRINT_16_OPTION_B_PROBES.md](SPRINT_16_OPTION_B_PROBES.md). Probes #1, #2, #5, #7, #8 are gating. Probe #0 (`dig api.compr.ch`) resolves the Gandi/OVH contradiction and re-targets everything.
+
+**Likely outcome after probes:** Agent A's safer alternative — symlink-versioned dirs + `db.pragma('busy_timeout = 5000')` — gives ~75% of blue/green's value (atomic deploys + crash-safe rollback) at ~5% of the cross-app risk. No dual-process. Recommend that path UNLESS probes prove every blue/green prerequisite is clean AND the SQLite single-writer is migrated off in-process SQLite.
+
+The full draft is preserved below for context. **Read it AFTER the probe outputs, with the corrections above in mind.**
+
 ## Option B — Blue/Green for the Activation Server (recommended for `api.compr.ch`)
 
 **The pattern:**
