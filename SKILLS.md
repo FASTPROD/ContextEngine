@@ -116,7 +116,7 @@
 - `.git/hooks/` path operations classified as [git] not [other]
 
 ### Activation and licensing (`src/activation.ts` + `src/license-sig.ts` + `server/src/license-sig.ts`)
-- **Three free tiers** unlock paid tools: PREMIUM_TOOLS = `score_project`, `run_audit`, `check_ports`, `list_projects`. Everything else is free.
+- **Three free tiers** unlock paid tools: PREMIUM_TOOLS = `score_project`, `run_audit`, `check_ports`, `list_projects`. Everything else is free. The list is a re-export of `PREMIUM_TOOL_NAMES` from `src/tools-manifest.ts` (single source of truth that also feeds the VS Code info panel via `~/.contextengine/server-meta.json` — added in 2.1.3 to eliminate display drift on tool count).
 - **PREMIUM_MODULES = `agents` + `search-adv`** only. Collectors deliberately ship to free users (the docstring at the top of `src/activation.ts` documents this — alignment with reality landed in the 2026-06 hygiene pass).
 - **Activation flow** (`activate(key, email)`):
   1. POSTs `{key, email, machineId, version, platform, arch}` to `api.compr.ch/contextengine/activate`. **🔒 LOCK `[ACTIVATION-PAYLOAD-NO-USAGE-DATA]` (2026-06-24)** — these 6 fields are the COMPLETE payload, by deliberate product commitment. Adding a 7th field that reflects user usage (project paths, prompt text, tool inventory, learning IDs) breaks the marketing-data-isolation promise enshrined in `docs/about.md`. Any future feature that genuinely needs server-side telemetry MUST use a separate per-user opt-in endpoint, never bundle into this hot path.

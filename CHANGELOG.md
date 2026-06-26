@@ -2,6 +2,28 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
+## [2.1.3] — 2026-06-26 — Tool manifest as single source of truth + server-meta.json for VS Code extension
+
+Tactical fix for a class of silent display drift: the VS Code info panel hardcoded "Active on all 17 MCP tools" while the npm package was at 21 tools. The README was at 20. None of these were tied to the actual `server.tool(...)` registrations, so adding a tool (e.g. `drift_status` in 2.1.0) left all displays stale.
+
+### Added
+
+- **`src/tools-manifest.ts`** — single source of truth for the tool catalog. Exports `ALL_TOOLS` (21 names), `PREMIUM_TOOL_NAMES` (4), `TOOL_COUNT`, `FREE_TOOL_COUNT`. Every `server.tool(...)` registration must appear in `ALL_TOOLS`.
+
+- **`~/.contextengine/server-meta.json`** written on MCP server startup with `{ toolCount, freeCount, premiumCount, version, generatedAt }`. The VS Code extension reads this file (no active MCP session required) and uses it to render the info panel's tool-count claim dynamically. Falls back to "all MCP tools" (no number) if the file is missing.
+
+- **`tests/tools-manifest.test.ts`** — 7 regression tests enforcing: `ALL_TOOLS.length === count(server.tool(...) in index.ts)`, every name in `ALL_TOOLS` is registered, every registered name is in `ALL_TOOLS`, `TOOL_COUNT` matches, `FREE_TOOL_COUNT` matches, `PREMIUM_TOOL_NAMES` is a subset of `ALL_TOOLS`, and `PREMIUM_TOOLS` (re-exported from activation.ts) equals `PREMIUM_TOOL_NAMES`. Adding/removing a tool requires updating both `src/index.ts` AND `src/tools-manifest.ts` together — no silent drift possible.
+
+### Changed
+
+- **`src/activation.ts`** — `PREMIUM_TOOLS` is now a re-export of `PREMIUM_TOOL_NAMES` from the manifest (was a duplicate const). DRY without breaking the public API.
+
+### Why this isn't a feature, it's an anti-drift fix
+
+The same class of drift hit the README ("20 tools" vs reality 21) and the info panel ("17 tools" vs reality 21). Both displays existed BEFORE `drift_status` shipped in 2.1.0; neither was updated. The fix isn't "remember to update the displays" — it's "make the displays read from the source of truth so they can't drift in the first place." The regression test makes it mechanical: tool added without manifest entry = CI red.
+
+---
+
 ## [2.1.2] — 2026-06-25 — Audit-chain race fix + cliInit nudge + ESM install-autostart bug + LOCKED marketing-isolation + shared-learnings v1
 
 Overnight pass on the Session 13 carry-forward queue. Several user-visible bug fixes + a load-bearing compliance hardening + Sprint-5's shared-learnings hybrid landing as v1.

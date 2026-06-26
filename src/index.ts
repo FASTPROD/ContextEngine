@@ -54,11 +54,13 @@ import {
   mergeWithDedup,
   loadCommunityStore,
 } from "./community-sync.js";
-import { readFileSync, existsSync, watch, statSync } from "fs";
+import { readFileSync, existsSync, watch, statSync, writeFileSync, mkdirSync } from "fs";
 import { basename, join, dirname } from "path";
+import { homedir } from "os";
 import { execSync } from "child_process";
 import { scanCodeDir } from "./code-chunker.js";
 import { fileURLToPath } from "url";
+import { TOOL_COUNT, FREE_TOOL_COUNT, PREMIUM_TOOL_NAMES } from "./tools-manifest.js";
 
 // Read version from package.json at startup
 let PKG_VERSION = "1.21.3";
@@ -1402,6 +1404,30 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[ContextEngine] 🚀 MCP server running on stdio (keyword search ready)");
+
+  // 3b. Write server-meta.json so the VS Code extension can read tool count
+  // without needing an active MCP session. Single source of truth =
+  // src/tools-manifest.ts (asserted by tests/tools-manifest.test.ts).
+  try {
+    const metaDir = join(homedir(), ".contextengine");
+    mkdirSync(metaDir, { recursive: true });
+    writeFileSync(
+      join(metaDir, "server-meta.json"),
+      JSON.stringify(
+        {
+          toolCount: TOOL_COUNT,
+          freeCount: FREE_TOOL_COUNT,
+          premiumCount: PREMIUM_TOOL_NAMES.length,
+          version: PKG_VERSION,
+          generatedAt: new Date().toISOString(),
+        },
+        null,
+        2
+      ),
+    );
+  } catch (err) {
+    console.error("[ContextEngine] ⚠ Failed to write server-meta.json:", err);
+  }
 
   // 4. Load embeddings — try cache first, then model (non-blocking)
   const cached = loadCache(chunks);

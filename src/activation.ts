@@ -57,13 +57,12 @@ export const PREMIUM_MODULES = [
   "search-adv",  // advanced BM25 with tuned parameters
 ] as const;
 
-// Tools that require activation
-export const PREMIUM_TOOLS = [
-  "score_project",
-  "run_audit",
-  "check_ports",
-  "list_projects",
-] as const;
+// Tools that require activation. Re-exported from the central manifest so
+// the count and the name list have a SINGLE source of truth. Adding a new
+// PRO tool requires editing src/tools-manifest.ts (which also feeds the
+// VS Code extension's info panel via ~/.contextengine/server-meta.json).
+import { PREMIUM_TOOL_NAMES } from "./tools-manifest.js";
+export const PREMIUM_TOOLS = PREMIUM_TOOL_NAMES;
 
 // ---------------------------------------------------------------------------
 // Types
