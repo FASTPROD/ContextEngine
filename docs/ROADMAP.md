@@ -50,6 +50,35 @@ gh release create v$(node -p "require('./package.json').version") --generate-not
 
 **Why npm version > manual `vim package.json + commit + tag`:** the manual sequence allows each step to be forgotten independently (the exact root cause this fixes). `npm version` collapses the three steps into one atomic operation; the only remaining gap is `npm publish` itself, which the pre-flight checklist guards.
 
+### Version alignment between npm package and VS Code extension (fires at extension v1.0)
+
+**Context (2026-06-26, Session 17):** the user surfaced the question "should we align directly from extension 0.11.0 → npm 2.1.x?" The current state has two parallel version streams:
+
+- `@compr/opscontext-mcp` on npm: registry `2.1.1`, local `2.1.2` (the bump-without-publish drift above)
+- `css-llc.contextengine` on VS Code Marketplace: published `0.9.0`, local `0.11.0`
+
+Aligning the extension directly to the npm semver (`0.11.0 → 2.1.2`) was REJECTED. Three reasons:
+
+1. **Broken semver signal.** `0.x.x` honestly says "still iterating, breaking changes possible." `2.x.x` promises "stable contract." The extension just added drift alerts in 0.11.0 (Session 13 commit `1eef67a`); 4 versions in 3 days — not stable enough for a 2.x signal.
+2. **Marketplace UX cliff.** Skipping `0.9 → 2.1` makes users see "what happened to 1.0?" — looks like a fork, accidental skip, or quality issue.
+3. **Two distinct distribution channels.** `css-llc.contextengine` (Marketplace, legacy publisher ID) and `@compr/opscontext-mcp` (npm, current name) have different audiences, different release cadences. Forcing patch-level alignment couples them artificially.
+
+**The real goal is COORDINATED RELEASES, not synchronized numbers.** Plan:
+
+1. **Bump extension to `1.0.0` first** — at the next moment when "I've finished iterating UI fundamentals, this is the stable contract" is honestly true. That moment is the trigger.
+2. **From v1.0 onward, align MAJOR-version-only** — extension `1.x.x` ≈ npm `2.x.x`. When npm goes to `3.0`, extension goes to `2.0`. Patch + minor stay independent (UI iterates faster than the policy engine and that's healthy).
+3. **Coordinate releases via a shared CHANGELOG section** for cross-cutting shippings. Format:
+   ```
+   ## Release 2026-06-26
+   ### npm 2.1.x — [what changed in the package]
+   ### vscode 0.11.x — [what changed in the extension]
+   ```
+4. **Optional: `vscode-ext-vX.Y.Z` git tags** alongside `vX.Y.Z` for the npm package. Two tag streams, but easier to navigate releases per layer.
+
+**Why this lives in the backlog:** the trigger is "when extension reaches v1.0 maturity", not a scheduled date. Same shape as the publish-hygiene entry above — fires when a future condition is true, then is internalized.
+
+**Related learnings:** [[feedback-multi-agent-for-shared-infra]] (don't sync things that don't need syncing), [[feedback-nerd-talk-avoidance]] (semver IS a marketing signal, not just engineering metadata).
+
 ---
 
 ## 🚀 Phase 1 — Cross-surface capture + drift alerts  (now → ~4 weeks)
