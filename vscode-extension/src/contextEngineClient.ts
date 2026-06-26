@@ -118,21 +118,39 @@ function buildCommand(): { cmd: string; baseArgs: string[] } {
 
 async function runCLI(
   args: string[],
-  options?: { cwd?: string; timeout?: number }
+  options?: { cwd?: string; timeout?: number; signal?: AbortSignal }
 ): Promise<{ stdout: string; stderr: string }> {
   const { cmd, baseArgs } = buildCommand();
   const fullArgs = [...baseArgs, ...args];
 
   try {
+    // killSignal: "SIGKILL" — when execFile's timeout fires (or the
+    // AbortSignal aborts), kill the child IMMEDIATELY rather than sending
+    // SIGTERM (which npx wrappers + grandchildren can ignore). 0.11.1's
+    // scoreHtml hang was caused by SIGTERM (default) being ignored by the
+    // npx wrapper while its grandchild had already exited — execFileAsync
+    // never resolved because the npx process kept stdio pipes open. SIGKILL
+    // is non-ignorable; the process MUST exit, the pipes MUST close, the
+    // promise MUST resolve.
     const result = await execFileAsync(cmd, fullArgs, {
       cwd: options?.cwd || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
       timeout: options?.timeout || 30_000,
+      killSignal: "SIGKILL",
+      signal: options?.signal,
       maxBuffer: 1024 * 1024, // 1MB
       env: { ...process.env, NO_COLOR: "1" },
     });
     return result;
   } catch (error: unknown) {
-    const err = error as { stdout?: string; stderr?: string; message?: string };
+    const err = error as { stdout?: string; stderr?: string; message?: string; name?: string; code?: string };
+    // Cancellation propagates as AbortError — preserve the name so callers
+    // can distinguish "user cancelled" from "actual failure" and skip the
+    // showErrorMessage UX in the cancellation case.
+    if (err.name === "AbortError" || options?.signal?.aborted) {
+      const e = new Error("OpsContext CLI cancelled by user");
+      e.name = "AbortError";
+      throw e;
+    }
     // Some CLI commands exit with non-zero on "FAIL" checks (e.g., end-session)
     if (err.stdout) {
       return { stdout: err.stdout || "", stderr: err.stderr || "" };
@@ -277,11 +295,14 @@ export async function emitEvent(
  *   - With a license   → resolves to "/tmp/<...>/contextengine-score.html"
  *     (path is os.tmpdir() + "contextengine-score.html" in the CLI).
  */
-export async function generateHtmlScoreReport(projectName?: string): Promise<string> {
+export async function generateHtmlScoreReport(
+  projectName?: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const args = ["score"];
   if (projectName) args.push(projectName);
   args.push("--html", "--no-save");
-  const { stdout, stderr } = await runCLI(args, { timeout: 60_000 });
+  const { stdout, stderr } = await runCLI(args, { timeout: 60_000, signal });
   const combined = stdout + "\n" + stderr;
   // The CLI prints: "📊 HTML report written to: <path>"
   const match = combined.match(/HTML report written to:\s*([^\s]+)/);

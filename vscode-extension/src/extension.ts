@@ -682,11 +682,17 @@ function registerCommands(
         {
           location: vscode.ProgressLocation.Notification,
           title: `OpsContext: Generating HTML score report${defaultProject ? ` for ${defaultProject}` : ""}…`,
-          cancellable: false,
+          cancellable: true,
         },
-        async () => {
+        async (_progress, token) => {
+          // Wire the progress's cancel button to an AbortController that
+          // propagates through runCLI → execFile.signal → SIGKILL on the
+          // child. Without this the user has no way to exit a stuck score —
+          // the 0.11.1 bug class.
+          const abortController = new AbortController();
+          token.onCancellationRequested(() => abortController.abort());
           try {
-            const path = await client.generateHtmlScoreReport(defaultProject);
+            const path = await client.generateHtmlScoreReport(defaultProject, abortController.signal);
             // The CLI auto-opens the file in the default browser, so we just
             // confirm and surface the path for the user who wants to share it.
             const action = await vscode.window.showInformationMessage(
@@ -700,7 +706,12 @@ function registerCommands(
               vscode.env.openExternal(vscode.Uri.file(path));
             }
           } catch (error: unknown) {
-            const err = error as { message?: string };
+            const err = error as { message?: string; name?: string };
+            // Silently exit on user cancellation — no error popup. Honors the
+            // contract: user clicked the X, user gets nothing in their face.
+            if (err.name === "AbortError" || token.isCancellationRequested) {
+              return;
+            }
             const msg = err.message || "unknown error";
             // Heuristic: if the CLI returned a gate-rejection message that
             // slipped past isProActivated (e.g., expired between probe and

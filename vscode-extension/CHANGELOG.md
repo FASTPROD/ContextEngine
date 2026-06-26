@@ -2,6 +2,24 @@
 
 All notable changes to the OpsContext VS Code Extension (previously ContextEngine).
 
+## [0.11.2] — 2026-06-26 — Fix stuck "Generating HTML score report" hangs + cancellable progress
+
+### Fixed
+
+- **`OpsContext: Generate HTML Score Report` could hang forever in the status bar** (reported in 0.11.1). Two root causes, both fixed:
+
+  1. **`runCLI` (`src/contextEngineClient.ts`) used `execFileAsync`'s default `killSignal: "SIGTERM"`** on timeout. The npx wrapper that spawns the actual `opscontext` binary can ignore SIGTERM after its grandchild has exited, leaving stdio pipes open and the parent promise pending FOREVER. Fixed by setting `killSignal: "SIGKILL"` (non-ignorable) + accepting an `AbortSignal` so callers can manually abort. Timeout now actually kills, every time.
+
+  2. **`scoreHtml` command in `src/extension.ts` used `cancellable: false`** on `vscode.window.withProgress(...)`. Even when the user noticed the hang, there was no way to dismiss the progress notification without reloading the VS Code window. Fixed by setting `cancellable: true` + wiring the cancellation token to an `AbortController` whose signal propagates through `client.generateHtmlScoreReport()` → `runCLI()` → `execFile.signal` → SIGKILL on the child.
+
+  Net effect: the user can click the X on the progress notification at any time; the underlying CLI is killed cleanly; no error popup is shown for user-initiated cancellations (only for genuine failures).
+
+### Known limitation (backlog'd for 0.11.3)
+
+The other 5 `withProgress(... cancellable: false ...)` callsites in `src/extension.ts` (`commitAll`, `endSession`, `sync`, `search`, `pushAllProjects`) are NOT cancellable in this release. They benefit from the `runCLI` hardening (timeouts now actually kill) but the user cannot dismiss their progress notifications mid-flight. Fix is the same shape as `scoreHtml`'s; deferred to keep this release tight.
+
+---
+
 ## [0.11.1] — 2026-06-26 — Info panel tool count is now dynamic (no more "17 MCP tools" drift)
 
 ### Fixed
