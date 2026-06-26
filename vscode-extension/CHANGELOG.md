@@ -2,6 +2,28 @@
 
 All notable changes to the OpsContext VS Code Extension (previously ContextEngine).
 
+## [0.11.1] — 2026-06-26 — Info panel tool count is now dynamic (no more "17 MCP tools" drift)
+
+### Fixed
+
+- **Info panel hardcoded "Active on all 17 MCP tools"** — the displayed count was hardcoded at the moment the panel was authored. The actual MCP server shipped tool #21 (`drift_status`) in `@compr/opscontext-mcp@2.1.0`; the panel never updated. Two occurrences in `src/infoPanel.ts` (hero + plain-English explanation block).
+
+### Added
+
+- **`src/serverMeta.ts`** — synchronous reader for `~/.contextengine/server-meta.json`. The file is written on startup by `@compr/opscontext-mcp@>=2.1.3` (single source of truth = `src/tools-manifest.ts` in the npm package). Falls back to "Active on all MCP tools" (no count) when the file is absent — graceful degradation for users on older MCP server versions or first-run before the daemon has fired.
+
+### Why this fix shape
+
+The previous "fix" was conceptually "remember to update the panel when tools change." That's not a fix — it's a backlog item that ages into a bug. The 2.1.3 + 0.11.1 paired release breaks the drift class structurally:
+
+- Adding a tool requires editing `src/tools-manifest.ts` in the npm package.
+- A regression test in the npm package asserts `ALL_TOOLS.length === count(server.tool(...) in index.ts)`.
+- The extension reads from `server-meta.json` which derives from the same manifest.
+
+No human discipline needed. CI red on miss.
+
+---
+
 ## [0.11.0] — 2026-06-24 — Drift alerts in VS Code UI + robust one-click setup (audit B2)
 
 Folded two features into one 0.11.0 release because neither shipped before

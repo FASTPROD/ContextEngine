@@ -14,6 +14,7 @@
 import * as vscode from "vscode";
 import { type GitSnapshot } from "./gitMonitor";
 import { type SessionStats } from "./statsPoller";
+import { readServerMeta } from "./serverMeta";
 
 // ---------------------------------------------------------------------------
 // Info Status Bar Item — the ℹ️ icon next to the main CE indicator
@@ -118,6 +119,15 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
   // extension API isn't available (e.g., in a test harness).
   const extVersion =
     vscode.extensions.getExtension("css-llc.contextengine")?.packageJSON?.version ?? "?.?.?";
+
+  // Read MCP server tool count from ~/.contextengine/server-meta.json (written
+  // by @compr/opscontext-mcp@>=2.1.3 on startup). Falls back to a counted-less
+  // phrasing when the file is absent (server <2.1.3 or never run on this box).
+  // Eliminates the "Active on all 17 MCP tools" hardcoded drift class.
+  const meta = readServerMeta();
+  const toolCountPhrase = meta
+    ? `Active on all ${meta.toolCount} MCP tools`
+    : "Active on all MCP tools";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -247,7 +257,7 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
   <div class="firewall-hero">
     <div class="shield">🛡️</div>
     <div class="firewall-title">Protocol Firewall</div>
-    <div class="firewall-status">Active on all 17 MCP tools</div>
+    <div class="firewall-status">${toolCountPhrase}</div>
   </div>
 
   <!-- ======================================================== -->
@@ -306,7 +316,7 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
       without you having to remind it.
     </p>
     <p>
-      <strong>It just works.</strong> No configuration needed. Active on all 17 MCP tools.
+      <strong>It just works.</strong> No configuration needed. ${toolCountPhrase}.
       When agents comply, they get full access. When they don't, OpsContext handles it.
     </p>
   </div>
