@@ -1,6 +1,6 @@
 # OpsContext Roadmap
 
-> Last updated: 2026-06-22 (Session 09).
+> Last updated: 2026-06-26 (Session 17).
 > See [docs/sessions/](sessions/) for the full historical trail of decisions and verdicts.
 
 This roadmap is **deliberately conservative**. Each phase ships in production before the next starts. No phase exists to "future-proof" something — each one ships customer value or unblocks a sale.
@@ -14,6 +14,41 @@ This roadmap is **deliberately conservative**. Each phase ships in production be
 - **Activation server live on `api.compr.ch`** — Ed25519-signing in production, 4 licenses, 1 activation
 - **Pricing page live** at `https://api.compr.ch/contextengine/pricing`
 - **Marketing positioning** in [docs/marketing/pitch-proposals.md](marketing/pitch-proposals.md) — EN+FR × 4 surfaces
+
+---
+
+## 🛠️ Backlog — operational guardrails
+
+### Release hygiene: canonical npm publish sequence (fires at next publish)
+
+**Context (2026-06-26, Session 17):** discovered `package.json` was bumped locally to `2.1.2` at `f9e8f9c` (Session 14 batch) but `npm publish` was never run — npm registry remained at `2.1.1`, git tag remained at `v2.1.1`. The bump was in-tree limbo. Going to tag `v2.1.2` on GitHub would have created a ghost release pointing at a version users can't `npm install`. The bump-commit-tag-publish steps were split across operations and one of them (`npm publish`) was forgotten.
+
+**Fix: use `npm version` as the atomicity anchor.** It edits `package.json`, creates the commit, AND creates the local tag in one atomic call — eliminating the "bumped but not published" drift class entirely.
+
+**Canonical sequence — run when ready to ship the next version:**
+
+```bash
+# 1. Bump (atomic: edits package.json + creates commit + creates local tag)
+npm version patch     # or minor, or major
+# 2. Build + test
+npm run build && npm test
+# 3. Publish — IRREVERSIBLE after 24h. Verify CHANGELOG entry exists.
+npm publish --access public
+# 4. Push the commit + tag created in step 1
+git push origin main --follow-tags
+# 5. GitHub Release from the tag (auto-generates release notes from commits)
+gh release create v$(node -p "require('./package.json').version") --generate-notes
+```
+
+**Pre-flight before step 3:**
+- [ ] `CHANGELOG.md` has an entry for the new version (commit history shows the bump usually lands BEFORE the changelog — invert this on next release)
+- [ ] `npm run build && npm test` green
+- [ ] `git status --short` clean (no stray uncommitted work in the publish snapshot)
+- [ ] `npm whoami` returns the right account (avoid publishing under a personal handle by accident)
+
+**Reason this lives in the backlog and not in a runbook:** the failure mode here was "the next time we ship," not "every time we ship." It needs to fire once when the next bump happens, then it's internalized. A LOCK comment in `package.json` referencing this section would also work — TBD whether to add one.
+
+**Why npm version > manual `vim package.json + commit + tag`:** the manual sequence allows each step to be forgotten independently (the exact root cause this fixes). `npm version` collapses the three steps into one atomic operation; the only remaining gap is `npm publish` itself, which the pre-flight checklist guards.
 
 ---
 
