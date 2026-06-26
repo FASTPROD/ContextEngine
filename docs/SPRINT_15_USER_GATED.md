@@ -1,5 +1,8 @@
 # Sprint 15 — User-Gated Steps After the 2026-06-25 Overnight Pass
 
+
+> ⚠️ **PROBE-0 CORRECTION 2026-06-26**: this document was written assuming `api.compr.ch` runs on the OVH Konive VPS (217.182.204.86). **Probe #0 (`dig +short api.compr.ch`) returned 92.243.24.157 = Gandi.** All references to `konive-ovh` / `OVH` / `217.182.204.86` below mean `admin@92.243.24.157` (Gandi) for THIS service. `server/deploy.sh:22` was correct all along. Sibling apps on Gandi: compr.fr (static), admin.CROWLR, compr.app — NOT Konive/invoc/PLANK (those ARE on OVH Konive, just for different services). See [SESSION_16](sessions/SESSION_16_2026-06-26.md) § D.
+
 > Each item below is something I deliberately did NOT do overnight, because it requires either your auth (npm OTP, marketplace PAT, $5 dev account) or touches live external state (production VPS, the live compR.fr site, etc.). Each has a numbered safety walkthrough.
 >
 > **Order recommendation:** items 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. The early items unlock the later ones (e.g. npm publish unlocks the new `opscontext` CLI features the README references).

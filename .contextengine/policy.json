@@ -62,5 +62,14 @@
       "requires_reason_min_length": 30,
       "description": "Documented escape hatch for production-critical hotfixes. Reason recorded in the audit log; 5-minute TTL. Beats undocumented --no-verify."
     }
+  ],
+  "commit_message_required": [
+    {
+      "id": "multi-agent-for-shared-infra",
+      "paths": ["server/deploy.sh", "server/ecosystem.config.*", "**/nginx*.conf", "compR.fr/deploy*.sh", "compR.fr/setup-symlink-deploy.sh"],
+      "pattern": "Multi-agent: wf_[a-z0-9-]+|--skip-multi-agent-reason: .+",
+      "severity": "block",
+      "description": "Multi-agent diagnostic required before changes to shared-infra files (per docs/skills/CLAUDE_MULTI_AGENT_PROMPT.md + Session 15 lesson). Cite workflow ID in commit body OR provide --skip-multi-agent-reason: <reason> for the explicit bypass (logged to audit log)."
+    }
   ]
 }

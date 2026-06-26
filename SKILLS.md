@@ -146,10 +146,11 @@
 - **LOCK `[AUDIT-CHAIN]`** protects: canonical serialization, SHA-256 chain, appendAudit-must-throw contract.
 
 ### Policy contract & hook checkers (`src/policy.ts` + `src/hooks.ts`)
-- **`.contextengine/policy.json`** at repo root is the declarative contract that the policy-driven pre-commit checkers consume. Four sections:
+- **`.contextengine/policy.json`** at repo root is the declarative contract that the policy-driven pre-commit checkers consume. Five sections:
   - `secret_patterns` — id-tagged regex rules (severity `block` | `warn`), optional `paths` glob scoping (e.g. JWT pattern scoped only to `docs/sessions/**/*.md`)
   - `doc_coverage` — source-subtree → doc-section mappings. Replaces the legacy 4-hour wall-clock staleness gate with diff-aware coverage.
   - `deploy_verify_hosts` — production hosts requiring a verification probe within N seconds of `git push`
+  - `commit_message_required` — staged-path → required-commit-message-pattern rules. Fires when a commit touches any matching path AND the commit message does not match `pattern`. Canonical example: `multi-agent-for-shared-infra` requires either `Multi-agent: wf_<id>` (citing a multi-agent diagnostic workflow per `docs/skills/CLAUDE_MULTI_AGENT_PROMPT.md`) OR an explicit `--skip-multi-agent-reason: <reason>` bypass (logged to audit log) before edits to shared production infra (`server/deploy.sh`, `server/ecosystem.config.*`, `**/nginx*.conf`, `compR.fr/deploy*.sh`, `compR.fr/setup-symlink-deploy.sh`). Origin: Session 15 / Sprint 16 — the multi-agent diagnostic (workflow `wdcraou93`) caught 5 design errors + 2 structural blockers in an Option B blue/green rollout that would otherwise have crashed sibling apps on a multi-tenant VPS. Schema lives in `src/policy.ts` (`CommitMessageRequiredSchema`); hook processor implementation is intentionally deferred to a follow-up.
   - `bypass_tokens` — documented escape hatches with reason + TTL (alternative to undocumented `--no-verify`)
 - **CLI**: `contextengine policy validate <file>` (CI-friendly, exit 0/1), `contextengine policy show` (loads the active repo policy and pretty-prints it).
 - **CLI hook checkers**: `contextengine hook secret-scan` and `contextengine hook doc-coverage` apply the policy against the staged git diff. Exit 0 clean / 1 on blocking violations. `CE_JSON=1` switches to one-line JSON for CI logs.

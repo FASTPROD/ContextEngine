@@ -1,5 +1,8 @@
 # Deploy Architecture Upgrade — Beyond "Rsync With Safety Belts"
 
+
+> ⚠️ **PROBE-0 CORRECTION 2026-06-26**: this document was written assuming `api.compr.ch` runs on the OVH Konive VPS (217.182.204.86). **Probe #0 (`dig +short api.compr.ch`) returned 92.243.24.157 = Gandi.** All references to `konive-ovh` / `OVH` / `217.182.204.86` below mean `admin@92.243.24.157` (Gandi) for THIS service. `server/deploy.sh:22` was correct all along. Sibling apps on Gandi: compr.fr (static), admin.CROWLR, compr.app — NOT Konive/invoc/PLANK (those ARE on OVH Konive, just for different services). See [SESSION_16](sessions/SESSION_16_2026-06-26.md) § D.
+
 **Status**: Design only — NO implementation yet. Awaiting user choice from the option matrix at the bottom.
 **Context**: User's 2026-06-25 question after Sprint-15 scripts shipped: *"this procedure is run to update the server code I assume, is there an other way to do this more safe from start? longer 2 or 3 steps maybe but safer?"*
 **Honest answer**: yes. `rsync` to a live serving directory is structurally risky no matter how disciplined the script is, because the write window is the same window nginx serves from. Below are 5 patterns that eliminate that window entirely.

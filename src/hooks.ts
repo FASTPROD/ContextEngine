@@ -16,6 +16,33 @@
 // Inputs are fed by helpers that read the actual git working state.
 // Each runner returns a list of violations + a summary; the CLI maps that
 // onto exit codes + audit events + human/machine output.
+//
+// ---------------------------------------------------------------------------
+// ACCEPTED LIMITS — out-of-scope by design (do NOT classify these as bugs)
+// ---------------------------------------------------------------------------
+//   1. `git commit --no-verify` — documented git escape hatch. Cannot be
+//      caught at the hook layer (git skips ALL hooks under that flag).
+//      Mitigation lives upstream of git (CODEOWNERS / branch protection /
+//      server-side push rules), not here.
+//   2. Workflow ID format (`wf_x`) is NOT verified against actual
+//      audit-log entries — adding that would require a server-side query
+//      against the OpsContext audit-log service. Deferred to a later
+//      iteration. We only enforce the text-shape of the citation, not that
+//      it corresponds to a real workflow.
+//   3. Direct SSH edits, cron edits, Cloudflare UI edits — out of scope
+//      by design. If the change never enters git, no commit hook can
+//      observe it. Defense-in-depth is via sidecar collectors (PM2,
+//      systemd, cron, Cloudflare audit log) feeding the central audit log.
+//   4. Glob case-sensitivity on case-insensitive filesystems (APFS / NTFS)
+//      — git itself does NOT normalize this. A rule scoped to
+//      `server/Deploy.sh` will not match a path `server/deploy.sh` on
+//      Linux but WILL match on macOS-default APFS. Mitigation: author
+//      policy.json with case-sensitive paths that match git's stored
+//      paths exactly.
+//   5. Sibling-project deploy scripts (KONIVE / PLANK / etc.) — each
+//      project gets its own `.contextengine/policy.json`. This rule only
+//      applies to the repo it lives in. Cross-repo enforcement is a
+//      separate concern (org-policy distribution via `extends:`).
 
 import { execSync } from "child_process";
 import { existsSync, readFileSync } from "fs";
@@ -328,6 +355,253 @@ export function formatDocCoverageViolations(violations: DocCoverageViolation[]):
     lines.push(`  [${v.severity}] ${v.matchedFiles.join(", ")} → ${v.requiresSection} (${reason})`);
   }
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Commit-message-required checker (Agent B — Option B consumer)
+// ---------------------------------------------------------------------------
+//
+// Consumes the `commit_message_required` rule type added by Agent A
+// (CommitMessageRequiredSchema in src/policy.ts, sample rule
+// `multi-agent-for-shared-infra` in .contextengine/policy.json).
+//
+// Trigger: any staged file path matches the rule's `paths` globs.
+// Pass:    the commit message matches the rule's `pattern` (ERE regex).
+// Bypass:  the commit body contains `--skip-multi-agent-reason: <reason>`
+//          — the bypass IS recorded as a separate kind (`bypass`) so the
+//          CLI can emit a `policy.skipped` audit event with the reason.
+//
+// We intentionally do NOT swallow the bypass into "no violation":
+// surfacing it as a `bypass` kind lets the CLI keep the audit-log append
+// in the same place as `hook.block` events, preserving symmetry.
+
+/** Canonical bypass marker. Lives at the top of the checker so editors
+ *  can grep for it when reviewing the audit story. */
+export const COMMIT_BYPASS_PREFIX = "--skip-multi-agent-reason:";
+
+/** Minimum reason length when bypassing. Hardened 2026-06-26 (verifier
+ *  Bypass #11): the previous 5-char floor passed `12345` as a "valid"
+ *  reason — no semantic content, just a placeholder to defeat the gate.
+ *  Now 20 chars + at least one whitespace character (real reasons are
+ *  prose with words, not concatenated tokens). Matches
+ *  BypassTokenSchema.requires_reason_min_length default of 20. */
+const MIN_BYPASS_REASON_LENGTH = 20;
+
+export interface CommitMessageViolation {
+  kind: "missing-pattern" | "bypass";
+  severity: "block" | "warn";
+  ruleId: string;
+  matchedFiles: string[];
+  pattern: string;
+  description?: string;
+  /** Only set when kind === "bypass". The free-text reason captured
+   *  after `--skip-multi-agent-reason:` for the audit log. */
+  bypassReason?: string;
+}
+
+/** Extract a bypass reason from the commit message. Returns the
+ *  reason text (trimmed) or null when absent.
+ *
+ *  Hardened 2026-06-26 (verifier Bypass #5 + #11):
+ *    - The bypass-marker MUST appear at the start of its own line
+ *      (only leading whitespace allowed). Mid-line or commented-out
+ *      markers like `# Note: do NOT use --skip-multi-agent-reason: ever`
+ *      are REJECTED — the `#` (or any non-whitespace char) before the
+ *      prefix on the same line disqualifies the line.
+ *    - Reason must be ≥ MIN_BYPASS_REASON_LENGTH chars (20).
+ *    - Reason must contain at least one whitespace character — real
+ *      reasons are prose ("emergency rollback at 03:00 UTC"), not
+ *      alphanumeric placeholders ("12345" / "abc123def456…"). A token
+ *      without spaces is almost certainly a defeat attempt.
+ */
+export function extractBypassReason(commitMessage: string): string | null {
+  for (const rawLine of commitMessage.split(/\r?\n/)) {
+    // Allow ONLY leading whitespace before the prefix (no `#`, no quote,
+    // no other prose). Verifier Bypass #5 attack vector closed here.
+    const leadingMatch = rawLine.match(/^(\s*)/);
+    const leading = leadingMatch ? leadingMatch[1] : "";
+    const afterLeading = rawLine.slice(leading.length);
+    if (!afterLeading.startsWith(COMMIT_BYPASS_PREFIX)) continue;
+
+    const reason = afterLeading.slice(COMMIT_BYPASS_PREFIX.length).trim();
+    if (reason.length < MIN_BYPASS_REASON_LENGTH) continue;
+    // Real reasons contain at least one space — reject "12345",
+    // "abcdef1234567890ABCDE", and other word-less placeholders.
+    if (!/\s/.test(reason)) continue;
+    return reason;
+  }
+  return null;
+}
+
+/**
+ * Strip any top-level alternation branch from a policy regex pattern
+ * that contains the literal COMMIT_BYPASS_PREFIX. Verifier Bypass #3:
+ * the canonical policy pattern
+ *
+ *   Multi-agent: wf_[a-z0-9-]+|--skip-multi-agent-reason: .+
+ *
+ * had two branches in one pattern; the second branch matched the literal
+ * bypass marker anywhere in the message (including mid-line, commented
+ * out, etc.), short-circuiting the strict line-anchored validation in
+ * extractBypassReason. Fix: the matcher in runCommitMessageRequired
+ * ignores the bypass-marker branch entirely — bypass MUST go through
+ * extractBypassReason's hardened validation.
+ *
+ * Returns the cleaned pattern. If every branch is bypass-related (rare
+ * footgun), returns null — caller treats as "no positive branch to
+ * satisfy", which is the safe default.
+ */
+export function stripBypassBranchFromPattern(pattern: string): string | null {
+  // Top-level alternation split. This is a SIMPLE split — patterns with
+  // nested grouping that uses `|` inside `(...)` aren't decomposed, but
+  // the canonical policy patterns don't use that shape. If a future
+  // policy needs nested alternation, the safer move is to author the
+  // bypass branch out of the policy entirely (it belongs to
+  // extractBypassReason, not to the pattern).
+  const branches = pattern.split("|");
+  const cleaned = branches.filter(
+    (b) => !b.includes(COMMIT_BYPASS_PREFIX),
+  );
+  if (cleaned.length === 0) return null;
+  return cleaned.join("|");
+}
+
+/**
+ * Apply policy.commit_message_required rules to a staged-file list +
+ * commit message. Returns one entry per fired rule (either a
+ * missing-pattern violation OR a bypass acknowledgement).
+ *
+ * Empty list = nothing fired (either no rule's `paths` matched, or every
+ * fired rule was satisfied by the message).
+ *
+ * IMPORTANT: This does NOT itself decide exit codes. The caller (CLI)
+ * decides: missing-pattern + severity=block → exit 1 + hook.block event;
+ * bypass → exit 0 + policy.skipped event with the reason.
+ */
+export function runCommitMessageRequired(
+  policy: Policy,
+  files: StagedFile[],
+  commitMessage: string,
+): CommitMessageViolation[] {
+  const results: CommitMessageViolation[] = [];
+  const bypassReason = extractBypassReason(commitMessage);
+
+  for (const rule of policy.commit_message_required) {
+    const matchedFiles = files
+      .map((f) => f.path)
+      .filter((p) => matchesAnyGlob(p, rule.paths));
+    if (matchedFiles.length === 0) continue; // rule did not fire
+
+    // Bypass takes precedence — record it, do not block.
+    if (bypassReason !== null) {
+      results.push({
+        kind: "bypass",
+        severity: rule.severity,
+        ruleId: rule.id,
+        matchedFiles,
+        pattern: rule.pattern,
+        description: rule.description,
+        bypassReason,
+      });
+      continue;
+    }
+
+    // No bypass — check the pattern. Strip any bypass-marker alternation
+    // branch first (verifier Bypass #3): the bypass path is owned by
+    // extractBypassReason ONLY. Pattern-matching the bypass marker text
+    // is forbidden because the policy regex has no line-anchoring and
+    // therefore cannot distinguish a real bypass from a quoted/commented
+    // mention of the marker.
+    const cleanedPattern = stripBypassBranchFromPattern(rule.pattern);
+    if (cleanedPattern === null) {
+      // Pattern was 100% bypass-branches. Treat as missing-pattern —
+      // the rule has no positive enforcement branch left after
+      // sanitization.
+      results.push({
+        kind: "missing-pattern",
+        severity: rule.severity,
+        ruleId: rule.id,
+        matchedFiles,
+        pattern: rule.pattern,
+        description: rule.description,
+      });
+      continue;
+    }
+
+    let re: RegExp;
+    try {
+      re = new RegExp(cleanedPattern);
+    } catch {
+      // Malformed pattern in policy.json — surface as a missing-pattern
+      // violation rather than crashing the hook. The CLI will print the
+      // rule.description, which should explain the contract.
+      results.push({
+        kind: "missing-pattern",
+        severity: rule.severity,
+        ruleId: rule.id,
+        matchedFiles,
+        pattern: rule.pattern,
+        description: rule.description,
+      });
+      continue;
+    }
+    if (!re.test(commitMessage)) {
+      results.push({
+        kind: "missing-pattern",
+        severity: rule.severity,
+        ruleId: rule.id,
+        matchedFiles,
+        pattern: rule.pattern,
+        description: rule.description,
+      });
+    }
+  }
+
+  return results;
+}
+
+export function formatCommitMessageViolations(
+  violations: CommitMessageViolation[],
+): string {
+  if (violations.length === 0) return "✅ All commit-message-required rules satisfied.";
+  const lines: string[] = [];
+  const blocking = violations.filter((v) => v.kind === "missing-pattern" && v.severity === "block").length;
+  const bypasses = violations.filter((v) => v.kind === "bypass").length;
+  lines.push(
+    `📝 COMMIT MESSAGE POLICY: ${violations.length} rule(s) fired — ${blocking} blocking, ${bypasses} bypassed.`,
+  );
+  for (const v of violations) {
+    if (v.kind === "bypass") {
+      lines.push(
+        `  [bypass] ${v.ruleId} on ${v.matchedFiles.join(", ")} — reason: "${v.bypassReason}" (logged to audit)`,
+      );
+      continue;
+    }
+    lines.push(
+      `  [${v.severity}] ${v.ruleId} on ${v.matchedFiles.join(", ")} — commit body must match /${v.pattern}/`,
+    );
+    if (v.description) lines.push(`           ${v.description}`);
+  }
+  return lines.join("\n");
+}
+
+export function formatCommitMessageViolationsJson(
+  violations: CommitMessageViolation[],
+): string {
+  return JSON.stringify({
+    check: "commit-message-required",
+    violations_total: violations.length,
+    blocking: violations.filter((v) => v.kind === "missing-pattern" && v.severity === "block").length,
+    bypasses: violations.filter((v) => v.kind === "bypass").length,
+    violations: violations.map((v) => ({
+      kind: v.kind,
+      severity: v.severity,
+      rule_id: v.ruleId,
+      matched_files: v.matchedFiles,
+      pattern: v.pattern,
+      bypass_reason: v.bypassReason,
+    })),
+  });
 }
 
 // ---------------------------------------------------------------------------

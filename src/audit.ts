@@ -161,6 +161,9 @@ export type AuditEvent =
   | "firewall.escalate"
   | "hook.block"
   | "hook.bypass"
+  // Policy bypass — explicit, auditable opt-out for commit_message_required rules
+  // (e.g. `--skip-multi-agent-reason: <text>` in the commit body). Added 2026-06-25.
+  | "policy.skipped"
   // Cross-surface capture (Phase 1, added 2026-06-23)
   | "browser.prompt"
   | "browser.response"

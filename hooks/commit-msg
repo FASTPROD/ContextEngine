@@ -1,0 +1,63 @@
+#!/bin/zsh
+# ContextEngine — commit-msg hook
+#
+# Runs AFTER git has written the user's commit message to the file path
+# passed as $1 (typically .git/COMMIT_EDITMSG). This is the CORRECT
+# lifecycle hook for `commit_message_required` policy checks — pre-commit
+# fires BEFORE the message is written, so reading COMMIT_EDITMSG from
+# pre-commit returns either an empty string (first commit) or the
+# PREVIOUS commit's message (subsequent commits). Verifier P0 bug fix.
+#
+# BLOCKS commits when:
+#   - any staged file matches a commit_message_required rule's `paths`
+#   - AND the commit message does not match the rule's `pattern`
+#   - AND no valid `--skip-multi-agent-reason: <reason>` bypass is in the body
+#
+# Install: cp hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+
+# Ensure standard tools are on PATH (git hooks run with minimal PATH)
+export PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin:$PATH"
+
+COMMIT_MSG_FILE="$1"
+
+# If git didn't pass the message file (manual invocation, broken install),
+# fall through silently — the CLI will fall back to COMMIT_EDITMSG and
+# print a clear error if no file is readable.
+if [[ -z "$COMMIT_MSG_FILE" ]]; then
+  COMMIT_MSG_FILE=".git/COMMIT_EDITMSG"
+fi
+
+# ===================================================================
+# Helper: locate the ContextEngine CLI
+# ===================================================================
+find_ce_cli() {
+  if [[ -x "node_modules/.bin/contextengine" ]]; then
+    echo "node_modules/.bin/contextengine"
+    return 0
+  fi
+  if command -v contextengine >/dev/null 2>&1; then
+    command -v contextengine
+    return 0
+  fi
+  echo ""
+}
+
+CE_CLI=$(find_ce_cli)
+HAS_POLICY=false
+[[ -f .contextengine/policy.json ]] && HAS_POLICY=true
+
+# No CLI or no policy → no-op (legacy commit-msg lifecycle unchanged).
+if [[ -z "$CE_CLI" || "$HAS_POLICY" != "true" ]]; then
+  exit 0
+fi
+
+# Run the commit_message_required check against the ACTUAL written
+# commit message file. Bypass via `--skip-multi-agent-reason: …` in the
+# commit body — bypass is recorded as a policy.skipped audit event
+# (auditable opt-out, not a silent skip).
+if ! "$CE_CLI" hook commit-message-required "$COMMIT_MSG_FILE"; then
+  # CLI already printed the rule.description + wrote hook.block
+  exit 1
+fi
+
+exit 0

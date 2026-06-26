@@ -616,10 +616,13 @@ import {
   getStagedFiles,
   runSecretScan,
   runDocCoverage,
+  runCommitMessageRequired,
   formatSecretViolations,
   formatDocCoverageViolations,
   formatSecretViolationsJson,
   formatDocCoverageViolationsJson,
+  formatCommitMessageViolations,
+  formatCommitMessageViolationsJson,
 } from "./hooks.js";
 import { safeAppend } from "./audit.js";
 import {
@@ -1335,6 +1338,23 @@ Subcommands:
   doc-coverage   For each policy.doc_coverage rule, check whether the
                  commit touches matching source paths AND the required
                  doc section is staged. Exit 1 on blocking violations.
+  commit-message-required [MSG_FILE]
+                 For each policy.commit_message_required rule, check
+                 whether the commit touches matching source paths AND
+                 the commit message matches the required pattern. Exit 1
+                 on blocking violations. Bypass: include
+                 \`--skip-multi-agent-reason: <reason>\` in the commit
+                 body (≥ 20 chars, must contain whitespace, must be at
+                 the start of its own line) — bypass is recorded as a
+                 policy.skipped audit event (no exit-1).
+
+                 MSG_FILE: path to the commit message file. Passed by the
+                 commit-msg git hook as \$1. Lookup order:
+                   1. positional arg (preferred, what commit-msg passes)
+                   2. COMMIT_MSG_FILE env (test injection)
+                   3. .git/COMMIT_EDITMSG (legacy fallback — note this is
+                      UNRELIABLE from pre-commit; use the commit-msg
+                      hook lifecycle).
 
 Env:
   CE_JSON=1      Emit one-line JSON per check instead of human-readable
@@ -1422,6 +1442,69 @@ tamper-evident audit log at ~/.contextengine/audit.log.`);
       });
     }
     if (blocking.length > 0) process.exit(1);
+    return;
+  }
+
+  if (sub === "commit-message-required") {
+    // Locate the commit-message file. Order:
+    //   1. CLI positional arg (`contextengine hook commit-message-required
+    //      <path>`) — this is what the commit-msg git hook passes via $1.
+    //      Verifier P0 fix (2026-06-26): the previous implementation read
+    //      .git/COMMIT_EDITMSG from inside the PRE-COMMIT hook, but git
+    //      does not populate that file until AFTER pre-commit returns.
+    //      The check now runs from commit-msg, which gets the actual
+    //      message file path as its first argument.
+    //   2. COMMIT_MSG_FILE env (for test injection / scripted callers).
+    //   3. .git/COMMIT_EDITMSG in the repo root — backward-compat
+    //      fallback ONLY for legacy invocations. Will be empty / stale
+    //      when called from pre-commit; that's the documented footgun
+    //      this fix retires.
+    const commitMsgFile =
+      args[1] ||
+      process.env.COMMIT_MSG_FILE ||
+      join(repoRoot, ".git", "COMMIT_EDITMSG");
+    let commitMessage = "";
+    if (existsSync(commitMsgFile)) {
+      try {
+        commitMessage = readFileSync(commitMsgFile, "utf-8");
+      } catch {
+        // Fall through — empty message will fail any rule that fires,
+        // surfacing the description to the user.
+      }
+    }
+
+    const violations = runCommitMessageRequired(policy, stagedFiles, commitMessage);
+    if (jsonMode) {
+      process.stdout.write(formatCommitMessageViolationsJson(violations) + "\n");
+    } else {
+      console.log(formatCommitMessageViolations(violations));
+    }
+
+    let exitBlock = false;
+    for (const v of violations) {
+      if (v.kind === "bypass") {
+        // Bypass IS the auditable opt-out. Record the reason; let the
+        // commit proceed.
+        safeAppend("policy.skipped", {
+          check: "commit-message-required",
+          rule_id: v.ruleId,
+          matched_files: v.matchedFiles,
+          pattern: v.pattern,
+          bypass_reason: v.bypassReason,
+        });
+        continue;
+      }
+      // missing-pattern
+      safeAppend("hook.block", {
+        check: "commit-message-required",
+        rule_id: v.ruleId,
+        matched_files: v.matchedFiles,
+        pattern: v.pattern,
+        reason: "commit-message-pattern-not-matched",
+      });
+      if (v.severity === "block") exitBlock = true;
+    }
+    if (exitBlock) process.exit(1);
     return;
   }
 

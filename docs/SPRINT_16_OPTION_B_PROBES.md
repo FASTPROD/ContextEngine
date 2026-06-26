@@ -1,5 +1,8 @@
 # Sprint 16 — Read-Only SSH Probes Required Before Option B (Blue/Green Activation Server)
 
+
+> ⚠️ **PROBE-0 CORRECTION 2026-06-26**: this document was written assuming `api.compr.ch` runs on the OVH Konive VPS (217.182.204.86). **Probe #0 (`dig +short api.compr.ch`) returned 92.243.24.157 = Gandi.** All references to `konive-ovh` / `OVH` / `217.182.204.86` below mean `admin@92.243.24.157` (Gandi) for THIS service. `server/deploy.sh:22` was correct all along. Sibling apps on Gandi: compr.fr (static), admin.CROWLR, compr.app — NOT Konive/invoc/PLANK (those ARE on OVH Konive, just for different services). See [SESSION_16](sessions/SESSION_16_2026-06-26.md) § D.
+
 > Multi-agent diagnostic (workflow `wdcraou93`, 2026-06-25) found Option B as drafted in [DEPLOY_ARCHITECTURE_UPGRADE.md](DEPLOY_ARCHITECTURE_UPGRADE.md) is **NOT shippable**. Agent A + Agent B independently rated cross-app risk MED → HIGH; both flagged that the design assumes facts about the VPS that we have not verified.
 >
 > **Before any code change for Option B**, run the 8 probes below — all read-only, none modify production. Each is annotated with what it proves AND what the output would look like if blue/green is unsafe.

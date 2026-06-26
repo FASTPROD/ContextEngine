@@ -68,6 +68,42 @@ export const DeployVerifyHostSchema = z.object({
 export type DeployVerifyHost = z.infer<typeof DeployVerifyHostSchema>;
 
 /**
+ * A staged-path → required-commit-message-pattern rule. Fires when a
+ * commit touches any path matching `paths` AND the commit message does
+ * NOT match `pattern`. The canonical case (`multi-agent-for-shared-infra`)
+ * encodes the Session 15 / Sprint 16 lesson: shared production
+ * infrastructure changes (deploy scripts, ecosystem.config, nginx confs)
+ * must cite a multi-agent diagnostic workflow ID (`Multi-agent: wf_…`)
+ * OR carry an explicit bypass reason (`--skip-multi-agent-reason: …`)
+ * that gets recorded in the audit log.
+ *
+ * Rationale: the Sprint 16 multi-agent diagnostic (workflow `wdcraou93`)
+ * caught 5 design errors + 2 structural blockers in an Option B blue/green
+ * rollout that would otherwise have shipped and crashed sibling apps on
+ * the multi-tenant VPS. The rule turns that one-time discipline into a
+ * machine-enforced gate.
+ *
+ * NOTE: processor implementation (parsing staged paths + scanning the
+ * commit message buffer in the prepare-commit-msg or commit-msg hook)
+ * is intentionally left to a follow-up — this file only declares the
+ * shape so policy.json validation accepts the new rule today.
+ */
+export const CommitMessageRequiredSchema = z.object({
+  id: z.string().min(1).describe("Stable identifier for audit-log attribution"),
+  paths: z
+    .array(z.string())
+    .min(1)
+    .describe("Glob patterns of staged files that trigger this rule (e.g. server/deploy.sh)"),
+  pattern: z
+    .string()
+    .min(1)
+    .describe("ERE regex the commit message MUST match for the commit to proceed"),
+  severity: z.enum(["block", "warn"]).default("block"),
+  description: z.string().optional(),
+});
+export type CommitMessageRequired = z.infer<typeof CommitMessageRequiredSchema>;
+
+/**
  * A documented escape hatch for the hook. Beats undocumented `touch` /
  * `--no-verify` workarounds. Bypass token requires a reason and lives in
  * the audit log.
@@ -93,6 +129,7 @@ export const PolicySchema = z.object({
   secret_patterns: z.array(SecretPatternSchema).default([]),
   doc_coverage: z.array(DocCoverageSchema).default([]),
   deploy_verify_hosts: z.array(DeployVerifyHostSchema).default([]),
+  commit_message_required: z.array(CommitMessageRequiredSchema).default([]),
   bypass_tokens: z.array(BypassTokenSchema).default([]),
 });
 export type Policy = z.infer<typeof PolicySchema>;
@@ -189,6 +226,11 @@ export function formatPolicySummary(policy: Policy): string {
   lines.push(`Deploy-verify hosts: ${policy.deploy_verify_hosts.length}`);
   for (const h of policy.deploy_verify_hosts) {
     lines.push(`  - ${h.host} → probe within ${h.within_seconds}s: ${h.require_probe}`);
+  }
+  lines.push("");
+  lines.push(`Commit-message-required rules: ${policy.commit_message_required.length}`);
+  for (const r of policy.commit_message_required) {
+    lines.push(`  - [${r.severity}] ${r.id} → paths ${r.paths.join(", ")} must match /${r.pattern}/`);
   }
   lines.push("");
   lines.push(`Bypass tokens: ${policy.bypass_tokens.length}`);
