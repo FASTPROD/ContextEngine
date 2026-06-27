@@ -79,6 +79,54 @@ Aligning the extension directly to the npm semver (`0.11.0 → 2.1.2`) was REJEC
 
 **Related learnings:** [[feedback-multi-agent-for-shared-infra]] (don't sync things that don't need syncing), [[feedback-nerd-talk-avoidance]] (semver IS a marketing signal, not just engineering metadata).
 
+### Fan-out cancellable+AbortController pattern to 5 remaining withProgress callsites (fires at 0.11.3, ~30 min mechanical)
+
+**Context (2026-06-27, Session 18):** 0.11.2 fixed the `scoreHtml` hang by hardening `runCLI` (SIGKILL on timeout + `AbortSignal` propagation) AND wiring `cancellable: true` + `AbortController` on the `scoreHtml` `withProgress` callsite. The `runCLI` hardening benefits ALL 6 callsites implicitly (their timeouts now actually kill), but the UI-cancel button is only present on `scoreHtml`. The other 5 still show `cancellable: false` and have no way for the user to dismiss a stuck progress notification short of `Developer: Reload Window`.
+
+**The 5 callsites to fix** (all in [vscode-extension/src/extension.ts](../../vscode-extension/src/extension.ts), line numbers verified at HEAD post-0.11.2 = commit `67dc77e`):
+
+| Line | Command | Client call | Why it can hang |
+|---|---|---|---|
+| 291 | `contextengine.commitAll` | `client.gitCommitAll()` | git ops can stall on network-backed filesystems or large repos; loop over many dirty projects multiplies the risk |
+| 395 | `contextengine.endSession` | `client.endSession()` | external gates (license validation, compliance checks, activation heartbeat to `api.compr.ch`) |
+| 493 | `contextengine.sync` | `client.checkCEDocFreshness()` | filesystem stat calls across many projects; NFS / stale mount can hang for minutes |
+| 592 | `contextengine.search` | `client.search()` | hybrid BM25+semantic search; embeddings inference is CPU-bound + non-cancellable without explicit signal |
+| 872 | `pushAllProjects()` (helper called from `commitAll`) | `client.gitPush()` | git push over flaky network or slow remote hooks; no abort signal wired |
+
+**The canonical pattern** (already proven on `scoreHtml` at line 681 — copy this shape):
+
+```typescript
+await vscode.window.withProgress(
+  { location: vscode.ProgressLocation.Notification, title: "...", cancellable: true },
+  async (_progress, token) => {
+    const abortController = new AbortController();
+    token.onCancellationRequested(() => abortController.abort());
+    try {
+      const result = await client.<theCall>(args, abortController.signal);
+      // success path...
+    } catch (err: unknown) {
+      const e = err as { name?: string; message?: string };
+      if (e.name === "AbortError" || token.isCancellationRequested) return; // silent exit
+      // genuine-failure path...
+    }
+  }
+);
+```
+
+Each client function (`gitCommitAll`, `endSession`, `checkCEDocFreshness`, `search`, `gitPush`) needs an optional `signal?: AbortSignal` parameter added to its signature, then passed through to `runCLI({ signal })`. `runCLI` already accepts the signal as of 0.11.2 ([vscode-extension/src/contextEngineClient.ts:119-153](../../vscode-extension/src/contextEngineClient.ts#L119)) — no changes needed there.
+
+**Pre-flight before landing:**
+- [ ] All 5 callsites set `cancellable: true` + wire `AbortController` to the cancellation token
+- [ ] Each of the 5 client functions accepts + propagates `AbortSignal`
+- [ ] Each callsite catches `AbortError` and exits silently (no error popup for user-cancel)
+- [ ] Manual test: trigger each command, click the X mid-flight, verify the subprocess dies within 1-2s (use `ps aux | grep opscontext` to confirm no orphan)
+- [ ] Bump to 0.11.3 + CHANGELOG entry: "Fan-out cancellable+AbortController to commitAll, endSession, sync, search, pushAllProjects (paired with 0.11.2's scoreHtml fix)"
+- [ ] Publish + sideload + reload + verify on at least one of the 5 (e.g. trigger `OpsContext: Search Knowledge Base` with a query that returns many results, click X mid-flight)
+
+**Reason this lives in the backlog and not in 0.11.2:** the canonical pattern needed proof-of-life on ONE callsite first (`scoreHtml`). Now that it's shipped + verified, fanning out is mechanical copy-paste — but it's also 5 separate callsite edits with 5 separate client-function signature changes, which is bigger surface than the 0.11.2 hotfix wanted. The trigger to land this is either (a) the next user report of a stuck non-scoreHtml progress, OR (b) the next time the repo is open with appetite for a tight ~30 min cleanup pass — whichever comes first.
+
+**Related learnings:** [[feedback-multi-agent-for-shared-infra]] (the runCLI hardening already crosses the shared-infra threshold, but UI-level callsite changes are local), [[feedback-test-fixture-hides-bug]] (manual cancel-test required because automated tests mock `execFile` and won't catch real SIGTERM/SIGKILL behavior).
+
 ---
 
 ## 🚀 Phase 1 — Cross-surface capture + drift alerts  (now → ~4 weeks)
