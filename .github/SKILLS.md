@@ -69,6 +69,7 @@
 - **Activation gate** — premium tools check license before execution
 - **Offline grace** — 7-day window without heartbeat before lockout
 - **Delta modules** — premium code extracted, AES-encrypted per-machine, decrypted at runtime
+- **Dual doc-path resolution** — agent docs are scored wherever a project keeps them: `resolveDocPath()` in `src/agents.ts` checks `.github/` first (Copilot's official read path), repo root second. `contextengine init` writes `SKILLS.md` at the root, so a `.github/`-only lookup scores existing files as "Missing". LOCK `[DOC-PATH-DUAL]`, 7 tests in `tests/scoring.test.ts`.
 
 ## Key Learnings Applied
 - SSH keys with passphrases block CI/agent automation — use deploy scripts
@@ -78,6 +79,7 @@
 - Heredoc in zsh terminals can corrupt with special characters — use file-based approach
 - Stripe apiVersion must match SDK's `LatestApiVersion` type — check `node_modules/stripe/types/lib.d.ts`
 - Stripe webhook needs `express.raw()` registered BEFORE `express.json()` middleware
+- A scorer that hardcodes one path for a doc the tool itself writes elsewhere reports "Missing" for files that exist — and the fleet learns to hand-correct the report instead of fixing the scorer
 
 ## VS Code Extension (v0.4.1)
 - **Marketplace publishing** — `css-llc.contextengine` via Azure DevOps PAT + vsce CLI

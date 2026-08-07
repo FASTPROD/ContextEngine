@@ -184,6 +184,7 @@
 | `src/policy.ts` | 2026-06-10 | Declarative policy v1 schema + zod validator + disk loader (`[POLICY-CONTRACT]` LOCK) | 18 policy tests (acceptance, defaults, rejection, malformed JSON, disk) |
 | `src/hooks.ts` | 2026-06-10 | Policy-driven secret-scan + doc-coverage + redaction contract + git diff parser (`[HOOK-CHECKERS]` LOCK) | 25 hook tests (glob, scan, coverage, hashDocSection, formatters, live git) |
 | `src/sessions.ts` | 2026-03-03 | Session persistence: save/load/list/delete, auto-session inject on MCP startup | 16 session tests |
+| `src/agents.ts` | 2026-08-07 | Dual doc-path resolution for scoring — `copilot-instructions.md` / `SKILLS.md` are scored at `.github/` OR repo root (`[DOC-PATH-DUAL]` LOCK on `resolveDocPath`) | 7 scoring tests (both locations, precedence, missing, symlink) |
 
 ## AI Agent Rework Prevention Protocol
 1. **Check the LOCKED FILES table above before editing ANY `src/` file** — if the file is listed, DO NOT modify it unless the user explicitly requests a change to that specific file.
@@ -211,6 +212,7 @@
 | 10-min session save timer | v1.22.0 | Mar 2026 | `src/firewall.ts` | ✅ 5 tests, commit/push reminder |
 | Content-validated scoring (anti-gaming) | v1.23.0 | Mar 2026 | `src/agents.ts` | ✅ .env.example, .gitignore, CI/CD now validate content not just existence |
 | README marketing rewrite | v1.23.0 | Mar 2026 | `README.md`, `SKILLS.md` | ✅ New tagline, Why section, What it's NOT, tool count 19 |
+| Dual doc-path scoring (`.github/` OR repo root) | post-2.1.3 (unreleased) | Aug 2026 | `src/agents.ts`, `src/config.ts`, `tests/scoring.test.ts` | ✅ LOCKED `[DOC-PATH-DUAL]` — 7 tests. Do NOT re-hardcode `join(p, ".github", file)` |
 
 ## Critical Rules
 1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)
