@@ -105,6 +105,27 @@ function isSymlink(filePath: string): boolean {
 }
 
 /**
+ * Resolve an agent doc that may live in `.github/` or at the repo root.
+ * Returns the first location that exists (`.github/` wins), or null.
+ *
+ * 🔒 LOCKED [DOC-PATH-DUAL] — 2026-08-07
+ * ⛔ NEVER collapse a caller back to a single hardcoded join(p, ".github", file).
+ * WHY: the scorer read `.github/` only, while `contextengine init` writes SKILLS.md
+ *      at the repo root and the generated pre-commit hook accepts both. Every project
+ *      keeping these at root scored 0/10 + 0/3 for files that existed, so SCORE.md
+ *      rows had to be hand-corrected after every run (caught 2026-08-07 on this repo).
+ * FIX: score whichever location exists — `.github/` first (Copilot's official read
+ *      path), repo root second. Presence is what earns the points, not the directory.
+ */
+function resolveDocPath(projectPath: string, file: string): { path: string; rel: string } | null {
+  const inGithub = join(projectPath, ".github", file);
+  if (existsSync(inGithub)) return { path: inGithub, rel: `.github/${file}` };
+  const atRoot = join(projectPath, file);
+  if (existsSync(atRoot)) return { path: atRoot, rel: file };
+  return null;
+}
+
+/**
  * Check if an ESLint config is actually backed by installed packages.
  * Returns true if at least `eslint` itself is installed in node_modules.
  */
@@ -1083,23 +1104,24 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
 
   // --- Documentation (30 points max) ---
 
-  // copilot-instructions.md (10 pts)
-  const copilotPath = join(p, ".github", "copilot-instructions.md");
-  if (existsSync(copilotPath)) {
-    const copilotIsSymlink = isSymlink(copilotPath);
-    const content = readFileSync(copilotPath, "utf-8");
+  // copilot-instructions.md (10 pts) — .github/ or repo root, see resolveDocPath LOCK
+  const copilot = resolveDocPath(p, "copilot-instructions.md");
+  if (copilot) {
+    const copilotIsSymlink = isSymlink(copilot.path);
+    const content = readFileSync(copilot.path, "utf-8");
     const lines = content.split("\n").length;
+    const at = `${lines} lines (${copilot.rel})`;
     if (copilotIsSymlink) {
-      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 4, maxPoints: 10, status: "partial", detail: `⚠ Symlink (${lines} lines) — should be a real file with project-specific context` });
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 4, maxPoints: 10, status: "partial", detail: `⚠ Symlink — ${at} — should be a real file with project-specific context` });
     } else if (lines > 50) {
-      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 10, maxPoints: 10, status: "pass", detail: `${lines} lines — comprehensive` });
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 10, maxPoints: 10, status: "pass", detail: `${at} — comprehensive` });
     } else if (lines > 15) {
-      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 6, maxPoints: 10, status: "partial", detail: `${lines} lines — could be more detailed` });
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 6, maxPoints: 10, status: "partial", detail: `${at} — could be more detailed` });
     } else {
-      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 3, maxPoints: 10, status: "partial", detail: `${lines} lines — too sparse, add architecture, rules, key files` });
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 3, maxPoints: 10, status: "partial", detail: `${at} — too sparse, add architecture, rules, key files` });
     }
   } else {
-    checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 0, maxPoints: 10, status: "fail", detail: "Missing — AI agents lack project context" });
+    checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 0, maxPoints: 10, status: "fail", detail: "Missing from .github/ and repo root — AI agents lack project context" });
   }
 
   // README.md (8 pts)
@@ -1134,18 +1156,18 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 0, maxPoints: 6, status: "fail", detail: "No CLAUDE.md, .cursorrules, or AGENTS.md" });
   }
 
-  // .github/SKILLS.md (3 pts)
-  const skillsPath = join(p, ".github", "SKILLS.md");
-  if (existsSync(skillsPath)) {
-    const skillsContent = readFileSync(skillsPath, "utf-8");
+  // SKILLS.md (3 pts) — .github/ or repo root, see resolveDocPath LOCK
+  const skills = resolveDocPath(p, "SKILLS.md");
+  if (skills) {
+    const skillsContent = readFileSync(skills.path, "utf-8");
     const skillsLines = skillsContent.split("\n").length;
-    if (skillsLines > 10 && !isSymlink(skillsPath)) {
-      checks.push({ name: "SKILLS.md", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: `${skillsLines} lines` });
+    if (skillsLines > 10 && !isSymlink(skills.path)) {
+      checks.push({ name: "SKILLS.md", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: `${skillsLines} lines (${skills.rel})` });
     } else {
-      checks.push({ name: "SKILLS.md", category: "Documentation", points: 1, maxPoints: 3, status: "partial", detail: `${skillsLines} lines${isSymlink(skillsPath) ? " (symlink)" : ""} — add real skill descriptions` });
+      checks.push({ name: "SKILLS.md", category: "Documentation", points: 1, maxPoints: 3, status: "partial", detail: `${skillsLines} lines (${skills.rel})${isSymlink(skills.path) ? " — symlink" : ""} — add real skill descriptions` });
     }
   } else {
-    checks.push({ name: "SKILLS.md", category: "Documentation", points: 0, maxPoints: 3, status: "fail", detail: "Missing — agents can't discover capabilities" });
+    checks.push({ name: "SKILLS.md", category: "Documentation", points: 0, maxPoints: 3, status: "fail", detail: "Missing from .github/ and repo root — agents can't discover capabilities" });
   }
 
   // .env.example (3 pts) — validates actual content, not just existence

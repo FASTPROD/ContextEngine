@@ -63,6 +63,8 @@ const DEFAULT_PATTERNS = [
   ".github/copilot-instructions.md",
   ".github/instructions/copilot-instructions.md",
   ".github/SKILLS.md",
+  "SKILLS.md", // `contextengine init` writes SKILLS.md at the repo root — index both
+
   // Claude Code
   "CLAUDE.md",
   // Cursor
