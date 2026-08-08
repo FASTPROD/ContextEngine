@@ -80,6 +80,7 @@
 - Stripe apiVersion must match SDK's `LatestApiVersion` type — check `node_modules/stripe/types/lib.d.ts`
 - Stripe webhook needs `express.raw()` registered BEFORE `express.json()` middleware
 - A scorer that hardcodes one path for a doc the tool itself writes elsewhere reports "Missing" for files that exist — and the fleet learns to hand-correct the report instead of fixing the scorer
+- Scoping a commit is not scoping a push: `git push` publishes every commit the branch has ahead of origin, so a carefully single-file commit can still publish unrelated work (2026-08-08, `shop.invoc.io`). In this workspace `.git/hooks/post-commit` already auto-pushes — commit and stop
 
 ## VS Code Extension (v0.4.1)
 - **Marketplace publishing** — `css-llc.contextengine` via Azure DevOps PAT + vsce CLI
