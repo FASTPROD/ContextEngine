@@ -13,8 +13,14 @@ function run(args: string, timeout = 15000): string {
       cwd: join(__dirname, ".."),
     }).trim();
   } catch (e: any) {
-    // Some commands exit non-zero intentionally
-    return (e.stdout || "").trim() + "\n" + (e.stderr || "").trim();
+    // 🔒 [EXEC-FAILURE-IS-NOT-EMPTY] — a timeout or crash must NOT masquerade as empty output.
+    // This previously returned "" for a killed process, so a 15s timeout under parallel suite load
+    // surfaced as the useless assertion "expected 0 to be greater than 0" instead of "SIGTERM".
+    // Some commands exit non-zero intentionally, so non-empty output is still a valid result.
+    const output = ((e.stdout || "") + "\n" + (e.stderr || "")).trim();
+    if (output) return output;
+    const cause = e.signal ? `killed by ${e.signal}` : e.code !== undefined ? `exit code ${e.code}` : "unknown failure";
+    throw new Error(`\`${args}\` produced no output at all (${cause}, timeout ${timeout}ms): ${e.message}`);
   }
 }
 
@@ -26,7 +32,9 @@ describe("CLI smoke tests", () => {
   });
 
   it("search returns results for common query", () => {
-    const output = run('search "typescript"');
+    // 60s, not the 15s default: search loads the local all-MiniLM-L6-v2 embedding model, which on a
+    // cold cache and under parallel suite load legitimately exceeds 15s. Standalone it runs in ~2s.
+    const output = run('search "typescript"', 60_000);
     // Should either return results or a "no results" message — not crash
     expect(typeof output).toBe("string");
     expect(output.length).toBeGreaterThan(0);
