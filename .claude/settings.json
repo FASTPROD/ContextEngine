@@ -13,7 +13,16 @@
       "Bash(npm pack *)",
       "Bash(node -p \"JSON.stringify\\(require\\('./package.json'\\).files\\)\")",
       "Bash(tar xzf *)",
-      "Bash(git tag *)"
+      "Bash(git tag *)",
+      "Bash(npm publish *)",
+      "Bash(GIT_TRACE_PACKET=0 git -C /Users/yan/FASTPROD push gdrive main)",
+      "Bash(git '--git-dir=/Users/yan/Library/CloudStorage/GoogleDrive-yannick@compr.ch/My Drive/CTRL/FP.git' cat-file -t b0741b95b9f33822a6cae0629a01281f0fc7f682)",
+      "Bash(git -C /Users/yan/FASTPROD cat-file -t b0741b95b9f33822a6cae0629a01281f0fc7f682)",
+      "Bash(git -C /Users/yan/FASTPROD cat-file -t 72d6eceb9b896956c4b32abab4c8615e38dcb6df)",
+      "Bash(git -C /Users/yan/FASTPROD rev-list --count b0741b95b9f33822a6cae0629a01281f0fc7f682..HEAD)",
+      "Bash(rm '/Users/yan/Library/CloudStorage/GoogleDrive-yannick@compr.ch/My Drive/CTRL/FP.git/refs/heads/main')",
+      "Bash(git '--git-dir=/Users/yan/Library/CloudStorage/GoogleDrive-yannick@compr.ch/My Drive/CTRL/FP.git' rev-parse refs/heads/main)",
+      "Bash(git -C /Users/yan/FASTPROD push gdrive main)"
     ]
   },
   "hooks": {
