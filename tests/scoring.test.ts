@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, symlinkSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { scoreProject } from "../src/agents.js";
+import { scoreProject, runScoreCanary } from "../src/agents.js";
 
 let tempRepo: string;
 
@@ -93,6 +93,109 @@ describe("scoreProject — agent docs resolve at .github/ OR repo root", () => {
     expect(skills.detail).toContain("repo root");
   });
 
+  it("reports a DANGLING post-commit symlink as broken, not as 'no hooks'", () => {
+    // The 2026-06-10 incident: .git/hooks/post-commit -> ../../hooks/post-commit, target deleted.
+    // existsSync() follows symlinks, so this used to be indistinguishable from "never configured".
+    mkdirSync(join(tempRepo, ".git", "hooks"), { recursive: true });
+    symlinkSync(join(tempRepo, "hooks", "post-commit"), join(tempRepo, ".git", "hooks", "post-commit"));
+
+    const c = check("Git hooks", tempRepo);
+    expect(c.status).toBe("fail");
+    expect(c.detail).toContain("BROKEN");
+    expect(c.detail).toContain("dangling symlink");
+    // Must NOT tell the user to set up a hook they already have
+    expect(c.detail).not.toContain("No post-commit hook");
+  });
+
+  it("reports a working post-commit hook as pass, naming where it found it", () => {
+    mkdirSync(join(tempRepo, ".git", "hooks"), { recursive: true });
+    writeFileSync(join(tempRepo, ".git", "hooks", "post-commit"), "#!/bin/sh\ntrue\n", "utf-8");
+
+    const c = check("Git hooks", tempRepo);
+    expect(c.status).toBe("pass");
+    expect(c.detail).toContain(".git/hooks/post-commit");
+  });
+
+  it("distinguishes 'no hook' from 'broken hook'", () => {
+    const c = check("Git hooks", tempRepo);
+    expect(c.status).toBe("fail");
+    expect(c.detail).toContain("No post-commit hook");
+    expect(c.detail).not.toContain("BROKEN");
+  });
+});
+
+describe("scoreProject — absence is not a verdict", () => {
+  it("marks .env-without-git as unknown instead of awarding a 6/6 pass", () => {
+    writeFileSync(join(tempRepo, ".env"), "SECRET=x\n", "utf-8"); // no .git/ anywhere
+
+    const c = check("Secrets exposure", tempRepo);
+    expect(c.status).toBe("unknown");
+    expect(c.points).toBe(0);
+    expect(c.detail).toContain("cannot verify");
+  });
+
+  it("still passes cleanly when there is genuinely no .env", () => {
+    const c = check("Secrets exposure", tempRepo);
+    expect(c.status).toBe("pass");
+    expect(c.points).toBe(6);
+    expect(c.detail).toContain("No .env");
+  });
+
+  it("pins the denominator to 100 and surfaces skipped checks as a visible gap", () => {
+    // A project with no .gitignore never emits the "Deps gitignored" check, which used to
+    // shrink maxScore to 97 and silently rescale the percentage.
+    const score = scoreProject({ name: "fixture", path: tempRepo } as never);
+    expect(score.maxScore).toBe(100);
+
+    const gap = score.checks.find(c => c.name === "Scoring completeness");
+    expect(gap).toBeDefined();
+    expect(gap!.status).toBe("unknown");
+    expect(gap!.points).toBe(0);
+    expect(score.checks.reduce((s, c) => s + c.maxPoints, 0)).toBe(100);
+  });
+
+  it("emits no completeness gap when every check can run", () => {
+    // Every conditionally-emitted check needs its precondition: .gitignore gates "Deps gitignored",
+    // package.json gates "npm scripts", and a lockfile gates "Lockfile".
+    writeFileSync(join(tempRepo, ".gitignore"), ".env\nnode_modules\ndist\n", "utf-8");
+    writeFileSync(join(tempRepo, "package.json"), JSON.stringify({ scripts: { build: "tsc", test: "vitest" } }), "utf-8");
+    writeFileSync(join(tempRepo, "package-lock.json"), "{}", "utf-8");
+
+    const score = scoreProject({ name: "fixture", path: tempRepo } as never);
+
+    expect(score.checks.find(c => c.name === "Scoring completeness")).toBeUndefined();
+    expect(score.checks.reduce((s, c) => s + c.maxPoints, 0)).toBe(100);
+    expect(score.maxScore).toBe(100);
+  });
+
+  it("names the unassessable points rather than shrinking the denominator", () => {
+    // A non-JS project cannot be scored on npm scripts or a lockfile. The old behaviour scored it
+    // out of 94 and printed a percentage as if it were out of 100.
+    const score = scoreProject({ name: "fixture", path: tempRepo } as never);
+    const gap = score.checks.find(c => c.name === "Scoring completeness")!;
+
+    expect(gap.maxPoints).toBe(9); // npm scripts (3) + Lockfile (3) + Deps gitignored (3)
+    expect(score.maxScore).toBe(100);
+    expect(score.percentage).toBe(Math.round((score.score / 100) * 100));
+  });
+});
+
+describe("runScoreCanary", () => {
+  it("passes against the current scorer", () => {
+    const r = runScoreCanary();
+    expect(r.inconclusive).toBe(false);
+    expect(r.deviations).toEqual([]);
+    expect(r.ok).toBe(true);
+  });
+
+  it("cleans up its temp fixture", () => {
+    // Two consecutive runs must not accumulate state or interfere.
+    expect(runScoreCanary().ok).toBe(true);
+    expect(runScoreCanary().ok).toBe(true);
+  });
+});
+
+describe("scoreProject — doc path resolution, continued", () => {
   it("still penalizes a root-located symlink the same as a .github/ one", () => {
     writeDoc(join(tempRepo, "real-instructions.md"), 60);
     symlinkSync(join(tempRepo, "real-instructions.md"), join(tempRepo, "copilot-instructions.md"));

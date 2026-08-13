@@ -560,6 +560,7 @@ import {
   formatPortMap,
   formatPlan,
   scoreProject,
+  runScoreCanary,
   formatScoreReport,
   generateScoreHTML,
   generateProjectScoreMD,
@@ -820,6 +821,22 @@ async function cliDeleteLearning(id: string): Promise<void> {
 async function cliScore(project?: string, html = false, save = true): Promise<void> {
   const gate = gateCheck("score_project");
   if (gate) { console.error(gate); process.exit(1); }
+
+  // [SCORE-CANARY] — every health signal must read exactly as pinned before we are allowed to
+  // write a single SCORE.md. A drifting scorer that silently rewrites 37 reports is the failure
+  // this blocks; it does not test for one known bug, it refuses to proceed on ANY deviation.
+  const canary = runScoreCanary();
+  if (!canary.ok) {
+    console.error("\n🚨 Scoring canary FAILED — refusing to write any SCORE.md.\n");
+    for (const d of canary.deviations) console.error(`   • ${d}`);
+    console.error(
+      canary.inconclusive
+        ? "\nThe canary fixture could not be built, so the scorer is unverified. This is an unknown, not a pass.\n"
+        : "\nThe scorer no longer behaves as pinned. Fix the deviation or update the pin deliberately.\n"
+    );
+    process.exit(1);
+  }
+
   const projectDirs = loadProjectDirs();
 
   let scores: ProjectScore[];

@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(node -e ' *)",
+      "Bash(git --git-dir=\"/Users/yan/Library/CloudStorage/GoogleDrive-yannick@compr.ch/My Drive/CTRL/ContextEngine.git\" log --oneline -1)",
+      "Bash(perl -0pi -e 's/const icon = c\\\\.status === \"pass\" \\\\? \"✅\" : c\\\\.status === \"partial\" \\\\? \"🟡\" : \"❌\";/const icon = statusIcon\\(c.status\\);/g' src/agents.ts)",
+      "Bash(npx . score ContextEngine)",
+      "mcp__contextengine__save_learning"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {

@@ -1,0 +1,40 @@
+#!/bin/sh
+# 🔒 LOCKED [GDRIVE_REF_SELFHEAL] — 2026-07-13
+# ⛔ NEVER remove this block — Drive sync creates "<branch> 2" duplicate ref files that silently break every backup push
+# WHY: 12 CTRL bare repos had stray refs on 2026-07-13; INVOQ.me backup was silently stuck since April 21
+# FIX: delete Drive-conflict ref duplicates in the bare repo before pushing
+GDRIVE_DIR=$(git remote get-url gdrive 2>/dev/null)
+if [ -n "$GDRIVE_DIR" ] && [ -d "$GDRIVE_DIR/refs" ]; then
+  find "$GDRIVE_DIR/refs" -name "* [0-9]" -delete 2>/dev/null
+fi
+
+# 🔒 LOCKED [POST_COMMIT_REAL_FILE] — 2026-08-13
+# ⛔ NEVER install this as a symlink from .git/hooks/post-commit into the repo's hooks/ dir.
+# WHY: it WAS a symlink (.git/hooks/post-commit -> ../../hooks/post-commit). Commit 56ef658
+#      (2026-06-10, "chore(hygiene): cleanup pass") deleted the tracked target. existsSync()
+#      follows symlinks, so a dangling link is indistinguishable from "no hook" — the auto-push
+#      stopped silently and CE's own scorer reported it as "No hooks — consider auto-push",
+#      pointing at the wrong fix. The Drive backup drifted 4 commits before anyone noticed.
+# FIX: .git/hooks/post-commit is a REAL FILE (copy this one in). This tracked copy is the
+#      reference that ships with the repo, matching hooks/pre-commit and hooks/commit-msg.
+
+# Auto-push to all remotes after every commit
+# Created: February 5, 2026 | Updated: August 13, 2026
+# Fixes: detached HEAD guard, portable shebang, Drive duplicate-ref self-heal
+
+# Skip push if in detached HEAD state (rebase, bisect, checkout SHA)
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ -z "$BRANCH" ]; then
+  echo "⏭️  Detached HEAD — skipping auto-push"
+  exit 0
+fi
+
+echo "🚀 Auto-pushing $BRANCH to remotes..."
+
+# Push to GitHub (primary)
+git push origin "$BRANCH" && echo "✅ origin (GitHub)" || echo "❌ origin FAILED"
+
+# Push to Google Drive (backup)
+git push gdrive "$BRANCH" && echo "✅ gdrive (Drive backup)" || echo "❌ gdrive FAILED"
+
+echo "📦 Done!"

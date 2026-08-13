@@ -1,7 +1,7 @@
 import { execSync } from "child_process";
-import { readFileSync, existsSync, readdirSync, statSync, lstatSync } from "fs";
+import { readFileSync, existsSync, readdirSync, statSync, lstatSync, readlinkSync, mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "fs";
 import { resolve, join, basename, dirname } from "path";
-import { homedir } from "os";
+import { homedir, tmpdir } from "os";
 import { fileURLToPath } from "url";
 import type { ProjectDirectory } from "./config.js";
 
@@ -81,15 +81,34 @@ export interface AuditPlan {
 // ---------------------------------------------------------------------------
 
 function exec(cmd: string, cwd?: string): string {
+  return execChecked(cmd, cwd).output;
+}
+
+/**
+ * exec() that distinguishes "ran, produced nothing" from "did not run".
+ *
+ * 🔒 LOCKED [EXEC-FAILURE-IS-NOT-EMPTY] — 2026-08-13
+ * ⛔ NEVER let a caller treat exec()'s "" as a factual answer for a check that can FAIL SAFE.
+ * WHY: exec() returns "" for every failure mode — command not found, not a git repo, timeout,
+ *      permission denied — indistinguishable from a successful empty result. The `Secrets exposure`
+ *      check read `git ls-files .env` → "" as ".env is not tracked" and awarded a full 6/6 PASS.
+ *      A security check that hands out full marks precisely when it cannot run is worse than one
+ *      that fails: it manufactures reassurance. Found by [SCORE-CANARY] on its first run, against
+ *      a fixture with a .git directory that is not a real repository.
+ * FIX: security- and correctness-relevant callers use execChecked() and emit "unknown" when
+ *      ok === false. Absence of output is a measurement, not a decision.
+ */
+function execChecked(cmd: string, cwd?: string): { ok: boolean; output: string } {
   try {
-    return execSync(cmd, {
+    const output = execSync(cmd, {
       cwd,
       encoding: "utf-8",
       timeout: 10_000,
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
+    return { ok: true, output };
   } catch {
-    return "";
+    return { ok: false, output: "" };
   }
 }
 
@@ -101,6 +120,27 @@ function isSymlink(filePath: string): boolean {
     return lstatSync(filePath).isSymbolicLink();
   } catch {
     return false;
+  }
+}
+
+/**
+ * Status icon for a score check. "unknown" is ❔ — the check could not determine its
+ * condition, which is a gap in the audit, not a verdict on the project.
+ * See [ABSENCE-IS-NOT-A-VERDICT].
+ */
+function statusIcon(status: ScoreCheck["status"]): string {
+  if (status === "pass") return "✅";
+  if (status === "partial") return "🟡";
+  if (status === "unknown") return "❔";
+  return "❌";
+}
+
+/** Symlink target for diagnostics, or "?" if unreadable. Never throws. */
+function readlinkSafe(filePath: string): string {
+  try {
+    return readlinkSync(filePath);
+  } catch {
+    return "?";
   }
 }
 
@@ -1080,9 +1120,28 @@ export interface ScoreCheck {
   category: string;
   points: number;
   maxPoints: number;
-  status: "pass" | "partial" | "fail";
+  status: "pass" | "partial" | "fail" | "unknown";
   detail: string;
 }
+
+/**
+ * 🔒 LOCKED [ABSENCE-IS-NOT-A-VERDICT] — 2026-08-13
+ * ⛔ NEVER emit "pass" or "fail" for a condition the check could not actually determine,
+ *    and NEVER write a detail string that hides WHICH locations were inspected.
+ * WHY: three live bugs, all the same shape — the scorer wrote *absence of evidence* down as
+ *      a *verdict*, and the verdict pointed at the wrong fix.
+ *      1. `copilot-instructions.md`/`SKILLS.md` looked only in .github/ and reported files that
+ *         existed at the repo root as "Missing" (fixed ffa5914, [DOC-PATH-DUAL]).
+ *      2. `Git hooks` reported "No hooks — consider auto-push" for a hook that WAS installed but
+ *         whose symlink target had been deleted. existsSync() follows symlinks, so dangling and
+ *         absent are indistinguishable. CE's own Drive backup drifted while the row said
+ *         "consider auto-push" — advice for a problem the repo did not have.
+ *      3. `Secrets exposure` awarded a full 6/6 PASS with the detail "No .env or not a git repo" —
+ *         full marks for a state it openly could not distinguish.
+ * FIX: a check that cannot determine its condition emits status "unknown" (0 points, rendered ❔,
+ *      excluded from the remediation list — it is a gap in the CHECK, not in the project). Every
+ *      pass/fail detail must name what was inspected. Absence is a measurement, not a decision.
+ */
 
 export interface ProjectScore {
   project: string;
@@ -1092,6 +1151,89 @@ export interface ProjectScore {
   percentage: number;
   grade: string; // A+ to F
   checks: ScoreCheck[];
+}
+
+export interface CanaryResult {
+  ok: boolean;
+  /** Human-readable deviations from the pinned expectation. Empty when ok. */
+  deviations: string[];
+  /** True when the canary itself could not be built — an unknown, not a failure. */
+  inconclusive: boolean;
+}
+
+/**
+ * 🔒 LOCKED [SCORE-CANARY] — 2026-08-13
+ * ⛔ NEVER weaken this to "test one known bug", and never let a deviation be a warning only.
+ * WHY: every guard in this file was written AFTER the failure it prevents — the doc-path bug, the
+ *      dangling-hook bug, the shrinking-denominator bug. A wall of named guards is a museum of past
+ *      mistakes: valuable, but it does nothing about the next one. The canary is the only check here
+ *      that can catch a failure nobody predicted, because it does not test for a specific defect —
+ *      it demands that EVERY health signal still reads exactly as pinned before the scorer is
+ *      allowed to write a single file.
+ * FIX: build a synthetic project whose every awkward case is represented (doc at repo root, doc in
+ *      .github/, dangling hook symlink, .env with no git, no package manager), score it, and compare
+ *      against the pinned expectation. Any drift blocks the run. If the fixture cannot be built at
+ *      all, that is `inconclusive` — an unknown, per [ABSENCE-IS-NOT-A-VERDICT] — and must not be
+ *      silently treated as a pass.
+ *
+ * Runs in production on every scoring run, not just in CI. Costs a few milliseconds.
+ */
+/**
+ * True while the canary fixture is being scored. The fixture deliberately leaves 9 points
+ * unassessable (no package manager, no .gitignore), so its invariant log line is EXPECTED —
+ * printing it on every run would train the reader to ignore the warning that matters.
+ */
+let canaryRunning = false;
+
+export function runScoreCanary(): CanaryResult {
+  let dir: string | null = null;
+  canaryRunning = true;
+  try {
+    dir = mkdtempSync(join(tmpdir(), "ce-canary-"));
+
+    // Deliberately awkward, all legal, each one a past or plausible failure:
+    mkdirSync(join(dir, ".github"), { recursive: true });
+    // doc in .github/ — 60 lines, should score the full 10
+    writeFileSync(join(dir, ".github", "copilot-instructions.md"), Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join("\n"));
+    // doc at repo ROOT — the [DOC-PATH-DUAL] case, should score the full 3
+    writeFileSync(join(dir, "SKILLS.md"), Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n"));
+    // hook installed but BROKEN — the 2026-06-10 case, must read as fail-broken not fail-absent
+    mkdirSync(join(dir, ".git", "hooks"), { recursive: true });
+    symlinkSync(join(dir, "hooks", "post-commit"), join(dir, ".git", "hooks", "post-commit"));
+    // .env with no git repo — unverifiable, must be `unknown` and must NOT collect points
+    writeFileSync(join(dir, ".env"), "SECRET=canary\n");
+
+    const score = scoreProject({ name: "ce-canary", path: dir } as ProjectDirectory);
+    const by = (n: string) => score.checks.find(c => c.name === n);
+    const deviations: string[] = [];
+
+    const expect = (label: string, actual: unknown, wanted: unknown) => {
+      if (actual !== wanted) deviations.push(`${label}: expected ${JSON.stringify(wanted)}, got ${JSON.stringify(actual)}`);
+    };
+
+    expect("copilot-instructions.md points", by("copilot-instructions.md")?.points, 10);
+    expect("SKILLS.md points (repo root)", by("SKILLS.md")?.points, 3);
+    expect("Git hooks status", by("Git hooks")?.status, "fail");
+    expect("Git hooks names the break", by("Git hooks")?.detail.includes("BROKEN"), true);
+    expect("Secrets exposure status", by("Secrets exposure")?.status, "unknown");
+    expect("Secrets exposure points", by("Secrets exposure")?.points, 0);
+    expect("denominator pinned to 100", score.maxScore, 100);
+    expect("maxPoints sum to 100", score.checks.reduce((s, c) => s + c.maxPoints, 0), 100);
+    expect("percentage matches score/100", score.percentage, Math.round(score.score));
+
+    return { ok: deviations.length === 0, deviations, inconclusive: false };
+  } catch (err) {
+    return {
+      ok: false,
+      inconclusive: true,
+      deviations: [`canary fixture could not be built: ${err instanceof Error ? err.message : String(err)}`],
+    };
+  } finally {
+    canaryRunning = false;
+    if (dir) {
+      try { rmSync(dir, { recursive: true, force: true }); } catch { /* temp dir cleanup is best-effort */ }
+    }
+  }
 }
 
 /**
@@ -1210,14 +1352,20 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     checks.push({ name: ".gitignore", category: "Infrastructure", points: 0, maxPoints: 3, status: "fail", detail: "Missing" });
   }
 
-  // Git hooks (5 pts)
-  const hookDir = join(p, "hooks");
-  const gitHookDir = join(p, ".git", "hooks");
-  const hasPostCommit = existsSync(join(hookDir, "post-commit")) || existsSync(join(gitHookDir, "post-commit"));
-  if (hasPostCommit) {
-    checks.push({ name: "Git hooks", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "post-commit hook configured" });
+  // Git hooks (5 pts) — see [ABSENCE-IS-NOT-A-VERDICT]: "installed but broken" is not "not installed"
+  const repoHook = join(p, "hooks", "post-commit");
+  const gitHook = join(p, ".git", "hooks", "post-commit");
+  // existsSync() follows symlinks — a dangling link reads as absent. Check the link itself first.
+  const dangling = [repoHook, gitHook].filter(h => isSymlink(h) && !existsSync(h));
+  const live = [repoHook, gitHook].filter(h => existsSync(h));
+  if (live.length > 0) {
+    const where = live.map(h => h === gitHook ? ".git/hooks/post-commit" : "hooks/post-commit").join(" + ");
+    checks.push({ name: "Git hooks", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: `post-commit hook configured (${where})` });
+  } else if (dangling.length > 0) {
+    const broken = dangling.map(h => `${h === gitHook ? ".git/hooks" : "hooks"}/post-commit → ${readlinkSafe(h)}`).join(", ");
+    checks.push({ name: "Git hooks", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: `⚠ Hook installed but BROKEN — dangling symlink: ${broken}. Auto-push is silently dead; restore the target, don't re-install` });
   } else {
-    checks.push({ name: "Git hooks", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "No hooks — consider auto-push" });
+    checks.push({ name: "Git hooks", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "No post-commit hook at hooks/ or .git/hooks/ — consider auto-push" });
   }
 
   // Docker / containerization (5 pts)
@@ -1420,15 +1568,24 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   }
 
   // No secrets in tracked files (6 pts)
-  if (existsSync(join(p, ".env")) && existsSync(join(p, ".git"))) {
-    const tracked = exec("git ls-files .env", p);
-    if (tracked === ".env") {
+  // [ABSENCE-IS-NOT-A-VERDICT]: "no .env" and "can't run git here" are different states.
+  // The second is unverifiable and must NOT collect a 6/6 pass.
+  const hasEnv = existsSync(join(p, ".env"));
+  const hasGit = existsSync(join(p, ".git"));
+  if (hasEnv && hasGit) {
+    // [EXEC-FAILURE-IS-NOT-EMPTY]: a failed `git ls-files` must never read as "not tracked".
+    const { ok, output: tracked } = execChecked("git ls-files .env", p);
+    if (!ok) {
+      checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 6, status: "unknown", detail: "❔ .env present but `git ls-files` failed here — cannot verify whether it is tracked" });
+    } else if (tracked === ".env") {
       checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 6, status: "fail", detail: ".env is tracked by git!" });
     } else {
-      checks.push({ name: "Secrets exposure", category: "Security", points: 6, maxPoints: 6, status: "pass", detail: ".env not tracked" });
+      checks.push({ name: "Secrets exposure", category: "Security", points: 6, maxPoints: 6, status: "pass", detail: ".env present and not tracked by git" });
     }
+  } else if (!hasEnv) {
+    checks.push({ name: "Secrets exposure", category: "Security", points: 6, maxPoints: 6, status: "pass", detail: "No .env at repo root — nothing to leak" });
   } else {
-    checks.push({ name: "Secrets exposure", category: "Security", points: 6, maxPoints: 6, status: "pass", detail: "No .env or not a git repo" });
+    checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 6, status: "unknown", detail: "❔ .env exists but this is not a git repo — cannot verify whether it is tracked" });
   }
 
   // Lockfile present (3 pts)
@@ -1453,8 +1610,41 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   }
 
   // --- Calculate totals ---
+  // 🔒 LOCKED [SCORE-ARITHMETIC-INVARIANT] — 2026-08-13
+  // ⛔ NEVER compute the percentage against a summed maxScore without checking it equals 100 first.
+  // WHY: several checks only push a result inside an `if` (e.g. "Deps gitignored" is skipped
+  //      entirely when a project has no .gitignore). A skipped check silently SHRANK the
+  //      denominator, so a project got a percentage out of 97 while every report — and every
+  //      cross-project comparison — presented it as if it were out of 100. Nothing was wrong on
+  //      screen; the number was just quietly measuring something else. A missing check is an
+  //      unknown, not a smaller exam.
+  // FIX: the denominator is pinned to EXPECTED_MAX_SCORE. Any shortfall becomes a visible
+  //      "Scoring completeness" unknown row worth the missing points, and is logged to stderr
+  //      (never stdout — MCP protocol stream). Exact, free, unarguable, runs every time.
+  const EXPECTED_MAX_SCORE = 100;
   const totalScore = checks.reduce((sum, c) => sum + c.points, 0);
-  const maxScore = checks.reduce((sum, c) => sum + c.maxPoints, 0);
+  const emittedMax = checks.reduce((sum, c) => sum + c.maxPoints, 0);
+
+  if (emittedMax !== EXPECTED_MAX_SCORE) {
+    const gap = EXPECTED_MAX_SCORE - emittedMax;
+    if (!canaryRunning) {
+      console.error(
+        `[contextengine] ⚠ scoring invariant: ${dir.name} emitted ${emittedMax}/${EXPECTED_MAX_SCORE} max points (${gap > 0 ? "missing" : "excess"} ${Math.abs(gap)}) — see the "Could Not Be Verified" section`
+      );
+    }
+    if (gap > 0) {
+      checks.push({
+        name: "Scoring completeness",
+        category: "Meta",
+        points: 0,
+        maxPoints: gap,
+        status: "unknown",
+        detail: `❔ ${gap} point(s) never assessed — a check did not run for this project. Scored against the full ${EXPECTED_MAX_SCORE}, so this is a gap in the audit, not a penalty you can fix`,
+      });
+    }
+  }
+
+  const maxScore = Math.max(EXPECTED_MAX_SCORE, emittedMax);
   const percentage = Math.round((totalScore / maxScore) * 100);
 
   let grade: string;
@@ -1535,7 +1725,7 @@ export function formatScoreReport(scores: ProjectScore[]): string {
     lines.push("| Check | Category | Score | Status | Detail |");
     lines.push("|-------|----------|-------|--------|--------|");
     for (const c of s.checks) {
-      const icon = c.status === "pass" ? "✅" : c.status === "partial" ? "🟡" : "❌";
+      const icon = statusIcon(c.status);
       lines.push(`| ${c.name} | ${c.category} | ${c.points}/${c.maxPoints} | ${icon} | ${c.detail} |`);
     }
     lines.push("");
@@ -1584,7 +1774,7 @@ export function generateProjectScoreMD(score: ProjectScore): string {
   lines.push("| Check | Category | Score | Max | Status | Detail |");
   lines.push("|---|---|---|---|---|---|");
   for (const c of score.checks) {
-    const icon = c.status === "pass" ? "✅" : c.status === "partial" ? "🟡" : "❌";
+    const icon = statusIcon(c.status);
     lines.push(`| ${c.name} | ${c.category} | ${c.points} | ${c.maxPoints} | ${icon} | ${c.detail} |`);
   }
 
@@ -1598,6 +1788,17 @@ export function generateProjectScoreMD(score: ProjectScore): string {
     }
     for (const p of partials) {
       lines.push(`- 🟡 **${p.name}**: ${p.detail}`);
+    }
+  }
+
+  // Unverifiable — kept OUT of "Improvements Needed" on purpose. These are checks that could not
+  // reach a verdict; listing them as project failures is what [ABSENCE-IS-NOT-A-VERDICT] forbids.
+  const unknowns = score.checks.filter(c => c.status === "unknown");
+  if (unknowns.length > 0) {
+    lines.push("\n## Could Not Be Verified\n");
+    lines.push("_Gaps in the audit, not defects in the project — the scorer could not determine these._\n");
+    for (const u of unknowns) {
+      lines.push(`- ❔ **${u.name}**: ${u.detail}`);
     }
   }
 
@@ -1621,11 +1822,8 @@ export function generateScoreHTML(scores: ProjectScore[]): string {
     return "#ef4444";
   }
 
-  function statusIcon(status: string): string {
-    if (status === "pass") return "✅";
-    if (status === "partial") return "🟡";
-    return "❌";
-  }
+  // statusIcon is module-level — see [ABSENCE-IS-NOT-A-VERDICT]. A local copy here previously
+  // rendered "unknown" as ❌, which is the exact conflation this work removed.
 
   function categoryByScore(checks: ScoreCheck[]): Map<string, { pts: number; max: number }> {
     const m = new Map<string, { pts: number; max: number }>();
