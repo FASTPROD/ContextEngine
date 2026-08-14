@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src/",
-    "prepublishOnly": "node scripts/check-npm-token-expiry.mjs && npm run build",
+    "prepublishOnly": "node scripts/check-npm-token-expiry.mjs && npm run build && node scripts/obfuscate-rubric.mjs",
     "check-token": "node scripts/check-npm-token-expiry.mjs"
   },
   "keywords": [

@@ -24,7 +24,8 @@
       "Bash(git '--git-dir=/Users/yan/Library/CloudStorage/GoogleDrive-yannick@compr.ch/My Drive/CTRL/FP.git' rev-parse refs/heads/main)",
       "Bash(git -C /Users/yan/FASTPROD push gdrive main)",
       "Bash(npm view *)",
-      "Bash(npm whoami *)"
+      "Bash(npm whoami *)",
+      "Bash(node scripts/obfuscate-rubric.mjs)"
     ]
   },
   "hooks": {

@@ -4,6 +4,7 @@ import { resolve, join, basename, dirname } from "path";
 import { homedir, tmpdir } from "os";
 import { fileURLToPath } from "url";
 import type { ProjectDirectory } from "./config.js";
+import { RUBRIC } from "./rubric.js";
 
 // Read version from package.json at module load
 const __agents_dirname = dirname(fileURLToPath(import.meta.url));
@@ -1255,9 +1256,9 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     const at = `${lines} lines (${copilot.rel})`;
     if (copilotIsSymlink) {
       checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 4, maxPoints: 10, status: "partial", detail: `⚠ Symlink — ${at} — should be a real file with project-specific context` });
-    } else if (lines > 50) {
+    } else if (lines > RUBRIC.copilotFull) {
       checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 10, maxPoints: 10, status: "pass", detail: `${at} — comprehensive` });
-    } else if (lines > 15) {
+    } else if (lines > RUBRIC.copilotPartial) {
       checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 6, maxPoints: 10, status: "partial", detail: `${at} — could be more detailed` });
     } else {
       checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 3, maxPoints: 10, status: "partial", detail: `${at} — too sparse, add architecture, rules, key files` });
@@ -1271,7 +1272,7 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   if (existsSync(readmePath)) {
     const content = readFileSync(readmePath, "utf-8");
     const readmeLines = content.split("\n").length;
-    if (readmeLines > 30) {
+    if (readmeLines > RUBRIC.readmeFull) {
       checks.push({ name: "README.md", category: "Documentation", points: 8, maxPoints: 8, status: "pass", detail: `${readmeLines} lines` });
     } else {
       checks.push({ name: "README.md", category: "Documentation", points: 4, maxPoints: 8, status: "partial", detail: `${readmeLines} lines — sparse` });
@@ -1285,11 +1286,11 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   const foundAlt = altPatterns.filter(pat => existsSync(join(p, pat)));
   const realAlt = foundAlt.filter(pat => !isSymlink(join(p, pat)));
   const symlinkAlt = foundAlt.filter(pat => isSymlink(join(p, pat)));
-  if (realAlt.length >= 2) {
+  if (realAlt.length >= RUBRIC.multiAgentFull) {
     checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 6, maxPoints: 6, status: "pass", detail: `Found: ${realAlt.join(", ")}` });
   } else if (realAlt.length === 1 && symlinkAlt.length >= 1) {
     checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 4, maxPoints: 6, status: "partial", detail: `${realAlt[0]} + ${symlinkAlt.length} symlink(s) — symlinks count as partial` });
-  } else if (foundAlt.length >= 2 && realAlt.length === 0) {
+  } else if (foundAlt.length >= RUBRIC.multiAgentFull && realAlt.length === 0) {
     checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 2, maxPoints: 6, status: "partial", detail: `${foundAlt.join(", ")} — all symlinks, create real per-agent files` });
   } else if (foundAlt.length === 1) {
     const pts = isSymlink(join(p, foundAlt[0])) ? 1 : 3;
@@ -1303,7 +1304,7 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   if (skills) {
     const skillsContent = readFileSync(skills.path, "utf-8");
     const skillsLines = skillsContent.split("\n").length;
-    if (skillsLines > 10 && !isSymlink(skills.path)) {
+    if (skillsLines > RUBRIC.skillsFull && !isSymlink(skills.path)) {
       checks.push({ name: "SKILLS.md", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: `${skillsLines} lines (${skills.rel})` });
     } else {
       checks.push({ name: "SKILLS.md", category: "Documentation", points: 1, maxPoints: 3, status: "partial", detail: `${skillsLines} lines (${skills.rel})${isSymlink(skills.path) ? " — symlink" : ""} — add real skill descriptions` });
@@ -1317,7 +1318,7 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   if (existsSync(envExamplePath)) {
     const envContent = readFileSync(envExamplePath, "utf-8");
     const envVarLines = envContent.split("\n").filter(l => /^[A-Z_]+=/.test(l.trim())).length;
-    if (envVarLines >= 3) {
+    if (envVarLines >= RUBRIC.envExampleVars) {
       checks.push({ name: ".env.example", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: `${envVarLines} env vars documented` });
     } else {
       checks.push({ name: ".env.example", category: "Documentation", points: 1, maxPoints: 3, status: "partial", detail: `Only ${envVarLines} env var(s) — add all required vars` });
@@ -1341,9 +1342,9 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     const giContent = readFileSync(gitignoreScorePath, "utf-8");
     const essentialPatterns = [".env", "node_modules", "dist", "vendor", ".DS_Store", "*.log"];
     const foundPatterns = essentialPatterns.filter(pat => giContent.includes(pat));
-    if (foundPatterns.length >= 3) {
+    if (foundPatterns.length >= RUBRIC.gitignoreFull) {
       checks.push({ name: ".gitignore", category: "Infrastructure", points: 3, maxPoints: 3, status: "pass", detail: `${foundPatterns.length} essential patterns` });
-    } else if (foundPatterns.length >= 1) {
+    } else if (foundPatterns.length >= RUBRIC.gitignorePartial) {
       checks.push({ name: ".gitignore", category: "Infrastructure", points: 2, maxPoints: 3, status: "partial", detail: `Only ${foundPatterns.length} essential pattern(s) — add .env, node_modules, dist` });
     } else {
       checks.push({ name: ".gitignore", category: "Infrastructure", points: 1, maxPoints: 3, status: "partial", detail: "Exists but missing essential patterns (.env, node_modules)" });
@@ -1480,9 +1481,9 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     const testFileCount = countTestFiles(testDirPath);
     if (testIsSymlink) {
       checks.push({ name: "Tests", category: "Code Quality", points: 3, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ is a symlink (${testFileCount} test files) — should be real test directory` });
-    } else if (testFileCount >= 5) {
+    } else if (testFileCount >= RUBRIC.testsFull) {
       checks.push({ name: "Tests", category: "Code Quality", points: 8, maxPoints: 8, status: "pass", detail: `${foundTests[0]}/ — ${testFileCount} test files` });
-    } else if (testFileCount > 0) {
+    } else if (testFileCount > RUBRIC.testsPartial) {
       checks.push({ name: "Tests", category: "Code Quality", points: 5, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ — only ${testFileCount} test files` });
     } else {
       try {
@@ -1506,7 +1507,7 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     const tsconfigContent = readFileSync(tsconfigPath, "utf-8").trim();
     const tsconfigIsSymlink = isSymlink(tsconfigPath);
     // Detect minimal/reference-only tsconfigs (just project references with no real config)
-    const isSubstantive = tsconfigContent.length > 50 && (tsconfigContent.includes('"compilerOptions"') || tsconfigContent.includes('"extends"'));
+    const isSubstantive = tsconfigContent.length > RUBRIC.tsconfigSubstantive && (tsconfigContent.includes('"compilerOptions"') || tsconfigContent.includes('"extends"'));
     if (tsconfigIsSymlink) {
       checks.push({ name: "TypeScript", category: "Code Quality", points: 2, maxPoints: 5, status: "partial", detail: "tsconfig.json is a symlink — create root config" });
     } else if (isSubstantive) {
