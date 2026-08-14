@@ -26,7 +26,8 @@
       "Bash(npm view *)",
       "Bash(npm whoami *)",
       "Bash(node scripts/obfuscate-rubric.mjs)",
-      "Bash(npx . score --no-save)"
+      "Bash(npx . score --no-save)",
+      "Bash(node -p \"'version: '+require\\('./package.json'\\).version\")"
     ]
   },
   "hooks": {

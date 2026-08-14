@@ -23,6 +23,7 @@ import { dirname, join } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const target = join(__dirname, "..", "dist", "rubric.js");
+const dtsTarget = join(__dirname, "..", "dist", "rubric.d.ts");
 const MARKER = "/*__RUBRIC_ENCODED__*/";
 const KEY = "ce-rubric-v1"; // not a secret — obfuscation, not encryption. See the LOCK above.
 
@@ -79,4 +80,21 @@ for (const [k, v] of Object.entries(RUBRIC)) {
 }
 
 writeFileSync(target, out, "utf-8");
-console.error(`✓ obfuscate-rubric: ${Object.keys(RUBRIC).length} thresholds encoded in dist/rubric.js`);
+
+// The .d.ts is the other half of the job and was missed in 2.3.0: tsc emits the full interface
+// INCLUDING the doc comments, so the published package carried a plain-language glossary
+// ("copilot-instructions.md line counts for the 10 / 6 point tiers") right next to the encoded
+// values. Encoding the data and shipping the legend protects nothing. Replace it with a minimal
+// declaration that still type-checks for any consumer.
+if (existsSync(dtsTarget)) {
+  writeFileSync(
+    dtsTarget,
+    `${MARKER}\nexport interface Rubric { [key: string]: number }\nexport declare const RUBRIC: Readonly<Rubric>;\n`,
+    "utf-8"
+  );
+}
+
+console.error(
+  `✓ obfuscate-rubric: ${Object.keys(RUBRIC).length} thresholds encoded in dist/rubric.js` +
+    (existsSync(dtsTarget) ? " (+ dist/rubric.d.ts stripped)" : "")
+);
