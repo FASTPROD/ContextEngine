@@ -53,7 +53,26 @@ const xor = (text, key) =>
 
 const encoded = xor(JSON.stringify(RUBRIC), KEY).toString("base64");
 
+// An unexplained encoded blob invites the wrong suspicion. Anyone opening this file in the
+// published package should learn, in place, exactly what is hidden (proprietary threshold VALUES)
+// and what is not (any behaviour, network call, or data flow) — see README "What's obfuscated,
+// and what isn't". Transparency about the mechanism is what makes withholding the values fair.
 const out = `${MARKER}
+/*
+ * Scoring thresholds — encoded deliberately.
+ *
+ * WHAT THIS IS: the point values and cut-offs behind the AI-readiness score. They are commercial
+ * IP under BSL-1.1, and publishing them exactly makes the score trivial to game by padding files
+ * to hit a number instead of doing the work.
+ *
+ * WHAT THIS IS NOT: hidden behaviour. This file contains numbers and nothing else — no network
+ * calls, no file access, no data collection. Every code path in this package ships readable,
+ * including the two (and only two) network calls the tool ever makes: licence activation and the
+ * daily heartbeat, both in activation.js. Full source: https://github.com/FASTPROD/ContextEngine
+ *
+ * Your project data never leaves your machine. See the Privacy section of the README, and verify
+ * it in the source rather than taking our word for it.
+ */
 const _k = ${JSON.stringify(KEY)};
 const _d = (b) => {
   const raw = Buffer.from(b, "base64").toString("binary");

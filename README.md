@@ -495,9 +495,22 @@ Everything happens locally — search, scoring, learnings, sessions, embeddings.
 |---|---|---|
 | License key (`CE-XXXX-...`) | Activation + daily heartbeat | Validate subscription |
 | Machine ID (SHA-256 hash) | Activation + daily heartbeat | Enforce machine limit |
+| Email | Activation only | Tie the licence to an account |
+| Package version | Activation only | Serve a compatible module bundle |
 | Platform/arch (e.g., `darwin/arm64`) | Activation only | Compatibility check |
+| Delta bundle version | Daily heartbeat | Detect an out-of-date module cache |
+
+That is the complete list. The activation request sends exactly six fields and the heartbeat exactly three — enforced by a lock comment in `src/activation.ts` that forbids adding a seventh field reflecting usage.
 
 **The server never receives:** project names, file contents, learnings, sessions, git history, dependencies, code, .env variables, or anything about your actual work.
+
+**These are the only two network calls the tool makes.** `activate` and `heartbeat`, both in `src/activation.ts`. Nothing else in the codebase opens a connection — verify it yourself with `grep -rn "fetch(" src/`.
+
+### What's obfuscated, and what isn't
+
+One file in the published package is deliberately unreadable: `dist/rubric.js`, which holds the scoring thresholds (what earns which points). Those values are commercial IP under [BSL-1.1](LICENSE), and knowing them exactly makes an AI-readiness score easy to game by padding files to hit a number rather than doing the work.
+
+**What that hides: values. What it does not hide: behaviour.** No code path, network call, file access, or data flow is concealed anywhere in this package. The scoring logic itself, every collector, the search ranker, and both network calls above ship as readable JavaScript — and the full source is public at [FASTPROD/ContextEngine](https://github.com/FASTPROD/ContextEngine). If a privacy claim on this page were false, the code that broke it would be right there to find.
 
 ### Why this matters
 
