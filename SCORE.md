@@ -1,42 +1,43 @@
 # SCORE.md — AI-Readiness Score
 
 **Project**: ContextEngine
-**Score**: 93/100 (A+)
+**Score**: 95/100 (A+)
 **Date**: 2026-08-14
 
 ## Summary
 
 | Category | Score | Max | Status |
 |---|---|---|---|
-| Documentation | 28 | 30 | ✅ 93% |
-| Infrastructure | 25 | 30 | ✅ 83% |
+| Documentation | 24 | 25 | ✅ 96% |
+| Infrastructure | 21 | 25 | ✅ 84% |
 | Code Quality | 20 | 20 | ✅ 100% |
-| Security | 20 | 20 | ✅ 100% |
+| Security | 30 | 30 | ✅ 100% |
 
 ## Breakdown
 
 | Check | Category | Score | Max | Status | Detail |
 |---|---|---|---|---|---|
-| copilot-instructions.md | Documentation | 10 | 10 | ✅ | 530 lines (.github/copilot-instructions.md) — comprehensive |
-| README.md | Documentation | 8 | 8 | ✅ | 536 lines |
-| Multi-agent patterns | Documentation | 6 | 6 | ✅ | Found: CLAUDE.md, .cursorrules |
+| copilot-instructions.md | Documentation | 6 | 6 | ✅ | .github/copilot-instructions.md, 532 lines — covers architecture, commands, rules, key files |
+| Doc freshness | Documentation | 4 | 4 | ✅ | Agent doc is the most recent change — fully current |
+| README.md | Documentation | 6 | 6 | ✅ | 536 lines |
+| Multi-agent patterns | Documentation | 4 | 4 | ✅ | Found: CLAUDE.md, .cursorrules |
 | SKILLS.md | Documentation | 3 | 3 | ✅ | 106 lines (.github/SKILLS.md) |
-| .env.example | Documentation | 1 | 3 | 🟡 | Only 0 env var(s) — add all required vars |
-| Git repository | Infrastructure | 5 | 5 | ✅ | Initialized |
-| .gitignore | Infrastructure | 3 | 3 | ✅ | 4 essential patterns |
-| Git hooks | Infrastructure | 5 | 5 | ✅ | post-commit hook configured (hooks/post-commit + .git/hooks/post-commit) |
-| Docker | Infrastructure | 0 | 5 | ❌ | Not containerized |
+| .env.example | Documentation | 1 | 2 | 🟡 | Only 0 env var(s) — add all required vars |
+| Git repository | Infrastructure | 4 | 4 | ✅ | Initialized |
+| .gitignore | Infrastructure | 2 | 2 | ✅ | 4 essential patterns |
+| Git hooks | Infrastructure | 4 | 4 | ✅ | post-commit hook configured (hooks/post-commit + .git/hooks/post-commit) |
+| Docker | Infrastructure | 0 | 4 | ❌ | Not containerized |
 | CI/CD | Infrastructure | 5 | 5 | ✅ | .github/workflows |
-| Deploy script | Infrastructure | 4 | 4 | ✅ | deploy.sh (45 effective lines) |
+| Deploy script | Infrastructure | 3 | 3 | ✅ | deploy.sh (45 effective lines) |
 | Process manager | Infrastructure | 3 | 3 | ✅ | PM2 ecosystem config |
 | Tests | Code Quality | 8 | 8 | ✅ | tests/ — 15 test files |
 | TypeScript | Code Quality | 5 | 5 | ✅ | tsconfig.json present |
 | Linting | Code Quality | 4 | 4 | ✅ | eslint.config.mjs |
 | npm scripts | Code Quality | 3 | 3 | ✅ | build, dev, start, test, test:watch, lint |
-| .env in .gitignore | Security | 8 | 8 | ✅ | .env is gitignored |
-| Secrets exposure | Security | 6 | 6 | ✅ | No .env at repo root — nothing to leak |
-| Lockfile | Security | 3 | 3 | ✅ | package-lock.json |
-| Deps gitignored | Security | 3 | 3 | ✅ | node_modules/vendor gitignored |
+| .env in .gitignore | Security | 10 | 10 | ✅ | .env is gitignored |
+| Secrets exposure | Security | 10 | 10 | ✅ | No .env at repo root — nothing to leak |
+| Lockfile | Security | 5 | 5 | ✅ | package-lock.json |
+| Deps gitignored | Security | 5 | 5 | ✅ | node_modules/vendor gitignored |
 
 ## Improvements Needed
 

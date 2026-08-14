@@ -3,7 +3,7 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine (PUBLIC repo)
-- **Version**: v1.23.0
+- **Version**: v2.3.0
 - **Branch**: `main`
 - **npm**: `@compr/contextengine-mcp`
 - **VS Code Extension**: `css-llc.contextengine` — https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
