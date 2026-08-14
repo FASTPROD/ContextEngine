@@ -17,6 +17,14 @@
 - **Input Validation** — license format regex, charset/length checks on all user input
 - **Parameterized SQL** — all SQLite queries use `?` placeholders
 
+## Activation and Licensing
+- **Gate lives at the tool layer, not the data layer** — `collectors.ts` runs for every user during reindex (its output feeds `search_context` on the free tier); the four PRO tools that *consume* that data are what require a licence. `56ef658` removed `collectors` from `PREMIUM_MODULES` for exactly this reason. Before making any module premium, check whether a free path imports it.
+- **PRO tools**: `score_project`, `run_audit`, `check_ports`, `list_projects` (+ CLI `score`, `audit`, `list-projects`). Every call site sits behind `gateCheck()`.
+- **Licence**: `CE-XXXX-XXXX-XXXX-XXXX`, Ed25519-signed, bound to a machine fingerprint, 7-day offline grace, daily heartbeat.
+- **Delta modules**: `server/src/gen-delta.ts` terser-obfuscates then AES-256-CBC encrypts the premium modules per machine; `installDelta()` caches them at `~/.contextengine/delta/`. `rubric.js` must stay in that bundle — `agents.mjs` imports it, and an incomplete bundle either fails to import or silently resolves against the shipped copy.
+- **🔒 `[DELTA-VERSION-PIN]`** — `loadDeltaModule()` refuses any cached delta whose `manifest.json` version differs from the running package. The cache never expires on its own: this machine held a **1.19.1** delta under a **2.3.1** package, two months of scorer fixes out of date. Without the pin, loading it would run the old scorer inside the new package with no error and no symptom. **The canary cannot catch this** — a stale delta carries its own stale canary and its own stale pins, so it passes against itself. A stale module is an unknown, never a usable one.
+- **Status**: the *install* half is proven in production; the *load* half (`loadDeltaModule`) has never been called by anything. Wiring it requires gated dynamic imports, npm `files` exclusions, a `gen-delta` redeploy, and first-ever tests for the load path — otherwise every licensed machine sits on a refused stale delta and loses the PRO tools entirely.
+
 ## Server & Infrastructure
 - **Express 4** — activation/licensing server, 5 endpoints (activate, heartbeat, health, checkout, webhook)
 - **SQLite3** (better-sqlite3) — license database, synchronous API

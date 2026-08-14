@@ -31,8 +31,9 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
+import { fileURLToPath } from "url";
 import { createHash, createDecipheriv } from "crypto";
 import { safeAppend } from "./audit.js";
 import { verifyLicenseSignature } from "./license-sig.js";
@@ -42,6 +43,20 @@ import { verifyLicenseSignature } from "./license-sig.js";
 // ---------------------------------------------------------------------------
 
 const DELTA_DIR = join(homedir(), ".contextengine", "delta");
+
+/**
+ * Version of the running package. Read from package.json at module load, the same way
+ * agents.ts does it, so [DELTA-VERSION-PIN] compares against the real installed version
+ * rather than a constant someone forgets to bump.
+ */
+const PACKAGE_VERSION: string = (() => {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    return JSON.parse(readFileSync(join(here, "..", "package.json"), "utf-8")).version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+})();
 const LICENSE_FILE = join(homedir(), ".contextengine", "license.json");
 const ACTIVATION_API_BASE = process.env.CONTEXTENGINE_API || "https://api.compr.ch/contextengine";
 const ACTIVATION_API = `${ACTIVATION_API_BASE}/activate`;
@@ -329,15 +344,50 @@ export function isDeltaInstalled(): boolean {
 }
 
 /**
+ * Version of the delta bundle currently cached on disk, or null if none/unreadable.
+ * Exported so callers can report the mismatch rather than guess at it.
+ */
+export function installedDeltaVersion(): string | null {
+  try {
+    const manifest = JSON.parse(readFileSync(join(DELTA_DIR, "manifest.json"), "utf-8"));
+    return typeof manifest.version === "string" ? manifest.version : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Dynamically import a delta module.
- * Returns null if not activated or module not found.
+ * Returns null if not activated, module missing, or the cached delta is stale.
+ *
+ * 🔒 LOCKED [DELTA-VERSION-PIN] — 2026-08-14
+ * ⛔ NEVER import a delta module without checking its manifest version against this package.
+ * WHY: the cache at ~/.contextengine/delta/ is written once at activation and never expires. On
+ *      the author's own machine it held version 1.19.1 while the installed package was 2.3.1 —
+ *      two months and three sessions of scorer fixes out of date. Because this function imported
+ *      whatever .mjs happened to be on disk, wiring it up would have silently run the OLD scorer
+ *      inside the NEW package: no error, no symptom, just quietly wrong scores. The canary cannot
+ *      catch this — a stale delta carries its own stale canary and its own stale pins, so it
+ *      passes against itself.
+ * FIX: refuse to load a delta whose version does not match the running package, and say so on
+ *      stderr. A stale module is an unknown, not a usable one — [ABSENCE-IS-NOT-A-VERDICT]
+ *      applied to code delivery rather than to a check result.
  */
 export async function loadDeltaModule(name: string): Promise<any | null> {
   if (!isDeltaInstalled()) return null;
-  
+
+  const cached = installedDeltaVersion();
+  if (cached !== PACKAGE_VERSION) {
+    console.error(
+      `[ContextEngine] ⚠ Delta module "${name}" is version ${cached ?? "unknown"} but this package is ` +
+        `${PACKAGE_VERSION} — refusing to load a stale module. Re-run \`contextengine activate\` to refresh.`
+    );
+    return null;
+  }
+
   const modulePath = join(DELTA_DIR, `${name}.mjs`);
   if (!existsSync(modulePath)) return null;
-  
+
   try {
     // Dynamic import of the decrypted module
     const moduleUrl = `file://${modulePath}`;

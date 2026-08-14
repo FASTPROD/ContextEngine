@@ -4,7 +4,12 @@ import {
   PREMIUM_TOOLS,
   requiresActivation,
   gateCheck,
+  loadDeltaModule,
+  installedDeltaVersion,
 } from "../src/activation.js";
+import { readFileSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
 describe("PREMIUM_MODULES", () => {
   it("contains expected premium modules", () => {
@@ -67,5 +72,27 @@ describe("gateCheck", () => {
       expect(result.length).toBeGreaterThan(0);
     }
     // If null, it means user has a valid license — also acceptable
+  });
+});
+
+// 🔒 [DELTA-VERSION-PIN]
+describe("delta module version pinning", () => {
+  const pkgVersion = JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf-8")
+  ).version as string;
+
+  it("never loads a delta whose version does not match the running package", async () => {
+    // Holds on any machine: with no delta installed the version is null (!== pkgVersion) and the
+    // loader must return null; with a stale delta cached — the real 1.19.1-vs-2.3.1 case that
+    // prompted this guard — it must also refuse rather than silently run a two-month-old scorer.
+    const cached = installedDeltaVersion();
+    if (cached !== pkgVersion) {
+      expect(await loadDeltaModule("agents")).toBeNull();
+    }
+  });
+
+  it("reports the cached version as a string or null, never undefined", () => {
+    const v = installedDeltaVersion();
+    expect(v === null || typeof v === "string").toBe(true);
   });
 });

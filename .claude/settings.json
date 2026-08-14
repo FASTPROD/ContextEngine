@@ -27,7 +27,8 @@
       "Bash(npm whoami *)",
       "Bash(node scripts/obfuscate-rubric.mjs)",
       "Bash(npx . score --no-save)",
-      "Bash(node -p \"'version: '+require\\('./package.json'\\).version\")"
+      "Bash(node -p \"'version: '+require\\('./package.json'\\).version\")",
+      "Bash(grep -iA 4 \"collector\\\\|delta\\\\|premium\")"
     ]
   },
   "hooks": {

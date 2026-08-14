@@ -175,7 +175,7 @@
 ## 🔒 Locked Files — DO NOT Modify Without Explicit User Request
 | File | Lock Date | What's Verified | Tests |
 |---|---|---|---|
-| `src/activation.ts` | 2026-03-03 | License validation, AES-256-CBC delta decryption, machine fingerprint, daily heartbeat | E2E verified Feb 23 2026, all 4 Pro tools |
+| `src/activation.ts` | 2026-08-14 | License validation, AES-256-CBC delta decryption, machine fingerprint, daily heartbeat, delta version pinning (`[DELTA-VERSION-PIN]`) | E2E verified Feb 23 2026, all 4 Pro tools; 2 pin tests |
 | `src/firewall.ts` | 2026-03-03 | Protocol Firewall: round-based escalation, auto-inject learnings, cross-window state, 10-min session timer | 36 tests (16 unit + 5 round + 7 injection + 3 cross-window + 5 session timer) |
 | `src/search.ts` | 2026-03-03 | BM25 keyword search with IDF, temporal decay, lock marker detection | 11 search tests |
 | `src/embeddings.ts` | 2026-03-03 | Xenova all-MiniLM-L6-v2 local CPU embeddings, disk cache, non-blocking startup | Stable since v1.0 |

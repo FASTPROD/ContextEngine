@@ -27,6 +27,9 @@ const DELTA_DIR = join(__dirname, "..", "delta-modules");
 // Premium modules to extract (these are the files with the real IP)
 const PREMIUM_MODULES = [
   { src: "agents.js", dest: "agents.mjs", description: "Scorer, auditor, port checker, formatters (1653 lines)" },
+  // agents.mjs does `import { RUBRIC } from "./rubric.js"` — without this entry the delta bundle
+  // is incomplete and either fails to import or silently resolves against the shipped copy.
+  { src: "rubric.js", dest: "rubric.js", description: "Scoring thresholds — imported by agents.mjs" },
   { src: "collectors.js", dest: "collectors.mjs", description: "11 operational data collectors (705 lines)" },
   { src: "search.js", dest: "search-adv.mjs", description: "Advanced BM25 search with tuned parameters" },
   { src: "firewall.js", dest: "firewall.mjs", description: "Protocol Firewall — escalation, auto-inject, cross-window state" },

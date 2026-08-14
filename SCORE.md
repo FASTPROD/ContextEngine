@@ -18,7 +18,7 @@
 | Check | Category | Score | Max | Status | Detail |
 |---|---|---|---|---|---|
 | copilot-instructions.md | Documentation | 6 | 6 | ✅ | .github/copilot-instructions.md, 532 lines — covers architecture, commands, rules, key files |
-| Doc freshness | Documentation | 4 | 4 | ✅ | Agent doc is the most recent change — fully current |
+| Doc freshness | Documentation | 4 | 4 | ✅ | 2 commit(s) since the agent doc was updated |
 | README.md | Documentation | 6 | 6 | ✅ | 536 lines |
 | Multi-agent patterns | Documentation | 4 | 4 | ✅ | Found: CLAUDE.md, .cursorrules |
 | SKILLS.md | Documentation | 3 | 3 | ✅ | 106 lines (.github/SKILLS.md) |
