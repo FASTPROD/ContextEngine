@@ -136,6 +136,23 @@ function statusIcon(status: ScoreCheck["status"]): string {
   return "❌";
 }
 
+/**
+ * Topics an agent doc must cover to be useful. Matched case-insensitively anywhere in the
+ * document, so a project's own heading vocabulary still counts — this rewards covering the
+ * subject, not adopting our wording. See [SCORE-CONTENT-NOT-LENGTH].
+ */
+const AGENT_DOC_TOPICS: Array<{ label: string; patterns: RegExp }> = [
+  { label: "architecture", patterns: /\b(architecture|structure|layout|stack|components?|modules?)\b/i },
+  { label: "commands", patterns: /\b(commands?|scripts?|npm run|yarn |pnpm |make |getting started|setup|install)\b/i },
+  { label: "rules", patterns: /\b(rules?|conventions?|guidelines?|standards?|policy|policies|do not|never|always)\b/i },
+  { label: "key files", patterns: /\b(key files?|important files?|entry ?point|file (map|tree)|directory)\b/i },
+];
+
+/** Labels of the topics this document covers. */
+function matchDocTopics(content: string, topics: typeof AGENT_DOC_TOPICS): string[] {
+  return topics.filter(t => t.patterns.test(content)).map(t => t.label);
+}
+
 /** Symlink target for diagnostics, or "?" if unreadable. Never throws. */
 function readlinkSafe(filePath: string): string {
   try {
@@ -1123,6 +1140,11 @@ export interface ScoreCheck {
   maxPoints: number;
   status: "pass" | "partial" | "fail" | "unknown";
   detail: string;
+  /**
+   * A failure here is disqualifying: it caps the overall grade regardless of the other points.
+   * Reserved for actual secret exposure — see [SECURITY-IS-DISQUALIFYING].
+   */
+  disqualifying?: boolean;
 }
 
 /**
@@ -1194,8 +1216,18 @@ export function runScoreCanary(): CanaryResult {
 
     // Deliberately awkward, all legal, each one a past or plausible failure:
     mkdirSync(join(dir, ".github"), { recursive: true });
-    // doc in .github/ — 60 lines, should score the full 10
-    writeFileSync(join(dir, ".github", "copilot-instructions.md"), Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join("\n"));
+    // doc in .github/ — covers all required topics, so it must score full marks on CONTENT.
+    // Deliberately short: length must not be what earns it. See [SCORE-CONTENT-NOT-LENGTH].
+    writeFileSync(
+      join(dir, ".github", "copilot-instructions.md"),
+      [
+        "# Canary", "", "## Architecture", "Two modules and a CLI entry point.", "",
+        "## Commands", "`npm run build`, `npm test`.", "",
+        "## Rules", "Never commit secrets.", "",
+        "## Key files", "`src/index.ts` is the entry point.", "",
+        ...Array.from({ length: 20 }, (_, i) => `filler ${i + 1}`),
+      ].join("\n")
+    );
     // doc at repo ROOT — the [DOC-PATH-DUAL] case, should score the full 3
     writeFileSync(join(dir, "SKILLS.md"), Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join("\n"));
     // hook installed but BROKEN — the 2026-06-10 case, must read as fail-broken not fail-absent
@@ -1212,8 +1244,12 @@ export function runScoreCanary(): CanaryResult {
       if (actual !== wanted) deviations.push(`${label}: expected ${JSON.stringify(wanted)}, got ${JSON.stringify(actual)}`);
     };
 
-    expect("copilot-instructions.md points", by("copilot-instructions.md")?.points, 10);
+    expect("copilot-instructions.md points", by("copilot-instructions.md")?.points, 6);
+    expect("copilot scored on topics not length", by("copilot-instructions.md")?.detail.includes("covers"), true);
     expect("SKILLS.md points (repo root)", by("SKILLS.md")?.points, 3);
+    // No .git worktree here, so freshness is unmeasurable — it must be unknown, never a pass.
+    expect("Doc freshness status", by("Doc freshness")?.status, "unknown");
+    expect("Doc freshness points", by("Doc freshness")?.points, 0);
     expect("Git hooks status", by("Git hooks")?.status, "fail");
     expect("Git hooks names the break", by("Git hooks")?.detail.includes("BROKEN"), true);
     expect("Secrets exposure status", by("Secrets exposure")?.status, "unknown");
@@ -1247,24 +1283,73 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
 
   // --- Documentation (30 points max) ---
 
-  // copilot-instructions.md (10 pts) — .github/ or repo root, see resolveDocPath LOCK
+  // copilot-instructions.md (6 pts) — scored on CONTENT, not length.
+  // 🔒 LOCKED [SCORE-CONTENT-NOT-LENGTH] — 2026-08-14
+  // ⛔ NEVER score an agent doc on line count alone.
+  // WHY: this was 10 points — a tenth of the entire score — awarded for ">50 lines". Fifty lines
+  //      of anything earned full marks, so the largest single check in the rubric was also the
+  //      easiest to satisfy without doing the work. Length is a proxy for effort; it measures
+  //      typing, not usefulness to an agent.
+  // FIX: score the sections an agent actually needs — architecture, commands, rules/conventions,
+  //      key files. Length survives only as a floor to reject stubs. Same approach the
+  //      .env.example check already used (counting real variables, not lines).
   const copilot = resolveDocPath(p, "copilot-instructions.md");
   if (copilot) {
     const copilotIsSymlink = isSymlink(copilot.path);
     const content = readFileSync(copilot.path, "utf-8");
     const lines = content.split("\n").length;
-    const at = `${lines} lines (${copilot.rel})`;
+    const found = matchDocTopics(content, AGENT_DOC_TOPICS);
+    const at = `${copilot.rel}, ${lines} lines`;
     if (copilotIsSymlink) {
-      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 4, maxPoints: 10, status: "partial", detail: `⚠ Symlink — ${at} — should be a real file with project-specific context` });
-    } else if (lines > RUBRIC.copilotFull) {
-      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 10, maxPoints: 10, status: "pass", detail: `${at} — comprehensive` });
-    } else if (lines > RUBRIC.copilotPartial) {
-      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 6, maxPoints: 10, status: "partial", detail: `${at} — could be more detailed` });
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 2, maxPoints: 6, status: "partial", detail: `⚠ Symlink (${at}) — should be a real file with project-specific context` });
+    } else if (found.length >= AGENT_DOC_TOPICS.length) {
+      // Content decides, and it decides FIRST. A short doc that covers everything an agent needs
+      // beats a long one that covers nothing — that inversion is the whole point of this rework,
+      // so the stub floor below must never be allowed to override a complete document.
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 6, maxPoints: 6, status: "pass", detail: `${at} — covers ${found.join(", ")}` });
+    } else if (lines <= RUBRIC.copilotPartial) {
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 1, maxPoints: 6, status: "partial", detail: `${at} — a stub; add architecture, commands, rules, key files` });
+    } else if (found.length > 0) {
+      const missing = AGENT_DOC_TOPICS.filter(t => !found.includes(t.label)).map(t => t.label);
+      const pts = found.length >= AGENT_DOC_TOPICS.length - 1 ? 4 : 2;
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: pts, maxPoints: 6, status: "partial", detail: `${at} — has ${found.join(", ")}; missing ${missing.join(", ")}` });
     } else {
-      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 3, maxPoints: 10, status: "partial", detail: `${at} — too sparse, add architecture, rules, key files` });
+      checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 1, maxPoints: 6, status: "partial", detail: `${at} — none of ${AGENT_DOC_TOPICS.map(t => t.label).join("/")} found; length without structure` });
     }
   } else {
-    checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 0, maxPoints: 10, status: "fail", detail: "Missing from .github/ and repo root — AI agents lack project context" });
+    checks.push({ name: "copilot-instructions.md", category: "Documentation", points: 0, maxPoints: 6, status: "fail", detail: "Missing from .github/ and repo root — AI agents lack project context" });
+  }
+
+  // Doc freshness (4 pts) — is the agent doc keeping up with the code?
+  // 🔒 LOCKED [SCORE-DOC-FRESHNESS] — 2026-08-14
+  // ⛔ NEVER treat a doc's existence as evidence that it is current.
+  // WHY: a 500-line copilot-instructions.md last touched a year ago scored identically to one
+  //      updated yesterday. Stale agent docs are worse than missing ones — an agent trusts them.
+  // FIX: count commits that touched the repo since the doc was last modified, excluding the doc
+  //      itself. The same signal firewall.ts already computes for its staleness nudges.
+  // [EXEC-FAILURE-IS-NOT-EMPTY]: if git cannot answer, this is "unknown", never a pass.
+  if (copilot && existsSync(join(p, ".git"))) {
+    const since = new Date(statSync(copilot.path).mtimeMs).toISOString();
+    // NEVER pipe this through `| wc -l`: a shell pipeline reports the LAST command's exit status,
+    // so a failed `git log` still exits 0 with output "0" — which reads as "0 commits since the
+    // doc changed → fully current". Caught by [SCORE-CANARY]. Count in JS where failure is visible.
+    const { ok, output } = execChecked(`git --no-pager log --oneline --since="${since}" -- . ":!${copilot.rel}"`, p);
+    const drift = ok ? (output ? output.split("\n").length : 0) : NaN;
+    if (!ok || Number.isNaN(drift)) {
+      checks.push({ name: "Doc freshness", category: "Documentation", points: 0, maxPoints: 4, status: "unknown", detail: "❔ git log failed here — cannot tell whether the agent doc is current" });
+    } else if (drift === 0) {
+      checks.push({ name: "Doc freshness", category: "Documentation", points: 4, maxPoints: 4, status: "pass", detail: "Agent doc is the most recent change — fully current" });
+    } else if (drift <= RUBRIC.freshnessGood) {
+      checks.push({ name: "Doc freshness", category: "Documentation", points: 4, maxPoints: 4, status: "pass", detail: `${drift} commit(s) since the agent doc was updated` });
+    } else if (drift <= RUBRIC.freshnessStale) {
+      checks.push({ name: "Doc freshness", category: "Documentation", points: 2, maxPoints: 4, status: "partial", detail: `${drift} commits since the agent doc was updated — drifting` });
+    } else {
+      checks.push({ name: "Doc freshness", category: "Documentation", points: 0, maxPoints: 4, status: "fail", detail: `${drift} commits since the agent doc was updated — agents are reading stale context` });
+    }
+  } else if (copilot) {
+    checks.push({ name: "Doc freshness", category: "Documentation", points: 0, maxPoints: 4, status: "unknown", detail: "❔ Not a git repo — cannot measure doc drift" });
+  } else {
+    checks.push({ name: "Doc freshness", category: "Documentation", points: 0, maxPoints: 4, status: "fail", detail: "No agent doc to keep fresh" });
   }
 
   // README.md (8 pts)
@@ -1273,12 +1358,12 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     const content = readFileSync(readmePath, "utf-8");
     const readmeLines = content.split("\n").length;
     if (readmeLines > RUBRIC.readmeFull) {
-      checks.push({ name: "README.md", category: "Documentation", points: 8, maxPoints: 8, status: "pass", detail: `${readmeLines} lines` });
+      checks.push({ name: "README.md", category: "Documentation", points: 6, maxPoints: 6, status: "pass", detail: `${readmeLines} lines` });
     } else {
-      checks.push({ name: "README.md", category: "Documentation", points: 4, maxPoints: 8, status: "partial", detail: `${readmeLines} lines — sparse` });
+      checks.push({ name: "README.md", category: "Documentation", points: 3, maxPoints: 6, status: "partial", detail: `${readmeLines} lines — sparse` });
     }
   } else {
-    checks.push({ name: "README.md", category: "Documentation", points: 0, maxPoints: 8, status: "fail", detail: "Missing" });
+    checks.push({ name: "README.md", category: "Documentation", points: 0, maxPoints: 6, status: "fail", detail: "Missing" });
   }
 
   // CLAUDE.md / .cursorrules / AGENTS.md (6 pts)
@@ -1287,16 +1372,16 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   const realAlt = foundAlt.filter(pat => !isSymlink(join(p, pat)));
   const symlinkAlt = foundAlt.filter(pat => isSymlink(join(p, pat)));
   if (realAlt.length >= RUBRIC.multiAgentFull) {
-    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 6, maxPoints: 6, status: "pass", detail: `Found: ${realAlt.join(", ")}` });
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 4, maxPoints: 4, status: "pass", detail: `Found: ${realAlt.join(", ")}` });
   } else if (realAlt.length === 1 && symlinkAlt.length >= 1) {
-    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 4, maxPoints: 6, status: "partial", detail: `${realAlt[0]} + ${symlinkAlt.length} symlink(s) — symlinks count as partial` });
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 3, maxPoints: 4, status: "partial", detail: `${realAlt[0]} + ${symlinkAlt.length} symlink(s) — symlinks count as partial` });
   } else if (foundAlt.length >= RUBRIC.multiAgentFull && realAlt.length === 0) {
-    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 2, maxPoints: 6, status: "partial", detail: `${foundAlt.join(", ")} — all symlinks, create real per-agent files` });
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 1, maxPoints: 4, status: "partial", detail: `${foundAlt.join(", ")} — all symlinks, create real per-agent files` });
   } else if (foundAlt.length === 1) {
     const pts = isSymlink(join(p, foundAlt[0])) ? 1 : 3;
     checks.push({ name: "Multi-agent patterns", category: "Documentation", points: pts, maxPoints: 6, status: "partial", detail: `Found: ${foundAlt[0]}${isSymlink(join(p, foundAlt[0])) ? " (symlink)" : ""} only` });
   } else {
-    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 0, maxPoints: 6, status: "fail", detail: "No CLAUDE.md, .cursorrules, or AGENTS.md" });
+    checks.push({ name: "Multi-agent patterns", category: "Documentation", points: 0, maxPoints: 4, status: "fail", detail: "No CLAUDE.md, .cursorrules, or AGENTS.md" });
   }
 
   // SKILLS.md (3 pts) — .github/ or repo root, see resolveDocPath LOCK
@@ -1319,21 +1404,21 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     const envContent = readFileSync(envExamplePath, "utf-8");
     const envVarLines = envContent.split("\n").filter(l => /^[A-Z_]+=/.test(l.trim())).length;
     if (envVarLines >= RUBRIC.envExampleVars) {
-      checks.push({ name: ".env.example", category: "Documentation", points: 3, maxPoints: 3, status: "pass", detail: `${envVarLines} env vars documented` });
+      checks.push({ name: ".env.example", category: "Documentation", points: 2, maxPoints: 2, status: "pass", detail: `${envVarLines} env vars documented` });
     } else {
-      checks.push({ name: ".env.example", category: "Documentation", points: 1, maxPoints: 3, status: "partial", detail: `Only ${envVarLines} env var(s) — add all required vars` });
+      checks.push({ name: ".env.example", category: "Documentation", points: 1, maxPoints: 2, status: "partial", detail: `Only ${envVarLines} env var(s) — add all required vars` });
     }
   } else {
-    checks.push({ name: ".env.example", category: "Documentation", points: 0, maxPoints: 3, status: "fail", detail: "Missing — agents can't set up env" });
+    checks.push({ name: ".env.example", category: "Documentation", points: 0, maxPoints: 2, status: "fail", detail: "Missing — agents can't set up env" });
   }
 
   // --- Infrastructure (30 points max) ---
 
   // Git repo (5 pts)
   if (existsSync(join(p, ".git"))) {
-    checks.push({ name: "Git repository", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "Initialized" });
+    checks.push({ name: "Git repository", category: "Infrastructure", points: 4, maxPoints: 4, status: "pass", detail: "Initialized" });
   } else {
-    checks.push({ name: "Git repository", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "Not a git repo" });
+    checks.push({ name: "Git repository", category: "Infrastructure", points: 0, maxPoints: 4, status: "fail", detail: "Not a git repo" });
   }
 
   // .gitignore (3 pts) — validates essential patterns, not just existence
@@ -1343,14 +1428,14 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     const essentialPatterns = [".env", "node_modules", "dist", "vendor", ".DS_Store", "*.log"];
     const foundPatterns = essentialPatterns.filter(pat => giContent.includes(pat));
     if (foundPatterns.length >= RUBRIC.gitignoreFull) {
-      checks.push({ name: ".gitignore", category: "Infrastructure", points: 3, maxPoints: 3, status: "pass", detail: `${foundPatterns.length} essential patterns` });
+      checks.push({ name: ".gitignore", category: "Infrastructure", points: 2, maxPoints: 2, status: "pass", detail: `${foundPatterns.length} essential patterns` });
     } else if (foundPatterns.length >= RUBRIC.gitignorePartial) {
-      checks.push({ name: ".gitignore", category: "Infrastructure", points: 2, maxPoints: 3, status: "partial", detail: `Only ${foundPatterns.length} essential pattern(s) — add .env, node_modules, dist` });
+      checks.push({ name: ".gitignore", category: "Infrastructure", points: 1, maxPoints: 2, status: "partial", detail: `Only ${foundPatterns.length} essential pattern(s) — add .env, node_modules, dist` });
     } else {
-      checks.push({ name: ".gitignore", category: "Infrastructure", points: 1, maxPoints: 3, status: "partial", detail: "Exists but missing essential patterns (.env, node_modules)" });
+      checks.push({ name: ".gitignore", category: "Infrastructure", points: 1, maxPoints: 2, status: "partial", detail: "Exists but missing essential patterns (.env, node_modules)" });
     }
   } else {
-    checks.push({ name: ".gitignore", category: "Infrastructure", points: 0, maxPoints: 3, status: "fail", detail: "Missing" });
+    checks.push({ name: ".gitignore", category: "Infrastructure", points: 0, maxPoints: 2, status: "fail", detail: "Missing" });
   }
 
   // Git hooks (5 pts) — see [ABSENCE-IS-NOT-A-VERDICT]: "installed but broken" is not "not installed"
@@ -1361,12 +1446,12 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   const live = [repoHook, gitHook].filter(h => existsSync(h));
   if (live.length > 0) {
     const where = live.map(h => h === gitHook ? ".git/hooks/post-commit" : "hooks/post-commit").join(" + ");
-    checks.push({ name: "Git hooks", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: `post-commit hook configured (${where})` });
+    checks.push({ name: "Git hooks", category: "Infrastructure", points: 4, maxPoints: 4, status: "pass", detail: `post-commit hook configured (${where})` });
   } else if (dangling.length > 0) {
     const broken = dangling.map(h => `${h === gitHook ? ".git/hooks" : "hooks"}/post-commit → ${readlinkSafe(h)}`).join(", ");
-    checks.push({ name: "Git hooks", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: `⚠ Hook installed but BROKEN — dangling symlink: ${broken}. Auto-push is silently dead; restore the target, don't re-install` });
+    checks.push({ name: "Git hooks", category: "Infrastructure", points: 0, maxPoints: 4, status: "fail", detail: `⚠ Hook installed but BROKEN — dangling symlink: ${broken}. Auto-push is silently dead; restore the target, don't re-install` });
   } else {
-    checks.push({ name: "Git hooks", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "No post-commit hook at hooks/ or .git/hooks/ — consider auto-push" });
+    checks.push({ name: "Git hooks", category: "Infrastructure", points: 0, maxPoints: 4, status: "fail", detail: "No post-commit hook at hooks/ or .git/hooks/ — consider auto-push" });
   }
 
   // Docker / containerization (5 pts)
@@ -1407,17 +1492,17 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     existsSync(join(p, "railway.json"));
 
   if (usesDockerForReal && hasDockerfile && hasCompose) {
-    checks.push({ name: "Docker", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "Dockerfile + compose (active deployment)" });
+    checks.push({ name: "Docker", category: "Infrastructure", points: 4, maxPoints: 4, status: "pass", detail: "Dockerfile + compose (active deployment)" });
   } else if (usesDockerForReal && (hasDockerfile || hasCompose)) {
-    checks.push({ name: "Docker", category: "Infrastructure", points: 3, maxPoints: 5, status: "partial", detail: hasDockerfile ? "Dockerfile only" : "Compose only" });
+    checks.push({ name: "Docker", category: "Infrastructure", points: 2, maxPoints: 4, status: "partial", detail: hasDockerfile ? "Dockerfile only" : "Compose only" });
   } else if ((hasDockerfile || hasCompose) && !usesDockerForReal) {
     // Files exist but look like stubs/placeholders — minimal credit
-    checks.push({ name: "Docker", category: "Infrastructure", points: 1, maxPoints: 5, status: "partial", detail: "Docker files exist but appear to be placeholders — not used in deployment" });
+    checks.push({ name: "Docker", category: "Infrastructure", points: 1, maxPoints: 4, status: "partial", detail: "Docker files exist but appear to be placeholders — not used in deployment" });
   } else if (hasAltDeploy) {
     // Project uses a different deploy platform — Docker is N/A, award full points
-    checks.push({ name: "Containerization", category: "Infrastructure", points: 5, maxPoints: 5, status: "pass", detail: "Uses managed platform (Vercel/Netlify/Render/Fly)" });
+    checks.push({ name: "Containerization", category: "Infrastructure", points: 4, maxPoints: 4, status: "pass", detail: "Uses managed platform (Vercel/Netlify/Render/Fly)" });
   } else {
-    checks.push({ name: "Docker", category: "Infrastructure", points: 0, maxPoints: 5, status: "fail", detail: "Not containerized" });
+    checks.push({ name: "Docker", category: "Infrastructure", points: 0, maxPoints: 4, status: "fail", detail: "Not containerized" });
   }
 
   // CI config (5 pts) — validates workflows have real actions, not empty stubs
@@ -1455,12 +1540,12 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     const deployContent = readFileSync(deployFile, "utf-8");
     const deployLines = deployContent.split("\n").filter(l => l.trim() && !l.trim().startsWith("#")).length;
     if (deployLines >= 3) {
-      checks.push({ name: "Deploy script", category: "Infrastructure", points: 4, maxPoints: 4, status: "pass", detail: `${foundDeploy[0]} (${deployLines} effective lines)` });
+      checks.push({ name: "Deploy script", category: "Infrastructure", points: 3, maxPoints: 3, status: "pass", detail: `${foundDeploy[0]} (${deployLines} effective lines)` });
     } else {
-      checks.push({ name: "Deploy script", category: "Infrastructure", points: 1, maxPoints: 4, status: "partial", detail: `${foundDeploy[0]} — only ${deployLines} effective lines, looks like a placeholder` });
+      checks.push({ name: "Deploy script", category: "Infrastructure", points: 1, maxPoints: 3, status: "partial", detail: `${foundDeploy[0]} — only ${deployLines} effective lines, looks like a placeholder` });
     }
   } else {
-    checks.push({ name: "Deploy script", category: "Infrastructure", points: 0, maxPoints: 4, status: "fail", detail: "No deploy automation" });
+    checks.push({ name: "Deploy script", category: "Infrastructure", points: 0, maxPoints: 3, status: "fail", detail: "No deploy automation" });
   }
 
   // PM2 / process manager (3 pts)
@@ -1560,12 +1645,12 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   if (existsSync(gitignorePath)) {
     const gitignore = readFileSync(gitignorePath, "utf-8");
     if (gitignore.includes(".env")) {
-      checks.push({ name: ".env in .gitignore", category: "Security", points: 8, maxPoints: 8, status: "pass", detail: ".env is gitignored" });
+      checks.push({ name: ".env in .gitignore", category: "Security", points: 10, maxPoints: 10, status: "pass", detail: ".env is gitignored" });
     } else {
-      checks.push({ name: ".env in .gitignore", category: "Security", points: 0, maxPoints: 8, status: "fail", detail: ".env NOT in .gitignore — secrets at risk!" });
+      checks.push({ name: ".env in .gitignore", category: "Security", points: 0, maxPoints: 10, status: "fail", disqualifying: true, detail: ".env NOT in .gitignore — secrets at risk! Caps this project's grade at C" });
     }
   } else {
-    checks.push({ name: ".env in .gitignore", category: "Security", points: 0, maxPoints: 8, status: "fail", detail: "No .gitignore at all" });
+    checks.push({ name: ".env in .gitignore", category: "Security", points: 0, maxPoints: 10, status: "fail", detail: "No .gitignore at all" });
   }
 
   // No secrets in tracked files (6 pts)
@@ -1577,36 +1662,36 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     // [EXEC-FAILURE-IS-NOT-EMPTY]: a failed `git ls-files` must never read as "not tracked".
     const { ok, output: tracked } = execChecked("git ls-files .env", p);
     if (!ok) {
-      checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 6, status: "unknown", detail: "❔ .env present but `git ls-files` failed here — cannot verify whether it is tracked" });
+      checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 10, status: "unknown", detail: "❔ .env present but `git ls-files` failed here — cannot verify whether it is tracked" });
     } else if (tracked === ".env") {
-      checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 6, status: "fail", detail: ".env is tracked by git!" });
+      checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 10, status: "fail", disqualifying: true, detail: ".env is tracked by git! Caps this project's grade at C" });
     } else {
-      checks.push({ name: "Secrets exposure", category: "Security", points: 6, maxPoints: 6, status: "pass", detail: ".env present and not tracked by git" });
+      checks.push({ name: "Secrets exposure", category: "Security", points: 10, maxPoints: 10, status: "pass", detail: ".env present and not tracked by git" });
     }
   } else if (!hasEnv) {
-    checks.push({ name: "Secrets exposure", category: "Security", points: 6, maxPoints: 6, status: "pass", detail: "No .env at repo root — nothing to leak" });
+    checks.push({ name: "Secrets exposure", category: "Security", points: 10, maxPoints: 10, status: "pass", detail: "No .env at repo root — nothing to leak" });
   } else {
-    checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 6, status: "unknown", detail: "❔ .env exists but this is not a git repo — cannot verify whether it is tracked" });
+    checks.push({ name: "Secrets exposure", category: "Security", points: 0, maxPoints: 10, status: "unknown", detail: "❔ .env exists but this is not a git repo — cannot verify whether it is tracked" });
   }
 
   // Lockfile present (3 pts)
   const lockfiles = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "composer.lock"];
   const foundLock = lockfiles.filter(l => existsSync(join(p, l)));
   if (foundLock.length > 0) {
-    checks.push({ name: "Lockfile", category: "Security", points: 3, maxPoints: 3, status: "pass", detail: foundLock.join(", ") });
+    checks.push({ name: "Lockfile", category: "Security", points: 5, maxPoints: 5, status: "pass", detail: foundLock.join(", ") });
   } else if (existsSync(pkgPath) || existsSync(join(p, "composer.json"))) {
-    checks.push({ name: "Lockfile", category: "Security", points: 0, maxPoints: 3, status: "fail", detail: "No lockfile — deps not pinned" });
+    checks.push({ name: "Lockfile", category: "Security", points: 0, maxPoints: 5, status: "fail", detail: "No lockfile — deps not pinned" });
   }
 
   // node_modules in .gitignore (3 pts)
   if (existsSync(gitignorePath)) {
     const gitignore = readFileSync(gitignorePath, "utf-8");
     if (gitignore.includes("node_modules") || gitignore.includes("vendor")) {
-      checks.push({ name: "Deps gitignored", category: "Security", points: 3, maxPoints: 3, status: "pass", detail: "node_modules/vendor gitignored" });
+      checks.push({ name: "Deps gitignored", category: "Security", points: 5, maxPoints: 5, status: "pass", detail: "node_modules/vendor gitignored" });
     } else if (!existsSync(join(p, "package.json")) && !existsSync(join(p, "composer.json"))) {
-      checks.push({ name: "Deps gitignored", category: "Security", points: 3, maxPoints: 3, status: "pass", detail: "N/A — no package manager" });
+      checks.push({ name: "Deps gitignored", category: "Security", points: 5, maxPoints: 5, status: "pass", detail: "N/A — no package manager" });
     } else {
-      checks.push({ name: "Deps gitignored", category: "Security", points: 0, maxPoints: 3, status: "fail", detail: "node_modules/vendor not in .gitignore" });
+      checks.push({ name: "Deps gitignored", category: "Security", points: 0, maxPoints: 5, status: "fail", detail: "node_modules/vendor not in .gitignore" });
     }
   }
 
@@ -1655,6 +1740,22 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   else if (percentage >= 60) grade = "C";
   else if (percentage >= 50) grade = "D";
   else grade = "F";
+
+  // 🔒 LOCKED [SECURITY-IS-DISQUALIFYING] — 2026-08-14
+  // ⛔ NEVER let exposed secrets be averaged away into a good grade.
+  // WHY: security was 20 of 100, so a project could commit its .env and still score 80% on the
+  //      strength of good docs. Weighting alone cannot express "this one thing is not a rounding
+  //      error" — at any weight below ~50 the arithmetic still lets other categories outvote it.
+  // FIX: a failed secret-exposure check CAPS the grade at C no matter the point total. The
+  //      percentage stays honest (it still reports what was earned); only the grade is capped, and
+  //      the report says why. Reserved for actual secret exposure — a missing lockfile is hygiene,
+  //      not a disqualification, and must never set this flag.
+  const disqualified = checks.filter(c => c.disqualifying && c.status === "fail");
+  const GRADE_CAP = "C";
+  const gradeOrder = ["F", "D", "C", "B", "A", "A+"];
+  if (disqualified.length > 0 && gradeOrder.indexOf(grade) > gradeOrder.indexOf(GRADE_CAP)) {
+    grade = GRADE_CAP;
+  }
 
   return {
     project: dir.name,

@@ -184,7 +184,8 @@
 | `src/policy.ts` | 2026-06-10 | Declarative policy v1 schema + zod validator + disk loader (`[POLICY-CONTRACT]` LOCK) | 18 policy tests (acceptance, defaults, rejection, malformed JSON, disk) |
 | `src/hooks.ts` | 2026-06-10 | Policy-driven secret-scan + doc-coverage + redaction contract + git diff parser (`[HOOK-CHECKERS]` LOCK) | 25 hook tests (glob, scan, coverage, hashDocSection, formatters, live git) |
 | `src/sessions.ts` | 2026-03-03 | Session persistence: save/load/list/delete, auto-session inject on MCP startup | 16 session tests |
-| `src/agents.ts` | 2026-08-13 | Dual doc-path resolution (`[DOC-PATH-DUAL]`), unknown-status + provenance (`[ABSENCE-IS-NOT-A-VERDICT]`), pinned 100-pt denominator (`[SCORE-ARITHMETIC-INVARIANT]`), production canary (`[SCORE-CANARY]`), failure-aware exec (`[EXEC-FAILURE-IS-NOT-EMPTY]`) | 17 scoring tests |
+| `src/rubric.ts` | 2026-08-14 | All scoring thresholds in one table (`[RUBRIC-SINGLE-TABLE]`), obfuscated in the published build by `scripts/obfuscate-rubric.mjs` (`[RUBRIC-OBFUSCATION]`) | covered by the 23 scoring tests + canary |
+| `src/agents.ts` | 2026-08-14 | Dual doc-path resolution (`[DOC-PATH-DUAL]`), unknown-status + provenance (`[ABSENCE-IS-NOT-A-VERDICT]`), pinned 100-pt denominator (`[SCORE-ARITHMETIC-INVARIANT]`), production canary (`[SCORE-CANARY]`), failure-aware exec (`[EXEC-FAILURE-IS-NOT-EMPTY]`), content-over-length scoring (`[SCORE-CONTENT-NOT-LENGTH]`), doc freshness (`[SCORE-DOC-FRESHNESS]`), disqualifying security (`[SECURITY-IS-DISQUALIFYING]`) | 23 scoring tests |
 
 ## AI Agent Rework Prevention Protocol
 1. **Check the LOCKED FILES table above before editing ANY `src/` file** — if the file is listed, DO NOT modify it unless the user explicitly requests a change to that specific file.
@@ -216,6 +217,7 @@
 | Unknown status + provenance rule | post-2.1.3 (unreleased) | Aug 2026 | `src/agents.ts` | ✅ LOCKED `[ABSENCE-IS-NOT-A-VERDICT]` — a check that can't determine its condition emits `unknown`, never pass/fail |
 | Pinned 100-point denominator | post-2.1.3 (unreleased) | Aug 2026 | `src/agents.ts` | ✅ LOCKED `[SCORE-ARITHMETIC-INVARIANT]` — skipped checks surface as a visible gap, never shrink the denominator |
 | Production scoring canary | post-2.1.3 (unreleased) | Aug 2026 | `src/agents.ts`, `src/cli.ts` | ✅ LOCKED `[SCORE-CANARY]` — blocks ALL SCORE.md writes on any deviation. Found `[EXEC-FAILURE-IS-NOT-EMPTY]` on its first run |
+| Rubric rework — content, freshness, disqualifying security | post-2.2.0 (unreleased) | Aug 2026 | `src/agents.ts`, `src/rubric.ts` | ✅ LOCKED. Weights 25/25/20/30. copilot-instructions.md scored on topics not line count; new Doc freshness check; exposed secrets CAP the grade at C |
 | Failure-aware exec | post-2.1.3 (unreleased) | Aug 2026 | `src/agents.ts` | ✅ LOCKED `[EXEC-FAILURE-IS-NOT-EMPTY]` — `execChecked()` returns `{ok, output}`; a failed command is never read as an empty-but-valid answer |
 
 ## Critical Rules

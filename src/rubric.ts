@@ -36,8 +36,11 @@ export interface Rubric {
   testsPartial: number;
   /** tsconfig.json byte length below which it is treated as a stub */
   tsconfigSubstantive: number;
-  /** Real (non-symlink) agent-pattern files for full 6 points */
+  /** Real (non-symlink) agent-pattern files for full credit */
   multiAgentFull: number;
+  /** Commits since the agent doc was updated: at or below = current, above `freshnessStale` = stale */
+  freshnessGood: number;
+  freshnessStale: number;
 }
 
 export const RUBRIC: Rubric = {
@@ -52,4 +55,6 @@ export const RUBRIC: Rubric = {
   testsPartial: 0,
   tsconfigSubstantive: 50,
   multiAgentFull: 2,
+  freshnessGood: 10,
+  freshnessStale: 40,
 };

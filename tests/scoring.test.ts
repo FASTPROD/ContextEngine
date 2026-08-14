@@ -19,6 +19,16 @@ function writeDoc(path: string, lines: number): void {
   writeFileSync(path, Array.from({ length: lines }, (_, i) => `line ${i + 1}`).join("\n"), "utf-8");
 }
 
+/** An agent doc covering every required topic — full content marks regardless of length. */
+function writeAgentDoc(path: string): void {
+  writeFileSync(path, [
+    "# P", "## Architecture", "Modules and entry point.",
+    "## Commands", "`npm run build`.",
+    "## Rules", "Never commit secrets.",
+    "## Key files", "`src/index.ts`.",
+  ].join("\n"), "utf-8");
+}
+
 /** Pull a single named check out of a score result. */
 function check(name: string, path: string) {
   const score = scoreProject({ name: "fixture", path } as never);
@@ -32,19 +42,19 @@ function check(name: string, path: string) {
 describe("scoreProject — agent docs resolve at .github/ OR repo root", () => {
   it("scores copilot-instructions.md in .github/", () => {
     mkdirSync(join(tempRepo, ".github"));
-    writeDoc(join(tempRepo, ".github", "copilot-instructions.md"), 60);
+    writeAgentDoc(join(tempRepo, ".github", "copilot-instructions.md"));
 
     const c = check("copilot-instructions.md", tempRepo);
-    expect(c.points).toBe(10);
+    expect(c.points).toBe(6);
     expect(c.status).toBe("pass");
     expect(c.detail).toContain(".github/copilot-instructions.md");
   });
 
   it("scores copilot-instructions.md at the repo root", () => {
-    writeDoc(join(tempRepo, "copilot-instructions.md"), 60);
+    writeAgentDoc(join(tempRepo, "copilot-instructions.md"));
 
     const c = check("copilot-instructions.md", tempRepo);
-    expect(c.points).toBe(10);
+    expect(c.points).toBe(6);
     expect(c.status).toBe("pass");
     expect(c.detail).toContain("copilot-instructions.md");
     expect(c.detail).not.toContain(".github/");
@@ -137,7 +147,7 @@ describe("scoreProject — absence is not a verdict", () => {
   it("still passes cleanly when there is genuinely no .env", () => {
     const c = check("Secrets exposure", tempRepo);
     expect(c.status).toBe("pass");
-    expect(c.points).toBe(6);
+    expect(c.points).toBe(10);
     expect(c.detail).toContain("No .env");
   });
 
@@ -174,9 +184,98 @@ describe("scoreProject — absence is not a verdict", () => {
     const score = scoreProject({ name: "fixture", path: tempRepo } as never);
     const gap = score.checks.find(c => c.name === "Scoring completeness")!;
 
-    expect(gap.maxPoints).toBe(9); // npm scripts (3) + Lockfile (3) + Deps gitignored (3)
+    expect(gap.maxPoints).toBe(13); // npm scripts (3) + Lockfile (5) + Deps gitignored (5)
     expect(score.maxScore).toBe(100);
     expect(score.percentage).toBe(Math.round((score.score / 100) * 100));
+  });
+});
+
+// 🔒 [SCORE-CONTENT-NOT-LENGTH] + [SECURITY-IS-DISQUALIFYING] + [SCORE-DOC-FRESHNESS]
+describe("scoreProject — the 2026-08-14 rubric rework", () => {
+  it("a short doc covering every topic beats a long one covering none", () => {
+    const short = mkdtempSync(join(tmpdir(), "ce-short-"));
+    const long = mkdtempSync(join(tmpdir(), "ce-long-"));
+    try {
+      writeAgentDoc(join(short, "copilot-instructions.md"));   // 9 lines, all 4 topics
+      writeDoc(join(long, "copilot-instructions.md"), 500);     // 500 lines of "line N"
+
+      const shortScore = check("copilot-instructions.md", short);
+      const longScore = check("copilot-instructions.md", long);
+
+      expect(shortScore.points).toBe(6);
+      expect(shortScore.points).toBeGreaterThan(longScore.points);
+      expect(longScore.detail).toContain("length without structure");
+    } finally {
+      rmSync(short, { recursive: true, force: true });
+      rmSync(long, { recursive: true, force: true });
+    }
+  });
+
+  it("gives partial credit for partial topic coverage and names what is missing", () => {
+    writeFileSync(
+      join(tempRepo, "copilot-instructions.md"),
+      ["# P", "## Architecture", "Modules.", ...Array.from({ length: 20 }, (_, i) => `x ${i}`)].join("\n"),
+      "utf-8"
+    );
+    const c = check("copilot-instructions.md", tempRepo);
+    expect(c.status).toBe("partial");
+    expect(c.detail).toContain("missing");
+    expect(c.detail).toContain("key files");
+  });
+
+  it("caps the grade at C when .env is not gitignored, however good everything else is", () => {
+    // .gitignore exists but omits .env — the disqualifying condition.
+    writeFileSync(join(tempRepo, ".gitignore"), "node_modules\ndist\n", "utf-8");
+    writeAgentDoc(join(tempRepo, "copilot-instructions.md"));
+    writeDoc(join(tempRepo, "README.md"), 100);
+    writeFileSync(join(tempRepo, "package.json"), JSON.stringify({ scripts: { build: "tsc" } }), "utf-8");
+    writeFileSync(join(tempRepo, "package-lock.json"), "{}", "utf-8");
+
+    const score = scoreProject({ name: "fixture", path: tempRepo } as never);
+    const envCheck = score.checks.find(c => c.name === ".env in .gitignore")!;
+
+    expect(envCheck.status).toBe("fail");
+    expect(envCheck.disqualifying).toBe(true);
+    expect(envCheck.detail).toContain("Caps this project's grade at C");
+    expect(["C", "D", "F"]).toContain(score.grade);
+    // The percentage stays honest — only the GRADE is capped.
+    expect(score.score).toBeGreaterThan(0);
+  });
+
+  it("does not let a missing lockfile disqualify anything — hygiene is not exposure", () => {
+    writeFileSync(join(tempRepo, ".gitignore"), ".env\nnode_modules\n", "utf-8");
+    writeFileSync(join(tempRepo, "package.json"), "{}", "utf-8");
+
+    const score = scoreProject({ name: "fixture", path: tempRepo } as never);
+    const lock = score.checks.find(c => c.name === "Lockfile");
+
+    expect(lock?.status).toBe("fail");
+    expect(lock?.disqualifying).toBeUndefined();
+  });
+
+  it("reports doc freshness as unknown outside a git repo, never as current", () => {
+    // Regression guard: `git log ... | wc -l` reports wc's exit status, so a failed git log
+    // returned "0" and read as "0 commits since the doc changed — fully current".
+    writeAgentDoc(join(tempRepo, "copilot-instructions.md"));
+
+    const c = check("Doc freshness", tempRepo);
+    expect(c.status).toBe("unknown");
+    expect(c.points).toBe(0);
+  });
+
+  it("keeps the four category weights at 25/25/20/30", () => {
+    writeFileSync(join(tempRepo, ".gitignore"), ".env\nnode_modules\ndist\n", "utf-8");
+    writeFileSync(join(tempRepo, "package.json"), JSON.stringify({ scripts: { build: "tsc" } }), "utf-8");
+    writeFileSync(join(tempRepo, "package-lock.json"), "{}", "utf-8");
+
+    const score = scoreProject({ name: "fixture", path: tempRepo } as never);
+    const byCat: Record<string, number> = {};
+    for (const c of score.checks) byCat[c.category] = (byCat[c.category] ?? 0) + c.maxPoints;
+
+    expect(byCat["Documentation"]).toBe(25);
+    expect(byCat["Infrastructure"]).toBe(25);
+    expect(byCat["Code Quality"]).toBe(20);
+    expect(byCat["Security"]).toBe(30);
   });
 });
 
@@ -197,11 +296,11 @@ describe("runScoreCanary", () => {
 
 describe("scoreProject — doc path resolution, continued", () => {
   it("still penalizes a root-located symlink the same as a .github/ one", () => {
-    writeDoc(join(tempRepo, "real-instructions.md"), 60);
+    writeAgentDoc(join(tempRepo, "real-instructions.md"));
     symlinkSync(join(tempRepo, "real-instructions.md"), join(tempRepo, "copilot-instructions.md"));
 
     const c = check("copilot-instructions.md", tempRepo);
-    expect(c.points).toBe(4);
+    expect(c.points).toBe(2);
     expect(c.status).toBe("partial");
     expect(c.detail).toContain("Symlink");
   });
