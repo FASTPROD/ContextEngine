@@ -7,11 +7,17 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 ## Critical Rules
 
-1. **Never expose scoring internals in public docs** — exact point values, category weights, anti-gaming detection methods, and search weight ratios are trade secrets. README should sell outcomes, not blueprint.
+1. **Keep scoring internals out of *marketing*, but know they are readable** — don't put exact point values, category weights, anti-gaming methods, or search weight ratios in the README or landing pages; sell outcomes, not blueprint. **They are not secret, though.** `dist/agents.js` ships in the npm tarball in plain readable JavaScript, and has since at least 2.1.3 — one `npm pack @compr/opscontext-mcp` and a text editor gets the whole rubric. Do not write, or let anyone believe, that these values are protected. (Updated 2026-08-14 — the previous wording claimed "trade secrets", which was false against what actually shipped.)
 
 2. **Activation gate is mandatory for premium tools** — `score_project`, `run_audit`, `check_ports`, `list_projects` require a valid Pro license. The gate check in `index.ts` and `cli.ts` must never be removed.
 
-3. **Delta modules are the moat** — `agents.ts`, `collectors.ts`, `search.ts`, and the `server/` directory must never be included in npm publishes (`files` field in package.json). Enforced by hook (`.claude/settings.json` → PostToolUse Edit/Write on `package.json`).
+3. **The licence is the moat, not the code** — `server/` must never be published (it holds the activation authority). But `agents.ts`, `collectors.ts` and `search.ts` **do** ship compiled in `dist/`, and cannot be excluded: `dist/index.js` and `dist/cli.js` import `./agents.js` directly, and no decrypt-at-runtime machinery exists in `dist/`. Removing them from `files` ships a broken package.
+
+   What actually protects the product: (a) the activation gate — premium tools refuse to run without a valid licence (rule 2), and (b) BSL-1.1's non-compete — no hosted/SaaS offering built on this codebase (rule 8). Reading the algorithm is not the threat; running it unlicensed and reselling it are, and both are already covered.
+
+   **Planned hardening (not yet built):** keep the canonical rubric text on the VPS and ship a build whose strings are neutered — meaningless labels that still let the tool compute and run. That obscures intent without pretending the code is hidden. Until that exists, assume everything in `dist/` is public.
+
+   _(Updated 2026-08-14. The previous rule required excluding files that were being published anyway, so it was unenforceable and quietly false for at least three releases.)_
 
 4. **All `exec()` calls must use hardcoded strings** — `agents.ts` and `collectors.ts` use `execSync` for git/docker/pm2 data collection. Never interpolate user input into shell commands.
 

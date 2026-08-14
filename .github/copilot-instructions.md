@@ -226,8 +226,8 @@
 5. **`contextengine.json` is optional** — all features work via auto-discovery; config only adds aliases and overrides
 6. **Skill files follow strict schema** — `SKILL.md` must have `## When to use`, `## Key rules`, `## Examples` sections
 7. **server/ is NOT published to npm** — `files` field in package.json restricts to `dist/`, `defaults/`, `skills/`, `examples/`
-8. **Never expose scoring internals in README** — exact point values, category weights, anti-gaming methods are trade secrets
-9. **Never expose Protocol Firewall internals in README** — exact escalation thresholds, scoring formula, truncation limits, exempt tool list, and cache intervals are trade secrets
+8. **Keep scoring internals out of the README — but they are NOT secret** — don't put exact point values, category weights, or anti-gaming methods in marketing copy; sell outcomes, not blueprint. They ship readable in `dist/agents.js` and have since at least 2.1.3, so never claim or assume they are protected. The licence gate (rule 17 in CLAUDE.md terms) and BSL-1.1 are the real protection. See CLAUDE.md rules 1 and 3, reworded 2026-08-14.
+9. **Same for Protocol Firewall internals** — escalation thresholds, scoring formula, truncation limits, exempt tool list and cache intervals stay out of the README for positioning reasons, not because they are hidden. `dist/firewall.js` ships too.
 10. **SSH to Gandi VPS** — Use `sshpass -p '<VPS_PASSWORD>' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`. SSH key passphrase is lost. For rsync: exclude `node_modules/`, `data/`, `delta-modules/`.
 11. **Post-push checkpoint** — after every `git push`, call `end_session` (MCP tool) or run `npx @compr/contextengine-mcp end-session` (CLI fallback if MCP not connected). Resolve any FAIL items before finishing. The full protocol before push: (a) update `copilot-instructions.md`, (b) update `SKILLS.md`, (c) `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit, (f) push, (g) `end_session`.
 12. **Every project workspace needs `.vscode/mcp.json`** — MCP servers are NOT configured globally in VS Code user settings (deprecated). Each workspace must have its own `.vscode/mcp.json` with the ContextEngine stdio config. Without it, agents in that project have zero access to the knowledge base. **MUST use absolute node path** (not bare `node`) to avoid shell-env resolution failures. See admin.CROWLR, FASTPROD, PLANK.io, CROWLR.io, FC_project, COMPR-app, EXO, GOOGLE Analytics, shop.invoc.io for examples.
@@ -293,7 +293,7 @@
 - Rounds tracked via `ROUND_GAP_MS = 30_000` (30s gap between non-exempt calls = new round)
 - `roundsSinceSessionSave` drives escalation: 2=footer, 3=header, 4+=degraded
 - `save_session` resets `roundsSinceSessionSave` to 0 and `roundAtLastSave` to current round
-- All constants and thresholds are IP-protected (trade secrets)
+- Constants and thresholds are kept out of public docs for positioning, but they are NOT protected — `dist/firewall.js` ships readable on npm (corrected 2026-08-14)
 
 ### Test Coverage
 - 31 firewall tests (was 15): 16 unit, 5 round escalation, 7 injection, 3 cross-window
