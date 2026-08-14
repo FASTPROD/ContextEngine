@@ -33,6 +33,20 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 10. **Post-push checkpoint** — after every `git push`, call `end_session` (MCP) or run `npx @compr/contextengine-mcp end-session` (CLI fallback). Enforced by hook (`.claude/settings.json` → PostToolUse Bash).
 
+## Local dev wiring — READ THIS BEFORE ANSWERING "how do I get the update?"
+
+**Both CE surfaces on this machine run the local repo build, not an npm install.**
+
+| Surface | Runs | Refresh after a code change |
+|---|---|---|
+| Terminal `contextengine` | `npm link` → this repo (`lib/node_modules/@compr/contextengine-mcp` is a **symlink** to `/Users/yan/Projects/ContextEngine`, still under the old package name) | `npm run build` — nothing else, no reinstall |
+| VS Code MCP server | `.vscode/mcp.json` → `/Users/yan/Projects/ContextEngine/dist/index.js` (absolute path) | `npm run build`, then **reload the VS Code window** — the MCP process is long-lived and holds the old code until it restarts |
+| VS Code extension `css-llc.contextengine` | shells out to the CLI | inherits the link automatically |
+
+So: **`npm run build` updates the tooling; `npm publish` does not.** Publishing only matters for other users. Verify with `ls -la $(dirname $(readlink -f $(which contextengine)))/..` rather than assuming.
+
+⚠ `dist/` is the live artifact here, not a throwaway build output. `scripts/obfuscate-rubric.mjs` rewrites `dist/rubric.js` into its encoded publish form — if you run it manually, finish with a plain `npm run build` so local tooling isn't left running the published artifact.
+
 ## Architecture
 - `src/` — 14 TypeScript source files (~7K lines)
 - `server/` — Activation server (Express + SQLite + AES-256-CBC)

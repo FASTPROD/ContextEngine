@@ -29,7 +29,15 @@
       "Bash(npx . score --no-save)",
       "Bash(node -p \"'version: '+require\\('./package.json'\\).version\")",
       "Bash(grep -iA 4 \"collector\\\\|delta\\\\|premium\")",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(contextengine)",
+      "Bash(echo \"=== what does the `contextengine` binary on PATH point to? ===\")",
+      "Bash(node -p \"require\\('./package.json'\\).version\")",
+      "Bash(echo \"MCP server \\(VS Code\\): /Users/yan/Projects/ContextEngine/dist/index.js → build $\\(node -p \"require\\('./package.json'\\).version\"\\) \\(this repo\\)\")",
+      "Bash(code --list-extensions --show-versions)",
+      "Bash(node -p \"'repo version: '+require\\('./package.json'\\).version\")",
+      "Bash(node -p \"require\\('/Users/yan/.nvm/versions/node/v20.19.4/lib/node_modules/@compr/contextengine-mcp/package.json'\\).version\")",
+      "Bash(node dist/cli.js --version)"
     ]
   },
   "hooks": {
