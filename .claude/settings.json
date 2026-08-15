@@ -37,7 +37,10 @@
       "Bash(code --list-extensions --show-versions)",
       "Bash(node -p \"'repo version: '+require\\('./package.json'\\).version\")",
       "Bash(node -p \"require\\('/Users/yan/.nvm/versions/node/v20.19.4/lib/node_modules/@compr/contextengine-mcp/package.json'\\).version\")",
-      "Bash(node dist/cli.js --version)"
+      "Bash(node dist/cli.js --version)",
+      "Bash(perl -pi -e 's{npx \\\\@compr/contextengine-mcp }{npx \\\\@compr/opscontext-mcp }g' src/cli.ts)",
+      "Bash(perl -pi -e 's{npmjs\\\\.com/package/\\\\@compr/contextengine-mcp}{npmjs.com/package/\\\\@compr/opscontext-mcp}g' src/cli.ts src/agents.ts)",
+      "Bash(sed -i '' 's/^- \\\\*\\\\*Version\\\\*\\\\*: v2\\\\.3\\\\.0$/- **Version**: v2.4.0/' .github/copilot-instructions.md)"
     ]
   },
   "hooks": {

@@ -66,7 +66,7 @@
 - Tests must pass before any commit
 
 ### npm Publishing
-- Package: `@compr/contextengine-mcp`
+- Package: `@compr/opscontext-mcp` (the `@compr/contextengine-mcp` name is deprecated and frozen at 1.23.1)
 - `npm publish --access public` (prepublishOnly runs `npm run build`)
 - `files` field restricts to: `dist/`, `defaults/`, `skills/`, `examples/`
 - **Sourcemaps EXCLUDED** from tarball (`!dist/**/*.map` in `files[]` + `dist/**/*.map` in `.npmignore`) — keeps tarball ~28% smaller and removes the de-obfuscation vector
@@ -298,7 +298,7 @@ code references already point at it._
 - **Plan mapping** — `metadata.plan_key` in Stripe checkout → `PLAN_CONFIG` → maxMachines + months
 
 ### npm Publishing
-- **Scoped package** — `@compr/contextengine-mcp` on npmjs.com
+- **Scoped package** — `@compr/opscontext-mcp` on npmjs.com
 - **BSL-1.1 license** — Business Source License (non-compete clause)
 - **Selective files** — only `dist/`, `defaults/`, `skills/`, `examples/` published
 - **Bundled defaults** — 30 starter learnings ship with npm

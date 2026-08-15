@@ -3,7 +3,7 @@
 ## MODEL POLICY: Opus 4.6 only. Sonnet code requires Opus review before merging.
 
 ## What This Is
-MCP (Model Context Protocol) server that indexes project documentation and source code into a searchable knowledge base for AI coding agents. Published as `@compr/contextengine-mcp` on npm.
+MCP (Model Context Protocol) server that indexes project documentation and source code into a searchable knowledge base for AI coding agents. Published as `@compr/opscontext-mcp` on npm. (The old `@compr/contextengine-mcp` name is deprecated and frozen at 1.23.1 — never point a command at it.)
 
 ## Critical Rules
 
@@ -31,7 +31,7 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 9. **Test before publish** — `npm run build` must succeed. Run `npx . search "test"` and `npx . score ContextEngine` to smoke-test before `npm publish`.
 
-10. **Post-push checkpoint** — after every `git push`, call `end_session` (MCP) or run `npx @compr/contextengine-mcp end-session` (CLI fallback). Enforced by hook (`.claude/settings.json` → PostToolUse Bash).
+10. **Post-push checkpoint** — after every `git push`, call `end_session` (MCP) or run `npx @compr/opscontext-mcp end-session` (CLI fallback). Enforced by hook (`.claude/settings.json` → PostToolUse Bash).
 
 ## Local dev wiring — READ THIS BEFORE ANSWERING "how do I get the update?"
 

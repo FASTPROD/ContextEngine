@@ -3,9 +3,9 @@
 ## Project Context
 - **TypeScript MCP Server** — queryable knowledge base for AI coding agents
 - **GitHub**: FASTPROD/ContextEngine (PUBLIC repo)
-- **Version**: v2.3.0
+- **Version**: v2.4.0
 - **Branch**: `main`
-- **npm**: `@compr/contextengine-mcp`
+- **npm**: `@compr/opscontext-mcp` (old `@compr/contextengine-mcp` is deprecated, frozen at 1.23.1 — `npx` at that name fetches June code)
 - **VS Code Extension**: `css-llc.contextengine` — https://marketplace.visualstudio.com/items?itemName=css-llc.contextengine
 - **License**: BSL-1.1 (Business Source License)
 
@@ -231,7 +231,7 @@
 8. **Keep scoring internals out of the README — but they are NOT secret** — don't put exact point values, category weights, or anti-gaming methods in marketing copy; sell outcomes, not blueprint. They ship readable in `dist/agents.js` and have since at least 2.1.3, so never claim or assume they are protected. The licence gate (rule 17 in CLAUDE.md terms) and BSL-1.1 are the real protection. See CLAUDE.md rules 1 and 3, reworded 2026-08-14.
 9. **Same for Protocol Firewall internals** — escalation thresholds, scoring formula, truncation limits, exempt tool list and cache intervals stay out of the README for positioning reasons, not because they are hidden. `dist/firewall.js` ships too.
 10. **SSH to Gandi VPS** — Use `sshpass -p '<VPS_PASSWORD>' ssh -o PubkeyAuthentication=no -o StrictHostKeyChecking=no admin@92.243.24.157`. SSH key passphrase is lost. For rsync: exclude `node_modules/`, `data/`, `delta-modules/`.
-11. **Post-push checkpoint** — after every `git push`, call `end_session` (MCP tool) or run `npx @compr/contextengine-mcp end-session` (CLI fallback if MCP not connected). Resolve any FAIL items before finishing. The full protocol before push: (a) update `copilot-instructions.md`, (b) update `SKILLS.md`, (c) `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit, (f) push, (g) `end_session`.
+11. **Post-push checkpoint** — after every `git push`, call `end_session` (MCP tool) or run `npx @compr/opscontext-mcp end-session` (CLI fallback if MCP not connected). Resolve any FAIL items before finishing. The full protocol before push: (a) update `copilot-instructions.md`, (b) update `SKILLS.md`, (c) `save_learning` for each reusable pattern, (d) update `SCORE.md`, (e) commit, (f) push, (g) `end_session`.
 12. **Every project workspace needs `.vscode/mcp.json`** — MCP servers are NOT configured globally in VS Code user settings (deprecated). Each workspace must have its own `.vscode/mcp.json` with the ContextEngine stdio config. Without it, agents in that project have zero access to the knowledge base. **MUST use absolute node path** (not bare `node`) to avoid shell-env resolution failures. See admin.CROWLR, FASTPROD, PLANK.io, CROWLR.io, FC_project, COMPR-app, EXO, GOOGLE Analytics, shop.invoc.io for examples.
 13. **MANDATORY: `save_learning` in real-time** — every reusable pattern, fix, or discovery MUST be saved via `save_learning` tool AS SOON AS it is identified. Do NOT batch them. Do NOT defer to end-of-session. Each learning must be saved within the same turn it is discovered. **If MCP is not connected**, use the CLI fallback: `node dist/cli.js save-learning "rule text" -c category -p project --context "details"` in terminal. NEVER silently skip learnings.
 14. **NEVER write secrets in code or docs** — passwords, API keys, tokens, and credentials must ONLY go in `.copilot-credentials.md` or `.env` (both gitignored). Documentation must use `*(see .copilot-credentials.md)*` placeholders. The pre-commit hook scans for 17 inline patterns + optional gitleaks (~150 patterns) + policy-driven patterns from `.contextengine/policy.json` and BLOCKS commits containing them. To update inline patterns, edit `hooks/pre-commit` and redeploy. To add project-specific patterns without touching the shared hook, author them in `.contextengine/policy.json`.

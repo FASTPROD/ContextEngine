@@ -226,7 +226,7 @@ function generateMcpJson(): object {
       contextengine: {
         type: "stdio",
         command: npxPath,
-        args: ["-y", "@compr/contextengine-mcp"],
+        args: ["-y", "@compr/opscontext-mcp"],
       },
     },
   };
@@ -2265,17 +2265,17 @@ Flags:
   --yes, -y   Skip all interactive prompts (auto-accept defaults)
 
 Examples:
-  npx @compr/contextengine-mcp search "docker nginx"
-  npx @compr/contextengine-mcp score ContextEngine
-  npx @compr/contextengine-mcp score --html
-  npx @compr/contextengine-mcp save-session my-project summary "Deployed v2, fixed auth"
-  npx @compr/contextengine-mcp load-session my-project
-  npx @compr/contextengine-mcp end-session
-  npx @compr/contextengine-mcp import-learnings rules.md -c deployment
-  npx @compr/contextengine-mcp init --yes
-  echo "value" | npx @compr/contextengine-mcp save-session my-project notes --stdin
+  npx @compr/opscontext-mcp search "docker nginx"
+  npx @compr/opscontext-mcp score ContextEngine
+  npx @compr/opscontext-mcp score --html
+  npx @compr/opscontext-mcp save-session my-project summary "Deployed v2, fixed auth"
+  npx @compr/opscontext-mcp load-session my-project
+  npx @compr/opscontext-mcp end-session
+  npx @compr/opscontext-mcp import-learnings rules.md -c deployment
+  npx @compr/opscontext-mcp init --yes
+  echo "value" | npx @compr/opscontext-mcp save-session my-project notes --stdin
 
-npm:  https://www.npmjs.com/package/@compr/contextengine-mcp
+npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
 `);
 } else if (command === "search") {
   const queryParts: string[] = [];
