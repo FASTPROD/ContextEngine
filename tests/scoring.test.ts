@@ -279,6 +279,67 @@ describe("scoreProject — the 2026-08-14 rubric rework", () => {
   });
 });
 
+// 🔒 [SCORE-LANGUAGE-AWARE] — reported from the Odoo connector: a Python addon with 15 passing
+// tests scored "No test directory", "No tsconfig/jsconfig" and "No lint config".
+describe("scoreProject — nested tests and non-JS projects", () => {
+  it("finds tests one level down, where Odoo addons and src-layouts keep them", () => {
+    mkdirSync(join(tempRepo, "my_module", "tests"), { recursive: true });
+    for (let i = 0; i < 6; i++) {
+      writeFileSync(join(tempRepo, "my_module", "tests", `test_thing_${i}.py`), "def test_x(): pass\n", "utf-8");
+    }
+
+    const c = check("Tests", tempRepo);
+    expect(c.status).toBe("pass");
+    expect(c.points).toBe(8);
+    expect(c.detail).toContain("my_module/tests/");
+  });
+
+  it("does not descend into node_modules or vendor looking for tests", () => {
+    mkdirSync(join(tempRepo, "node_modules", "somepkg", "tests"), { recursive: true });
+    writeFileSync(join(tempRepo, "node_modules", "somepkg", "tests", "test_a.js"), "", "utf-8");
+
+    const c = check("Tests", tempRepo);
+    expect(c.status).toBe("fail");
+  });
+
+  it("judges a Python project on mypy/pyright, not tsconfig", () => {
+    writeFileSync(join(tempRepo, "pyproject.toml"), "[tool.poetry]\nname='x'\n", "utf-8");
+
+    const c = check("Type checking", tempRepo);
+    expect(c.detail).toContain("Python");
+    expect(c.detail).not.toContain("tsconfig");
+  });
+
+  it("passes a Python project that configures mypy via pyproject", () => {
+    writeFileSync(join(tempRepo, "pyproject.toml"), "[tool.mypy]\nstrict = true\n", "utf-8");
+
+    const c = check("Type checking", tempRepo);
+    expect(c.status).toBe("pass");
+    expect(c.points).toBe(5);
+  });
+
+  it("judges Python linting on ruff/flake8, not eslint", () => {
+    writeFileSync(join(tempRepo, "setup.py"), "from setuptools import setup\n", "utf-8");
+    writeFileSync(join(tempRepo, ".flake8"), "[flake8]\nmax-line-length = 100\n", "utf-8");
+
+    const c = check("Linting", tempRepo);
+    expect(c.status).toBe("pass");
+    expect(c.detail).toContain(".flake8");
+  });
+
+  it("returns unknown — not fail — when no tooling convention is known for the project type", () => {
+    // No package.json, no python markers, no composer.json: the scorer has no basis for a verdict.
+    writeFileSync(join(tempRepo, "main.rs"), "fn main() {}\n", "utf-8");
+
+    const typeCheck = check("Type checking", tempRepo);
+    expect(typeCheck.status).toBe("unknown");
+    expect(typeCheck.detail).toContain("not assessed");
+
+    const lint = check("Linting", tempRepo);
+    expect(lint.status).toBe("unknown");
+  });
+});
+
 describe("runScoreCanary", () => {
   it("passes against the current scorer", () => {
     const r = runScoreCanary();

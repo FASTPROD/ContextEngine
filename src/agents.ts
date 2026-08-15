@@ -153,6 +153,48 @@ function matchDocTopics(content: string, topics: typeof AGENT_DOC_TOPICS): strin
   return topics.filter(t => t.patterns.test(content)).map(t => t.label);
 }
 
+/**
+ * Primary language of a project, used to pick which tooling checks even apply.
+ *
+ * 🔒 LOCKED [SCORE-LANGUAGE-AWARE] — 2026-08-15
+ * ⛔ NEVER score a project against tooling from a language it does not use.
+ * WHY: the Odoo connector — a pure Python addon with 15 passing tests — was scored
+ *      "❌ No tsconfig/jsconfig" (0/5) and "❌ No lint config" (0/4). A Python project is not
+ *      *missing* a TypeScript config; the check simply does not apply, and reporting 0/5 for it
+ *      is the scorer stating a verdict about something it never assessed. The agent working
+ *      there read the rows correctly and refused to distort the project to satisfy them, which
+ *      is the right instinct — the tool was wrong, not the repo.
+ * FIX: detect the language, run the matching tooling check, and emit "unknown" when no check
+ *      applies. [ABSENCE-IS-NOT-A-VERDICT] for language assumptions.
+ */
+type ProjectLanguage = "js" | "python" | "php" | "other";
+
+function detectLanguage(p: string): ProjectLanguage {
+  if (existsSync(join(p, "package.json"))) return "js";
+  const pythonMarkers = ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "__manifest__.py"];
+  if (pythonMarkers.some(m => existsSync(join(p, m)))) return "python";
+  if (existsSync(join(p, "composer.json"))) return "php";
+  // Odoo addons and src-layout packages keep their markers one level down.
+  for (const sub of safeSubdirs(p)) {
+    if (pythonMarkers.some(m => existsSync(join(p, sub, m)))) return "python";
+    if (existsSync(join(p, sub, "package.json"))) return "js";
+  }
+  return "other";
+}
+
+/** Immediate subdirectories worth searching — skips vendored, hidden and build output. */
+function safeSubdirs(p: string): string[] {
+  const SKIP = new Set(["node_modules", "vendor", "dist", "build", ".git", "__pycache__", "venv", ".venv", "coverage", "_deprecated"]);
+  try {
+    return readdirSync(p, { withFileTypes: true })
+      .filter(d => d.isDirectory() && !d.name.startsWith(".") && !SKIP.has(d.name))
+      .map(d => d.name)
+      .slice(0, 24); // bounded — this runs for every project on every fleet scan
+  } catch {
+    return [];
+  }
+}
+
 /** Symlink target for diagnostics, or "?" if unreadable. Never throws. */
 function readlinkSafe(filePath: string): string {
   try {
@@ -1281,6 +1323,9 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   const checks: ScoreCheck[] = [];
   const p = dir.path;
 
+  // Language decides which tooling checks apply at all — see [SCORE-LANGUAGE-AWARE].
+  const lang = detectLanguage(p);
+
   // --- Documentation (30 points max) ---
 
   // copilot-instructions.md (6 pts) — scored on CONTENT, not length.
@@ -1558,7 +1603,15 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   // --- Code Quality (20 points max) ---
 
   // Tests directory (8 pts) — checks for real test files, detects symlinks
-  const testDirs = ["tests", "test", "__tests__", "spec", "src/__tests__"];
+  // Search the repo root first, then one level down — Odoo addons, src-layout packages and
+  // single-package monorepos keep tests at `<module>/tests/`. Reporting "No test directory" for
+  // a project with 15 passing tests is [ABSENCE-IS-NOT-A-VERDICT] applied to a path assumption;
+  // it is the same defect as [DOC-PATH-DUAL], one directory deeper.
+  const testDirNames = ["tests", "test", "__tests__", "spec", "src/__tests__"];
+  const testDirs = [
+    ...testDirNames,
+    ...safeSubdirs(p).flatMap(sub => testDirNames.map(td => `${sub}/${td}`)),
+  ];
   const foundTests = testDirs.filter(td => existsSync(join(p, td)));
   if (foundTests.length > 0) {
     const testDirPath = join(p, foundTests[0]);
@@ -1602,6 +1655,18 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     }
   } else if (existsSync(join(p, "jsconfig.json"))) {
     checks.push({ name: "Type checking", category: "Code Quality", points: 2, maxPoints: 5, status: "partial", detail: "jsconfig.json only" });
+  } else if (lang === "python") {
+    // See [SCORE-LANGUAGE-AWARE]. Python type checking is mypy/pyright, not tsconfig.
+    const pyTypeMarkers = ["mypy.ini", ".mypy.ini", "pyrightconfig.json"];
+    const foundPyType = pyTypeMarkers.filter(m => existsSync(join(p, m)));
+    const pyproject = existsSync(join(p, "pyproject.toml")) ? readFileSync(join(p, "pyproject.toml"), "utf-8") : "";
+    if (foundPyType.length > 0 || /\[tool\.(mypy|pyright)\]/.test(pyproject)) {
+      checks.push({ name: "Type checking", category: "Code Quality", points: 5, maxPoints: 5, status: "pass", detail: `${foundPyType[0] ?? "pyproject.toml"} — static type checking configured` });
+    } else {
+      checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "fail", detail: "Python project with no mypy/pyright config — add one for static type checking" });
+    }
+  } else if (lang === "php" || lang === "other") {
+    checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "unknown", detail: `❔ No type-checking convention known for this project type (${lang}) — not assessed` });
   } else {
     checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "fail", detail: "No tsconfig/jsconfig" });
   }
@@ -1619,8 +1684,19 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     } else {
       checks.push({ name: "Linting", category: "Code Quality", points: 4, maxPoints: 4, status: "pass", detail: foundLint.join(", ") });
     }
+  } else if (lang === "python") {
+    // See [SCORE-LANGUAGE-AWARE]. Python linting is ruff/flake8/pylint, not eslint.
+    const pyLint = ["ruff.toml", ".ruff.toml", ".flake8", ".pylintrc", "tox.ini", "setup.cfg"].filter(l => existsSync(join(p, l)));
+    const pyproject = existsSync(join(p, "pyproject.toml")) ? readFileSync(join(p, "pyproject.toml"), "utf-8") : "";
+    if (pyLint.length > 0 || /\[tool\.(ruff|flake8|pylint|black)\]/.test(pyproject)) {
+      checks.push({ name: "Linting", category: "Code Quality", points: 4, maxPoints: 4, status: "pass", detail: pyLint[0] ?? "pyproject.toml" });
+    } else {
+      checks.push({ name: "Linting", category: "Code Quality", points: 0, maxPoints: 4, status: "fail", detail: "Python project with no ruff/flake8/pylint config — add one" });
+    }
+  } else if (lang === "other") {
+    checks.push({ name: "Linting", category: "Code Quality", points: 0, maxPoints: 4, status: "unknown", detail: "❔ No linting convention known for this project type — not assessed" });
   } else {
-    checks.push({ name: "Linting", category: "Code Quality", points: 0, maxPoints: 4, status: "fail", detail: "No lint config" });
+    checks.push({ name: "Linting", category: "Code Quality", points: 0, maxPoints: 4, status: "fail", detail: "No lint config (looked for eslint/prettier/phpcs at repo root)" });
   }
 
   // Package scripts / build commands (3 pts)
