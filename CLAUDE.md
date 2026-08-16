@@ -59,7 +59,8 @@ So: **`npm run build` updates the tooling; `npm publish` does not.** Publishing 
 npm run build          # Compile TypeScript
 npm start              # Start MCP server (stdio mode)
 npx . search "query"   # CLI search
-npx . score            # Score all projects
+npx . score            # Score THIS project only (writes its SCORE.md)
+npx . score --all      # Score every discovered project — writes into EACH (add --no-save to dry-run)
 npx . audit            # Run compliance audit
 ```
 

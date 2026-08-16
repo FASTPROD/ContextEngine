@@ -348,13 +348,33 @@ For full control, create a `contextengine.json`:
 
 ### Config resolution order
 
+Which **config file** is read (both the search corpus and the project fleet):
+
 | Priority | Source |
 |----------|--------|
 | 1 | `CONTEXTENGINE_CONFIG` env var |
 | 2 | `./contextengine.json` |
 | 3 | `~/.contextengine.json` |
-| 4 | `CONTEXTENGINE_WORKSPACES` env var |
-| 5 | `~/Projects` auto-discover |
+
+Which **project fleet** is scanned — this is what `score --all`, `audit`, `list_projects`
+and `check_ports` operate on:
+
+| Priority | Source |
+|----------|--------|
+| 1 | `CONTEXTENGINE_WORKSPACES` env var (colon-separated) |
+| 2 | `workspaces` in the config file |
+| 3 | `~/Projects` auto-discover |
+
+**The env var wins.** It is set per-invocation, so it is the most specific statement of
+intent — and it is what the MCP config blocks in this README set. Use it to scope a run:
+
+```bash
+CONTEXTENGINE_WORKSPACES=/tmp/sandbox npx @compr/opscontext-mcp score --all
+```
+
+> Note: the **search corpus** (`search`, `reindex`, `list-sources`) still prefers the config
+> file's `workspaces` over the env var. If you rely on the env var to scope indexing, set
+> `CONTEXTENGINE_CONFIG` to a config without `workspaces`, or unset `workspaces` there.
 
 ## Plugin Adapters
 

@@ -547,7 +547,7 @@ async function runInit(): Promise<void> {
 // CLI Engine — shared initialization for all CLI subcommands
 // ---------------------------------------------------------------------------
 
-import { loadSources, loadProjectDirs, loadConfig, resolveProjectDir, findProjectRoot, type KnowledgeSource } from "./config.js";
+import { loadSources, loadProjectDirs, loadConfig, resolveProjectDir, findProjectRoot, hasProjectMarker, looksLikePath, type KnowledgeSource } from "./config.js";
 import { ingestSources, type Chunk } from "./ingest.js";
 import { searchChunks } from "./search.js";
 import { collectProjectOps, collectSystemOps } from "./collectors.js";
@@ -880,9 +880,32 @@ async function cliScore(
     // [SCORE-ACCEPTS-PATH] — a path is as valid an identifier as a name.
     const dir = resolveProjectDir(project, projectDirs);
     if (!dir) {
-      console.error(`❌ Project not found: "${project}"`);
-      console.error(`   Not a known project name, and not an existing directory.`);
-      console.error(`Available: ${projectDirs.map((d) => d.name).join(", ")}`);
+      // Say which of the three failures actually happened. "Not found" for a
+      // directory that plainly exists is the same absence-as-verdict mistake
+      // [SCORE-ACCEPTS-PATH] was written to fix — do not reintroduce it here.
+      const abs = resolve(project.replace(/^~/, homedir()));
+      const exists = existsSync(abs);
+      const isDir = exists && statSync(abs).isDirectory();
+
+      if (!looksLikePath(project)) {
+        // A bare name that missed the fleet index. Deliberately NOT resolved as a
+        // relative directory — that is what silently scored ./src and ./dist.
+        console.error(`❌ Project not found: "${project}"`);
+        if (isDir) {
+          console.error(`   A directory named "${project}" exists here, but it is not a`);
+          console.error(`   project in your fleet. To score it anyway: contextengine score ./${project}`);
+        }
+        console.error(`Available: ${projectDirs.map((d) => d.name).join(", ")}`);
+      } else if (!exists) {
+        console.error(`❌ No such directory: ${abs}`);
+      } else if (!isDir) {
+        console.error(`❌ Not a directory: ${abs}`);
+      } else {
+        console.error(`❌ Not a project: ${abs}`);
+        console.error(`   The directory exists, but has no .git, package.json, pyproject.toml`);
+        console.error(`   or other build file — so it looks like a container, not a project.`);
+        console.error(`   If you meant the projects INSIDE it, use: contextengine score --all`);
+      }
       process.exit(1);
     }
     scores = [scoreProject(dir)];

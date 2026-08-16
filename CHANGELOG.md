@@ -4,6 +4,53 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [2.4.2] — 2026-08-16 — Close the three holes 2.4.1 left in "a directory is not a project"
+
+2.4.1 made `score`'s scope explicit but enforced it on only one of three entry points. An
+adversarial review (30 agents, sandboxed) raised 26 findings, refuted 18, and confirmed 8 —
+clustering into the fixes below. Every repro was reproduced against the shipped build before
+being fixed, and re-run after.
+
+### Fixed
+
+- **`score .` re-created the exact incident 2.4.1's LOCK forbids.** `cd ~/Projects && score .`
+  wrote `~/Projects/SCORE.md` — *"Projects: 27/100 (F), Not a git repo"* — into the container of
+  37 repositories. The identical command *without* the `.` was correctly refused: the guard
+  existed, and the explicit-path entry point walked straight past it. Same for `score ~/Projects`,
+  `score ..` and `score /`. A path must now carry a build/VCS marker
+  (`.git`, `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `Makefile`, …) to be
+  scoreable. Locked as `[RESOLVE-PATH-MUST-BE-A-PROJECT]`.
+- **A mistyped project name silently scored a subdirectory.** `score src`, `score dist`,
+  `score docs` no longer errored with the available-projects list — the bare token fell through
+  to path resolution against the cwd, scored the subdirectory, and wrote a `SCORE.md` into it.
+  In this repo `score dist` wrote `dist/SCORE.md`, which then ships inside the npm tarball. A
+  bare name now resolves against the fleet index **only**; the error names the directory it
+  found and offers `score ./src` as the explicit escape hatch.
+- **`score` in a subpackage reported "Not a git repo" from inside a git repo.** `cd server &&
+  score` stopped at the nearest `package.json` and reported *"server — 32% (F), Not a git repo,
+  No CI pipeline, README.md Missing"* — every claim false about the project the user was standing
+  in. `.git` is now the project boundary and wins over any nearer build file; a genuinely
+  standalone package still resolves to itself. Locked as `[GIT-ROOT-IS-THE-PROJECT-BOUNDARY]`.
+- **`CONTEXTENGINE_WORKSPACES` was read and ignored.** It was a fallback that applied only when
+  the config file defined no `workspaces` — so on the documented setup it did nothing, including
+  in every MCP config block this project ships. Precedence is now env var > config file >
+  auto-discovery. Locked as `[ENV-WORKSPACES-WINS]`.
+- Error messages no longer say "not an existing directory" about a directory that exists. Each
+  of the four failure modes (unknown name / no such path / not a directory / not a project) now
+  names the actual reason.
+
+### Documentation
+
+- README's "Config resolution order" table documented the pre-fix precedence and could not
+  describe both surfaces at once. Now split: config-file lookup, project-fleet lookup (env wins),
+  and an explicit note that the *search corpus* still prefers the config file.
+- `CLAUDE.md` still told every agent in this repo that `npx . score` scores all projects.
+
+### Tests
+
+373 pass (8 new). One pre-existing test asserted the old behaviour — a marker-less directory
+resolving as a project — and was corrected rather than deleted.
+
 ## [2.4.1] — 2026-08-16 — `score` scope is now explicit: current project by default, `--all` to opt into the fleet
 
 ### Changed (behaviour — read this before upgrading)

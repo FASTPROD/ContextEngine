@@ -337,7 +337,7 @@ export function loadProjectDirs(): ProjectDirectory[] {
  * path-only. Everything else stays eligible for name lookup first, so
  * `score KONIVE.com` keeps resolving exactly as it did before this existed.
  */
-function looksLikePath(token: string): boolean {
+export function looksLikePath(token: string): boolean {
   return (
     token.includes("/") ||
     token.includes(sep) ||
@@ -358,36 +358,67 @@ function looksLikePath(token: string): boolean {
  *      never inspected — the lookup only ever compared basenames, so this was
  *      [ABSENCE-IS-NOT-A-VERDICT] at the argument-parsing layer: "not in my
  *      name index" was reported as "does not exist".
- * FIX: resolve names AND paths. A path that exists is a project, whether or not
- *      it sits under a configured workspace — that is what makes the tool usable
- *      outside `~/Projects`.
+ * FIX: resolve names AND paths. A path that exists AND carries a project marker is a
+ *      project, whether or not it sits under a configured workspace — that is what makes
+ *      the tool usable outside `~/Projects`.
+ *
+ * 🔒 LOCKED [RESOLVE-PATH-MUST-BE-A-PROJECT] — 2026-08-16
+ * ⛔ NEVER accept "it is a directory that exists" as proof that a path is a project, and
+ *    NEVER let a bare name that missed the index fall through to path resolution.
+ * WHY: the first cut did both, and an adversarial review reproduced three consequences.
+ *      1. `cd ~/Projects && score .` wrote `~/Projects/SCORE.md` — "Projects: 27/100 (F),
+ *         Not a git repo" — into the CONTAINER of 37 repositories. The identical command
+ *         WITHOUT the `.` was correctly refused, so the guard existed and one entry point
+ *         walked straight past it. Same for `score ~/Projects`, `score ..`, and `score /`.
+ *      2. `score src`, `score dist`, `score docs` — a typo or a half-remembered name — no
+ *         longer errored with "Available: …". The bare token fell through to
+ *         `resolve(token)` against the cwd, so it silently scored a SUBDIRECTORY and wrote
+ *         a SCORE.md into it. In this repo `score dist` writes `dist/SCORE.md`, which then
+ *         ships inside the npm tarball.
+ *      3. It made the sibling LOCK a half-truth: [SCORE-CWD-MUST-BE-A-PROJECT] promises a
+ *         non-project is never scored, but enforced it on the no-argument path only.
+ * FIX: a directory must carry a build/VCS marker to be scoreable, and a bare name resolves
+ *      against the fleet index ONLY. Configured projects always pass — they are the fleet
+ *      by definition. Absence of a marker is a measurement, not permission to write.
  */
+const PROJECT_MARKERS = [
+  ".git", "package.json", "pyproject.toml", "requirements.txt", "setup.py",
+  "composer.json", "pubspec.yaml", "go.mod", "Cargo.toml", "Gemfile",
+  "pom.xml", "build.gradle", "Makefile", "CMakeLists.txt",
+];
+
+/** Does this directory carry any build/VCS marker that makes it a project? */
+export function hasProjectMarker(dir: string): boolean {
+  return PROJECT_MARKERS.some((m) => existsSync(join(dir, m)));
+}
+
 export function resolveProjectDir(
   token: string,
   dirs: ProjectDirectory[]
 ): ProjectDirectory | null {
-  // Name lookup first — preserves pre-existing behaviour exactly.
+  // A bare name resolves against the fleet index ONLY. It must never silently
+  // become a cwd-relative directory — that is how `score src` wrote src/SCORE.md
+  // instead of printing "Project not found. Available: …". Use `./src` to mean a path.
   if (!looksLikePath(token)) {
-    const byName = dirs.find(
-      (d) => d.name.toLowerCase() === token.toLowerCase()
+    return (
+      dirs.find((d) => d.name.toLowerCase() === token.toLowerCase()) ?? null
     );
-    if (byName) return byName;
   }
 
   // Path resolution — absolute, relative, or `~`-prefixed.
   const abs = resolve(token.replace(/^~/, homedir()));
   try {
-    if (statSync(abs).isDirectory()) {
-      // Prefer the configured entry when the path points at a known project,
-      // so the reported name matches the rest of the fleet output.
-      const known = dirs.find((d) => resolve(d.path) === abs);
-      return known ?? { name: basename(abs), path: abs };
-    }
+    if (!statSync(abs).isDirectory()) return null;
   } catch {
-    // ENOENT / EACCES — not a usable directory. Fall through to null.
+    return null; // ENOENT / EACCES — not a usable directory.
   }
 
-  return null;
+  // A configured project is a project by definition, marker or not.
+  const known = dirs.find((d) => resolve(d.path) === abs);
+  if (known) return known;
+
+  // Otherwise it must look like a project. `~/Projects` and `/` do not.
+  return hasProjectMarker(abs) ? { name: basename(abs), path: abs } : null;
 }
 
 /**
@@ -406,20 +437,52 @@ export function resolveProjectDir(
  *      instead (cd into a project, name one, or --all). Found by an adversarial review
  *      agent that ran the real CLI from `/` and `~/Projects`.
  *
- * Walk up from `start` to the enclosing project root. Stops at the first directory
- * holding a `.git` or a `package.json`. Returns null when neither is found anywhere
- * above `start`.
+ * 🔒 LOCKED [GIT-ROOT-IS-THE-PROJECT-BOUNDARY] — 2026-08-16
+ * ⛔ NEVER return the nearest `package.json` directory without first checking whether a
+ *    `.git` sits above it.
+ * WHY: stopping at the nearest marker meant `cd ContextEngine/server && score` reported
+ *      **"Scoring current project: server ... 32% (F) — Not a git repo, No CI pipeline,
+ *      README.md Missing"** and wrote `server/SCORE.md`. Every one of those statements is
+ *      false about the project the user is standing in: the repo root has `.git`, CI, and
+ *      a README. A build file marks a *package*; `.git` marks the *project*. Reporting
+ *      "Not a git repo" from inside a git repo is the scorer describing a boundary it
+ *      invented — absence-as-verdict again, this time about where the project ends.
+ * FIX: `.git` wins. Walk up looking for it, remembering the nearest build file on the way,
+ *      and fall back to that remembered directory only if no `.git` exists anywhere above.
+ *      A genuinely standalone package (no git anywhere) still resolves to itself.
+ *
+ * Walk up from `start` to the enclosing project root. Returns null when nothing is
+ * found anywhere above `start`.
  */
+const BUILD_FILE_MARKERS = [
+  "package.json", "pyproject.toml", "requirements.txt", "setup.py",
+  "composer.json", "pubspec.yaml", "go.mod", "Cargo.toml", "Gemfile",
+  "pom.xml", "build.gradle", "Makefile", "CMakeLists.txt",
+];
+
 export function findProjectRoot(start: string): string | null {
   let dir = resolve(start);
+  let nearestBuildFile: string | null = null;
+
   for (;;) {
-    if (existsSync(join(dir, ".git")) || existsSync(join(dir, "package.json"))) {
-      return dir;
+    // .git is the project boundary and always wins, however far up it sits.
+    if (existsSync(join(dir, ".git"))) return dir;
+
+    if (
+      nearestBuildFile === null &&
+      BUILD_FILE_MARKERS.some((m) => existsSync(join(dir, m)))
+    ) {
+      nearestBuildFile = dir;
     }
+
     const parent = dirname(dir);
-    if (parent === dir) return null; // reached filesystem root, no marker seen
+    if (parent === dir) break; // reached filesystem root
     dir = parent;
   }
+
+  // No .git anywhere above — a standalone package resolves to itself; a plain
+  // directory (a container, or /) resolves to nothing at all.
+  return nearestBuildFile;
 }
 
 /**
