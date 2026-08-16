@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "fs";
 import { join, basename } from "path";
 import { tmpdir } from "os";
 import { realpathSync } from "fs";
-import { resolveProjectDir, findProjectRoot, type ProjectDirectory } from "../src/config.js";
+import { resolveProjectDir, findProjectRoot, loadProjectDirs, type ProjectDirectory } from "../src/config.js";
 
 let tempRoot: string;
 
@@ -131,5 +131,55 @@ describe("findProjectRoot", () => {
 
     expect(findProjectRoot(deep)).toBe(proj);
     expect(basename(findProjectRoot(deep)!)).toBe("proj");
+  });
+});
+
+// 🔒 [ENV-WORKSPACES-WINS] — the env var is the most specific statement of intent
+// and must beat a config file. It was a fallback that only applied when the config
+// defined no workspaces, so on a configured machine it was silently ignored — which
+// let a "sandboxed" review agent write SCORE.md into 28 real repositories.
+describe("CONTEXTENGINE_WORKSPACES precedence", () => {
+  const saved = process.env.CONTEXTENGINE_WORKSPACES;
+  const savedCfg = process.env.CONTEXTENGINE_CONFIG;
+
+  afterEach(() => {
+    if (saved === undefined) delete process.env.CONTEXTENGINE_WORKSPACES;
+    else process.env.CONTEXTENGINE_WORKSPACES = saved;
+    if (savedCfg === undefined) delete process.env.CONTEXTENGINE_CONFIG;
+    else process.env.CONTEXTENGINE_CONFIG = savedCfg;
+  });
+
+  it("overrides workspaces defined in a config file", () => {
+    const cfgDir = join(tempRoot, "cfg");
+    const fromConfig = join(tempRoot, "config-ws", "ConfigProject");
+    const fromEnv = join(tempRoot, "env-ws", "EnvProject");
+    mkdirSync(cfgDir, { recursive: true });
+    mkdirSync(fromConfig, { recursive: true });
+    mkdirSync(fromEnv, { recursive: true });
+
+    const cfgPath = join(cfgDir, "contextengine.json");
+    writeFileSync(cfgPath, JSON.stringify({ workspaces: [join(tempRoot, "config-ws")] }), "utf-8");
+
+    process.env.CONTEXTENGINE_CONFIG = cfgPath;
+    process.env.CONTEXTENGINE_WORKSPACES = join(tempRoot, "env-ws");
+
+    const names = loadProjectDirs().map((d) => d.name);
+    expect(names).toContain("EnvProject");
+    expect(names).not.toContain("ConfigProject");
+  });
+
+  it("falls back to the config file when the env var is unset", () => {
+    const cfgDir = join(tempRoot, "cfg2");
+    const fromConfig = join(tempRoot, "config-ws2", "ConfigOnly");
+    mkdirSync(cfgDir, { recursive: true });
+    mkdirSync(fromConfig, { recursive: true });
+
+    const cfgPath = join(cfgDir, "contextengine.json");
+    writeFileSync(cfgPath, JSON.stringify({ workspaces: [join(tempRoot, "config-ws2")] }), "utf-8");
+
+    process.env.CONTEXTENGINE_CONFIG = cfgPath;
+    delete process.env.CONTEXTENGINE_WORKSPACES;
+
+    expect(loadProjectDirs().map((d) => d.name)).toContain("ConfigOnly");
   });
 });

@@ -276,12 +276,26 @@ export function loadProjectDirs(): ProjectDirectory[] {
     }
   }
 
-  // Env var fallback
-  if (workspaceDirs.length === 0) {
-    const envWorkspaces = process.env.CONTEXTENGINE_WORKSPACES;
-    if (envWorkspaces) {
-      workspaceDirs = envWorkspaces.split(":").filter(Boolean);
-    }
+  /**
+   * 🔒 LOCKED [ENV-WORKSPACES-WINS] — 2026-08-16
+   * ⛔ NEVER demote CONTEXTENGINE_WORKSPACES back to a fallback that only applies when the
+   *    config file happens not to define `workspaces`.
+   * WHY: it WAS such a fallback (`if (workspaceDirs.length === 0)`), so on any machine with a
+   *      contextengine.json defining workspaces — which is the documented setup — the env var
+   *      was read, ignored, and never reported. Every MCP config block we ship in
+   *      skills/opscontext/SKILL.md sets `env: { CONTEXTENGINE_WORKSPACES: ... }`, so our own
+   *      documented integration silently did nothing.
+   *      Caught the hard way: an attempt to sandbox a review agent by pointing this variable at
+   *      a scratch directory was ignored, and `score --all` wrote SCORE.md into 28 real
+   *      repositories instead. The sandbox reported success because the variable was accepted
+   *      without complaint — absence of an error read as confirmation.
+   * FIX: standard precedence — an explicit env var beats a config file beats auto-discovery.
+   *      It is set per-invocation and is therefore the most specific statement of intent.
+   */
+  const envWorkspaces = process.env.CONTEXTENGINE_WORKSPACES;
+  if (envWorkspaces) {
+    const fromEnv = envWorkspaces.split(":").filter(Boolean);
+    if (fromEnv.length > 0) workspaceDirs = fromEnv;
   }
 
   // Auto-discover fallback
