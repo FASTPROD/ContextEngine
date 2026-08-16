@@ -248,9 +248,14 @@ npx @compr/opscontext-mcp list-sources
 # Discover and analyze all projects
 npx @compr/opscontext-mcp list-projects
 
-# AI-readiness score (one or all projects)
+# AI-readiness score — no argument scores the CURRENT project only
 npx @compr/opscontext-mcp score
-npx @compr/opscontext-mcp score ContextEngine
+npx @compr/opscontext-mcp score ContextEngine          # by project name
+npx @compr/opscontext-mcp score ~/Projects/PLANK.io    # or by path
+
+# Score every discovered project (writes a SCORE.md into each — opt in explicitly)
+npx @compr/opscontext-mcp score --all
+npx @compr/opscontext-mcp score --all --no-save        # scan without writing
 
 # Visual HTML report (opens in browser)
 npx @compr/opscontext-mcp score --html
@@ -435,6 +440,22 @@ Your Project Files           ContextEngine              AI Agent
 The `score` command evaluates project AI-readiness across **documentation, infrastructure, code quality, and security** — producing a letter grade from A+ to F.
 
 **Grade scale:** A+ (90%+) · A (80%+) · B (70%+) · C (60%+) · D (50%+) · F (<50%)
+
+### What gets scored, and what gets written
+
+`score` writes a `SCORE.md` into each project it scores. Because that is a write into your
+repositories, the scope is never inferred:
+
+| Command | Scores | Writes `SCORE.md` to |
+|---|---|---|
+| `score` | the project you are standing in (walks up to the repo root) | that one project |
+| `score <name>` / `score <path>` | that one project | that one project |
+| `score --all` | every discovered project | **every** discovered project |
+| any of the above `--no-save` | as above | nothing |
+
+A project argument may be a **name** (`PLANK.io`) or a **path** (`~/Projects/PLANK.io`,
+`../PLANK.io`, or an absolute path). A path also works for projects outside your configured
+workspaces.
 
 ### Project Naming & Structure Tips
 

@@ -3,7 +3,7 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { loadSources, loadProjectDirs, loadConfig, KnowledgeSource } from "./config.js";
+import { loadSources, loadProjectDirs, loadConfig, resolveProjectDir, KnowledgeSource } from "./config.js";
 import { ingestSources, Chunk } from "./ingest.js";
 import { searchChunks, SearchResult } from "./search.js";
 import {
@@ -648,7 +648,7 @@ server.tool(
     project: z
       .string()
       .optional()
-      .describe("Project name to score. Omit to score all projects."),
+      .describe("Project name OR absolute directory path to score. Omit to score all projects."),
   },
   async ({ project }) => {
     const gate = gateCheck("score_project");
@@ -657,15 +657,15 @@ server.tool(
 
     let scores;
     if (project) {
-      const dir = projectDirs.find(
-        (d) => d.name.toLowerCase() === project.toLowerCase()
-      );
+      // [SCORE-ACCEPTS-PATH] — resolve names and paths alike. This tool never writes
+      // SCORE.md, so unlike the CLI its fleet-wide default is harmless and is kept.
+      const dir = resolveProjectDir(project, projectDirs);
       if (!dir) {
         return {
           content: [
             {
               type: "text" as const,
-              text: `Project "${project}" not found. Available: ${projectDirs.map((d) => d.name).join(", ")}`,
+              text: `Project "${project}" not found — not a known project name, and not an existing directory. Available: ${projectDirs.map((d) => d.name).join(", ")}`,
             },
           ],
         };

@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r 'if (.tool_input.command // \"\") | test(\"\\\\bgit\\\\s+push\\\\b\") then \"<system-reminder>CE Rule 10 — post-push checkpoint: call end_session (MCP tool) before ending your turn. If MCP is not connected, run `npx @compr/contextengine-mcp end-session` in terminal instead. Resolve any FAIL items it reports before finishing.</system-reminder>\" else empty end'"
+            "command": "jq -r 'if (.tool_input.command // \"\") | test(\"\\\\bgit\\\\s+push\\\\b\") then \"<system-reminder>CE Rule 10 — post-push checkpoint: call end_session (MCP tool) before ending your turn. If MCP is not connected, run `npx @compr/opscontext-mcp end-session` in terminal instead. Resolve any FAIL items it reports before finishing.</system-reminder>\" else empty end'"
           }
         ]
       },

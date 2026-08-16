@@ -11,7 +11,7 @@
  *   contextengine list-projects       Discover and analyze all projects
  *   contextengine list-learnings      List all permanent learnings
  *   contextengine save-learning        Save a learning (terminal fallback for MCP)
- *   contextengine score [project]     AI-readiness score (writes SCORE.md to each project)
+ *   contextengine score [project|path] AI-readiness score for one project (default: cwd; --all for fleet)
  *   contextengine audit               Run compliance audit across all projects
  *   contextengine help                Show this message
  */
@@ -547,7 +547,7 @@ async function runInit(): Promise<void> {
 // CLI Engine — shared initialization for all CLI subcommands
 // ---------------------------------------------------------------------------
 
-import { loadSources, loadProjectDirs, loadConfig, type KnowledgeSource } from "./config.js";
+import { loadSources, loadProjectDirs, loadConfig, resolveProjectDir, findProjectRoot, type KnowledgeSource } from "./config.js";
 import { ingestSources, type Chunk } from "./ingest.js";
 import { searchChunks } from "./search.js";
 import { collectProjectOps, collectSystemOps } from "./collectors.js";
@@ -818,9 +818,37 @@ async function cliDeleteLearning(id: string): Promise<void> {
   }
 }
 
-async function cliScore(project?: string, html = false, save = true): Promise<void> {
+/**
+ * 🔒 LOCKED [SCORE-FLEET-IS-OPT-IN] — 2026-08-16
+ * ⛔ NEVER make a bare `contextengine score` iterate the whole fleet again, and never
+ *    let the no-argument path write SCORE.md anywhere but the resolved project root.
+ * WHY: `score` with no argument scored all 37 discovered projects AND wrote a SCORE.md
+ *      into every one of them. Three separate agent sessions ran it expecting to score
+ *      the repo they were standing in, and dirtied 26 unrelated repositories — several of
+ *      which auto-push to Google Drive on commit, so the noise propagated off-machine
+ *      before anyone noticed. The blast radius of the default was the entire fleet while
+ *      the intent behind typing it was almost always a single project.
+ * FIX: the destructive-at-scale operation must be *asked for*. `--all` opts in; no
+ *      argument scores the current working directory's project root. A fleet-wide write
+ *      is a deliberate choice, never a default the user backs into.
+ *      Note the MCP `score_project` tool is read-only (it never writes SCORE.md), which
+ *      is why its fleet-wide default is left alone — the hazard here is the write, not
+ *      the scan.
+ */
+async function cliScore(
+  project?: string,
+  html = false,
+  save = true,
+  all = false
+): Promise<void> {
   const gate = gateCheck("score_project");
   if (gate) { console.error(gate); process.exit(1); }
+
+  if (project && all) {
+    console.error(`❌ Cannot combine --all with a project argument ("${project}").`);
+    console.error(`   Use --all for the whole fleet, or name one project/path.`);
+    process.exit(1);
+  }
 
   // [SCORE-CANARY] — every health signal must read exactly as pinned before we are allowed to
   // write a single SCORE.md. A drifting scorer that silently rewrites 37 reports is the failure
@@ -840,18 +868,44 @@ async function cliScore(project?: string, html = false, save = true): Promise<vo
   const projectDirs = loadProjectDirs();
 
   let scores: ProjectScore[];
-  if (project) {
-    const dir = projectDirs.find(
-      (d) => d.name.toLowerCase() === project.toLowerCase()
-    );
+  if (all) {
+    if (save) {
+      console.error(
+        `⚠️  --all: scoring ${projectDirs.length} projects and writing a SCORE.md into each.`
+      );
+      console.error(`   Use --no-save to scan without writing.\n`);
+    }
+    scores = projectDirs.map((d) => scoreProject(d));
+  } else if (project) {
+    // [SCORE-ACCEPTS-PATH] — a path is as valid an identifier as a name.
+    const dir = resolveProjectDir(project, projectDirs);
     if (!dir) {
       console.error(`❌ Project not found: "${project}"`);
+      console.error(`   Not a known project name, and not an existing directory.`);
       console.error(`Available: ${projectDirs.map((d) => d.name).join(", ")}`);
       process.exit(1);
     }
     scores = [scoreProject(dir)];
   } else {
-    scores = projectDirs.map((d) => scoreProject(d));
+    // [SCORE-FLEET-IS-OPT-IN] — no argument means "the project I am standing in",
+    // never "every project on this machine".
+    // [SCORE-CWD-MUST-BE-A-PROJECT] — and if I am not standing in a project, say so
+    // rather than scoring whatever directory happens to be here.
+    const root = findProjectRoot(process.cwd());
+    if (!root) {
+      console.error(`❌ Not inside a project: ${process.cwd()}`);
+      console.error(`   No .git or package.json found here or in any parent directory.`);
+      console.error(`   Do one of:`);
+      console.error(`     • cd into a project, then run: contextengine score`);
+      console.error(`     • name it:                     contextengine score <name|path>`);
+      console.error(`     • score the whole fleet:       contextengine score --all`);
+      process.exit(1);
+    }
+    const known = projectDirs.find((d) => resolve(d.path) === resolve(root));
+    const dir = known ?? { name: basename(root), path: root };
+    console.error(`📍 Scoring current project: ${dir.name} (${dir.path})`);
+    console.error(`   Use --all to score every discovered project.\n`);
+    scores = [scoreProject(dir)];
   }
 
   if (html) {
@@ -2253,7 +2307,11 @@ Usage:
                                        Fetch community-contributed learnings (Tier A = GitHub
                                        public, Tier B = api.compr.ch Pro). Daily run recommended.
                                        Network failures fall back to cached store.
-  contextengine score [project] [--html] [--no-save] AI-readiness score (Pro, writes SCORE.md)
+  contextengine score [project|path] [--all] [--html] [--no-save]
+                                       AI-readiness score (Pro, writes SCORE.md).
+                                       No argument scores the CURRENT project only.
+                                       Accepts a project name or a directory path.
+                                       --all scores every discovered project (writes to each).
   contextengine audit                  Run compliance audit (Pro)
   contextengine activate <key> <email> Activate a Pro license
   contextengine deactivate             Remove license and premium modules
@@ -2329,8 +2387,9 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
   const args = process.argv.slice(3);
   const htmlFlag = args.includes("--html");
   const noSaveFlag = args.includes("--no-save");
+  const allFlag = args.includes("--all");
   const project = args.filter(a => !a.startsWith("--"))[0];
-  cliScore(project, htmlFlag, !noSaveFlag).catch((err) => {
+  cliScore(project, htmlFlag, !noSaveFlag, allFlag).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });

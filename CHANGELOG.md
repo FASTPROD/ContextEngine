@@ -2,6 +2,64 @@
 
 All notable changes to OpsContext for AI Agents (previously ContextEngine — MCP server + CLI) are documented here.
 
+> Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
+
+## [2.4.1] — 2026-08-16 — `score` scope is now explicit: current project by default, `--all` to opt into the fleet
+
+### Changed (behaviour — read this before upgrading)
+
+- **`score` with no argument now scores only the current project**, walking up from the working
+  directory to the enclosing repo root. It previously scored all discovered projects **and wrote
+  a `SCORE.md` into every one of them** — which dirtied 26 repositories on the author's machine,
+  several of them auto-pushing on commit. Fleet-wide scoring now requires `--all`.
+  Locked as `[SCORE-FLEET-IS-OPT-IN]`.
+- `score --all` prints how many projects it is about to write into before doing it, and
+  `--all` combined with a project argument is now a hard error rather than a silently ignored flag.
+- The MCP `score_project` tool keeps its fleet-wide default — it never writes `SCORE.md`, so it
+  does not carry the hazard. The write is what must be asked for, not the scan.
+
+- **`score` with no argument now refuses to run outside a project** instead of scoring whatever
+  directory it is in. Run from `~/Projects` — a *container* of projects — it previously scored
+  the container and wrote a `SCORE.md` claiming `Projects: 27/100 (F)`; from `/` it would do the
+  same to the filesystem root. It now exits 1 and names the three ways to proceed.
+  Locked as `[SCORE-CWD-MUST-BE-A-PROJECT]`.
+
+### Fixed (documentation that shipped a working footgun)
+
+- **`skills/opscontext/SKILL.md` told agents to run `npx @compr/contextengine-mcp`** — a package
+  name npm freezes at **1.23.1**. Following the shipped skill downloaded a June scorer and ran a
+  fleet-wide write with a 94-point rubric that reports root-level `copilot-instructions.md` as
+  `Missing`. Ten call sites corrected, including three MCP-config blocks that would have
+  installed the frozen version as a long-running server. `skills/` now has zero references to it.
+- Same correction to the `.claude/settings.json` post-push reminder.
+
+### Added
+
+- **`score` accepts a path as well as a project name** — `score ~/Projects/PLANK.io`,
+  `score ../PLANK.io`, or an absolute path. Paths outside configured workspaces work too.
+  Previously `score /Users/yan/Projects/PLANK.io` failed with "Project not found" while listing
+  `PLANK.io` among the available projects — the lookup only ever compared basenames, so the
+  directory was never inspected. Locked as `[SCORE-ACCEPTS-PATH]`.
+- Same path support in the MCP `score_project` tool (strictly more accepting; no default changed).
+- `tests/project-resolution.test.ts` — 11 regression tests covering name/path/symlink/
+  file-not-a-directory/case-insensitivity/dotted names, and `findProjectRoot` termination.
+
+### Fixed
+
+- Polyglot repositories are scored against the languages they actually use (released here; committed
+  in 2.4.0's wake): test directories are aggregated across ecosystems rather than the first match
+  winning, `.dart` tests are counted, and Dart tooling (`analysis_options.yaml`) satisfies the
+  type-checking check instead of the project being marked down for a missing `tsconfig.json`.
+  PLANK.io 98%; KONIVE.com correctly reports 102 test files across two directories.
+
+### Investigated — no change
+
+- A report that the generated pre-commit hook regenerates and re-stages `SCORE.md` mid-commit
+  **does not reproduce**. `generatePreCommitHook()` only stats mtimes and greps staged files for
+  secrets; there is no score invocation and no `git add` in it, nor in the older custom hook the
+  reporting repo actually has installed. The observed empty commit is consistent with the
+  fleet-wide-write default above, which this release removes.
+
 ## [2.1.3] — 2026-06-26 — Tool manifest as single source of truth + server-meta.json for VS Code extension
 
 Tactical fix for a class of silent display drift: the VS Code info panel hardcoded "Active on all 17 MCP tools" while the npm package was at 21 tools. The README was at 20. None of these were tied to the actual `server.tool(...)` registrations, so adding a tool (e.g. `drift_status` in 2.1.0) left all displays stale.

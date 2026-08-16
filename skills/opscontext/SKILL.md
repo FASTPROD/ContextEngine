@@ -14,7 +14,7 @@ ContextEngine turns your project documentation into a **queryable knowledge base
 ### 1. Initialize (one-time per project)
 
 ```bash
-npx @compr/contextengine-mcp init
+npx @compr/opscontext-mcp init
 ```
 
 Creates `contextengine.json` config + `.github/copilot-instructions.md` template in the current directory.
@@ -39,14 +39,16 @@ ContextEngine auto-discovers documentation files from 7 common patterns:
 ContextEngine also works as a standalone CLI tool — no MCP client needed:
 
 ```bash
-npx @compr/contextengine-mcp search "docker nginx"    # Search knowledge base
-npx @compr/contextengine-mcp list-sources              # Show indexed sources
-npx @compr/contextengine-mcp list-projects             # Discover all projects
-npx @compr/contextengine-mcp score                     # AI-readiness score
-npx @compr/contextengine-mcp score --html               # Visual HTML report
-npx @compr/contextengine-mcp list-learnings security   # List learnings by category
-npx @compr/contextengine-mcp audit                     # Compliance audit
-npx @compr/contextengine-mcp help                      # Show all commands
+npx @compr/opscontext-mcp search "docker nginx"      # Search knowledge base
+npx @compr/opscontext-mcp list-sources               # Show indexed sources
+npx @compr/opscontext-mcp list-projects              # Discover all projects
+npx @compr/opscontext-mcp score                      # Score the CURRENT project (writes its SCORE.md)
+npx @compr/opscontext-mcp score ~/Projects/PLANK.io  # Score one project by name or path
+npx @compr/opscontext-mcp score --all --no-save      # Score every project, write nothing
+npx @compr/opscontext-mcp score --html               # Visual HTML report
+npx @compr/opscontext-mcp list-learnings security    # List learnings by category
+npx @compr/opscontext-mcp audit                      # Compliance audit
+npx @compr/opscontext-mcp help                       # Show all commands
 ```
 
 ## MCP Server Setup
@@ -62,7 +64,7 @@ Add to `.vscode/mcp.json` in your project root:
   "servers": {
     "contextengine": {
       "command": "npx",
-      "args": ["-y", "@compr/contextengine-mcp"],
+      "args": ["-y", "@compr/opscontext-mcp"],
       "env": {
         "CONTEXTENGINE_WORKSPACES": "/path/to/your/projects"
       }
@@ -80,7 +82,7 @@ Add to Claude Desktop MCP config:
   "mcpServers": {
     "contextengine": {
       "command": "npx",
-      "args": ["-y", "@compr/contextengine-mcp"],
+      "args": ["-y", "@compr/opscontext-mcp"],
       "env": {
         "CONTEXTENGINE_WORKSPACES": "/path/to/your/projects"
       }
@@ -98,7 +100,7 @@ Add to your OpenClaw `openclaw.json` MCP servers section:
   "mcpServers": {
     "contextengine": {
       "command": "npx",
-      "args": ["-y", "@compr/contextengine-mcp"],
+      "args": ["-y", "@compr/opscontext-mcp"],
       "env": {
         "CONTEXTENGINE_WORKSPACES": "/path/to/your/projects"
       }
@@ -186,7 +188,7 @@ load_session --name "project-x"
 
 ## Configuration
 
-Create `contextengine.json` in your project root (or run `npx @compr/contextengine-mcp init`):
+Create `contextengine.json` in your project root (or run `npx @compr/opscontext-mcp init`):
 
 ```json
 {
@@ -220,14 +222,14 @@ Create `contextengine.json` in your project root (or run `npx @compr/contextengi
 - First run downloads the embedding model (~22MB) — subsequent runs use cache
 - Keyword search is available instantly at startup; semantic search becomes available once the model loads
 - License: BSL-1.1 (Business Source License)
-- npm: `@compr/contextengine-mcp`
+- npm: `@compr/opscontext-mcp`
 
 ### Post-Commit Verification
 
 After every `git push`, call `end_session` to verify nothing was missed:
 
 - **MCP tool**: `end_session` — use when ContextEngine MCP server is connected
-- **CLI fallback**: `npx @compr/contextengine-mcp end-session` — use when MCP is not connected (Cursor, Copilot, terminal sessions)
+- **CLI fallback**: `npx @compr/opscontext-mcp end-session` — use when MCP is not connected (Cursor, Copilot, terminal sessions)
 
 Resolve any FAIL items before finishing. Workflow: `commit → push → end_session → verify → fix anything it catches → re-commit if needed`.
 

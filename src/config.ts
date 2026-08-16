@@ -1,4 +1,4 @@
-import { resolve, join } from "path";
+import { resolve, join, basename, dirname, sep } from "path";
 import { homedir } from "os";
 import { readFileSync, existsSync, readdirSync, statSync } from "fs";
 
@@ -313,6 +313,99 @@ export function loadProjectDirs(): ProjectDirectory[] {
   }
 
   return dirs;
+}
+
+/**
+ * Does this token look like a filesystem path rather than a bare project name?
+ *
+ * Deliberately conservative: only strings that CANNOT be a directory basename
+ * (they contain a separator, or start with `~`/`.`) are treated as
+ * path-only. Everything else stays eligible for name lookup first, so
+ * `score KONIVE.com` keeps resolving exactly as it did before this existed.
+ */
+function looksLikePath(token: string): boolean {
+  return (
+    token.includes("/") ||
+    token.includes(sep) ||
+    token.startsWith("~") ||
+    token === "." ||
+    token === ".."
+  );
+}
+
+/**
+ * 🔒 LOCKED [SCORE-ACCEPTS-PATH] — 2026-08-16
+ * ⛔ NEVER narrow this back to `dirs.find(d => d.name === token)` alone.
+ * WHY: `contextengine score /Users/yan/Projects/PLANK.io` failed with
+ *      "Project not found: /Users/yan/Projects/PLANK.io" while listing PLANK.io
+ *      among the available projects. A path is the natural first guess for a
+ *      tool that prints absolute paths in its own output, and the error named
+ *      the one thing the user had clearly just given it. The directory was
+ *      never inspected — the lookup only ever compared basenames, so this was
+ *      [ABSENCE-IS-NOT-A-VERDICT] at the argument-parsing layer: "not in my
+ *      name index" was reported as "does not exist".
+ * FIX: resolve names AND paths. A path that exists is a project, whether or not
+ *      it sits under a configured workspace — that is what makes the tool usable
+ *      outside `~/Projects`.
+ */
+export function resolveProjectDir(
+  token: string,
+  dirs: ProjectDirectory[]
+): ProjectDirectory | null {
+  // Name lookup first — preserves pre-existing behaviour exactly.
+  if (!looksLikePath(token)) {
+    const byName = dirs.find(
+      (d) => d.name.toLowerCase() === token.toLowerCase()
+    );
+    if (byName) return byName;
+  }
+
+  // Path resolution — absolute, relative, or `~`-prefixed.
+  const abs = resolve(token.replace(/^~/, homedir()));
+  try {
+    if (statSync(abs).isDirectory()) {
+      // Prefer the configured entry when the path points at a known project,
+      // so the reported name matches the rest of the fleet output.
+      const known = dirs.find((d) => resolve(d.path) === abs);
+      return known ?? { name: basename(abs), path: abs };
+    }
+  } catch {
+    // ENOENT / EACCES — not a usable directory. Fall through to null.
+  }
+
+  return null;
+}
+
+/**
+ * 🔒 LOCKED [SCORE-CWD-MUST-BE-A-PROJECT] — 2026-08-16
+ * ⛔ NEVER fall back to returning `start` when no project marker is found. A directory
+ *    that is not a project must produce null, and the caller must refuse to score it.
+ * WHY: the first cut of this returned `start` on failure, reasoning that "an un-versioned
+ *      directory is still scoreable — it just scores badly." That is exactly the
+ *      absence-as-verdict mistake this codebase keeps relearning. Running `score` from
+ *      `~/Projects` — a CONTAINER of 37 projects, not a project — walked to the filesystem
+ *      root, found nothing, fell back, scored the container as though it were a project,
+ *      and wrote `~/Projects/SCORE.md` claiming "Projects: 27/100 (F)". Run from `/` it
+ *      would do the same to the filesystem root. "I cannot tell which project you mean" is
+ *      an unknown, and the safe response to an unknown scope is to ask, never to write.
+ * FIX: return null and let the caller error out with the three things the user can do
+ *      instead (cd into a project, name one, or --all). Found by an adversarial review
+ *      agent that ran the real CLI from `/` and `~/Projects`.
+ *
+ * Walk up from `start` to the enclosing project root. Stops at the first directory
+ * holding a `.git` or a `package.json`. Returns null when neither is found anywhere
+ * above `start`.
+ */
+export function findProjectRoot(start: string): string | null {
+  let dir = resolve(start);
+  for (;;) {
+    if (existsSync(join(dir, ".git")) || existsSync(join(dir, "package.json"))) {
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return null; // reached filesystem root, no marker seen
+    dir = parent;
+  }
 }
 
 /**
