@@ -306,7 +306,8 @@ describe("scoreProject — nested tests and non-JS projects", () => {
     writeFileSync(join(tempRepo, "pyproject.toml"), "[tool.poetry]\nname='x'\n", "utf-8");
 
     const c = check("Type checking", tempRepo);
-    expect(c.detail).toContain("Python");
+    // Names the tools that actually apply to this stack, and never demands a tsconfig.
+    expect(c.detail).toContain("mypy/pyright");
     expect(c.detail).not.toContain("tsconfig");
   });
 
@@ -337,6 +338,51 @@ describe("scoreProject — nested tests and non-JS projects", () => {
 
     const lint = check("Linting", tempRepo);
     expect(lint.status).toBe("unknown");
+  });
+});
+
+// 🔒 [SCORE-LANGUAGE-AWARE] — reported from PLANK.io: a Flutter app with a Node backend.
+describe("scoreProject — polyglot repos", () => {
+  it("counts test files across EVERY test directory, not just the first", () => {
+    mkdirSync(join(tempRepo, "backend", "__tests__"), { recursive: true });
+    mkdirSync(join(tempRepo, "app", "test"), { recursive: true });
+    for (let i = 0; i < 3; i++) writeFileSync(join(tempRepo, "backend", "__tests__", `a${i}.test.js`), "", "utf-8");
+    for (let i = 0; i < 4; i++) writeFileSync(join(tempRepo, "app", "test", `w${i}_test.dart`), "", "utf-8");
+
+    const c = check("Tests", tempRepo);
+    expect(c.detail).toContain("7 test files");
+    expect(c.detail).toContain("2 dir(s)");
+  });
+
+  it("counts .dart tests — a suite that runs on every build must not read as zero", () => {
+    mkdirSync(join(tempRepo, "test"), { recursive: true });
+    for (let i = 0; i < 6; i++) writeFileSync(join(tempRepo, "test", `widget${i}_test.dart`), "", "utf-8");
+
+    const c = check("Tests", tempRepo);
+    expect(c.status).toBe("pass");
+    expect(c.points).toBe(8);
+  });
+
+  it("credits a Flutter app's analyzer config instead of demanding a tsconfig", () => {
+    // The exact PLANK.io shape: Node backend at root, Flutter app one level down.
+    writeFileSync(join(tempRepo, "package.json"), "{}", "utf-8");
+    mkdirSync(join(tempRepo, "app"), { recursive: true });
+    writeFileSync(join(tempRepo, "app", "pubspec.yaml"), "name: app\n", "utf-8");
+    writeFileSync(join(tempRepo, "app", "analysis_options.yaml"), "include: package:flutter_lints/flutter.yaml\n", "utf-8");
+
+    const c = check("Type checking", tempRepo);
+    expect(c.status).toBe("pass");
+    expect(c.points).toBe(5);
+    expect(c.detail).toContain("analysis_options.yaml");
+    expect(c.detail).not.toContain("tsconfig");
+  });
+
+  it("still asks a Node-only project for a tsconfig", () => {
+    writeFileSync(join(tempRepo, "package.json"), "{}", "utf-8");
+
+    const c = check("Type checking", tempRepo);
+    expect(c.status).toBe("fail");
+    expect(c.detail).toContain("tsconfig.json");
   });
 });
 

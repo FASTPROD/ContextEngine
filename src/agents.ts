@@ -167,19 +167,47 @@ function matchDocTopics(content: string, topics: typeof AGENT_DOC_TOPICS): strin
  * FIX: detect the language, run the matching tooling check, and emit "unknown" when no check
  *      applies. [ABSENCE-IS-NOT-A-VERDICT] for language assumptions.
  */
-type ProjectLanguage = "js" | "python" | "php" | "other";
+type ProjectLanguage = "js" | "python" | "php" | "dart" | "other";
 
-function detectLanguage(p: string): ProjectLanguage {
-  if (existsSync(join(p, "package.json"))) return "js";
-  const pythonMarkers = ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "__manifest__.py"];
-  if (pythonMarkers.some(m => existsSync(join(p, m)))) return "python";
-  if (existsSync(join(p, "composer.json"))) return "php";
-  // Odoo addons and src-layout packages keep their markers one level down.
-  for (const sub of safeSubdirs(p)) {
-    if (pythonMarkers.some(m => existsSync(join(p, sub, m)))) return "python";
-    if (existsSync(join(p, sub, "package.json"))) return "js";
+/**
+ * ALL languages present, root and one level down — not just a winner.
+ *
+ * A single "primary language" is the wrong model for this fleet. PLANK.io is a Flutter app with a
+ * Node backend: picking one meant scoring a Dart codebase against `tsconfig.json` and calling its
+ * analyzer config missing. Returning the set lets each tooling check pass on whichever ecosystem
+ * actually configures it. Part of [SCORE-LANGUAGE-AWARE].
+ */
+const LANGUAGE_MARKERS: Array<{ lang: ProjectLanguage; files: string[] }> = [
+  { lang: "dart", files: ["pubspec.yaml"] },
+  { lang: "python", files: ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", "__manifest__.py"] },
+  { lang: "js", files: ["package.json"] },
+  { lang: "php", files: ["composer.json"] },
+];
+
+function detectLanguages(p: string): Set<ProjectLanguage> {
+  const found = new Set<ProjectLanguage>();
+  const scan = (base: string) => {
+    for (const { lang, files } of LANGUAGE_MARKERS) {
+      if (files.some(f => existsSync(join(base, f)))) found.add(lang);
+    }
+  };
+  scan(p);
+  for (const sub of safeSubdirs(p)) scan(join(p, sub));
+  if (found.size === 0) found.add("other");
+  return found;
+}
+
+/** First existing path among `candidates`, searched at the root and one level down. */
+function findConfig(p: string, candidates: string[]): string | null {
+  for (const c of candidates) {
+    if (existsSync(join(p, c))) return c;
   }
-  return "other";
+  for (const sub of safeSubdirs(p)) {
+    for (const c of candidates) {
+      if (existsSync(join(p, sub, c))) return `${sub}/${c}`;
+    }
+  }
+  return null;
 }
 
 /** Immediate subdirectories worth searching — skips vendored, hidden and build output. */
@@ -258,9 +286,15 @@ function countTestFiles(dirPath: string, depth: number = 0): number {
       if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
         count += countTestFiles(fullPath, depth + 1);
       } else if (entry.isFile()) {
-        if (/\.(test|spec|_test)\.(ts|tsx|js|jsx|py|php)$/.test(entry.name) ||
-            entry.name.startsWith("test_") ||
-            entry.name.endsWith("_test.py")) {
+        // 🔒 [SCORE-LANGUAGE-AWARE] — the extension list is part of the language assumption.
+        // `dart` was absent, so PLANK.io's 68 Flutter tests in plank_app/test/ counted as ZERO:
+        // the directory was found, every file was skipped, and the row credited the Node backend
+        // alone. A test counter that silently ignores a language reports "no tests" for a suite
+        // that runs on every build. Add the extension when adding a language, not after someone
+        // notices their tests are invisible.
+        if (/\.(test|spec)\.(ts|tsx|js|jsx|mjs|cjs|py|php|dart)$/.test(entry.name) ||
+            /_(test|spec)\.(py|dart|go|rb)$/.test(entry.name) ||
+            entry.name.startsWith("test_")) {
           count++;
         }
       }
@@ -1324,7 +1358,7 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   const p = dir.path;
 
   // Language decides which tooling checks apply at all — see [SCORE-LANGUAGE-AWARE].
-  const lang = detectLanguage(p);
+  const langs = detectLanguages(p);
 
   // --- Documentation (30 points max) ---
 
@@ -1614,61 +1648,71 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
   ];
   const foundTests = testDirs.filter(td => existsSync(join(p, td)));
   if (foundTests.length > 0) {
-    const testDirPath = join(p, foundTests[0]);
-    const testIsSymlink = isSymlink(testDirPath);
-    const testFileCount = countTestFiles(testDirPath);
-    if (testIsSymlink) {
-      checks.push({ name: "Tests", category: "Code Quality", points: 3, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ is a symlink (${testFileCount} test files) — should be real test directory` });
+    // Count across EVERY test directory, not just the first match. PLANK.io has 68 Flutter tests
+    // in plank_app/test/ and 38 backend tests in backend/__tests__/; taking foundTests[0] credited
+    // the backend alone and rendered the larger codebase invisible. Any polyglot or multi-package
+    // repo hit this — the bug was the `[0]`, not the search.
+    const perDir = foundTests.map(td => ({ rel: td, count: countTestFiles(join(p, td)), symlink: isSymlink(join(p, td)) }));
+    const testFileCount = perDir.reduce((sum, d) => sum + d.count, 0);
+    const contributing = perDir.filter(d => d.count > 0);
+    const where = (contributing.length > 0 ? contributing : perDir)
+      .map(d => `${d.rel}/ (${d.count})`)
+      .slice(0, 3)
+      .join(", ") + (perDir.length > 3 ? `, +${perDir.length - 3} more` : "");
+    const allSymlinks = perDir.every(d => d.symlink);
+
+    if (allSymlinks) {
+      checks.push({ name: "Tests", category: "Code Quality", points: 3, maxPoints: 8, status: "partial", detail: `${where} — symlinked, should be real test directories` });
     } else if (testFileCount >= RUBRIC.testsFull) {
-      checks.push({ name: "Tests", category: "Code Quality", points: 8, maxPoints: 8, status: "pass", detail: `${foundTests[0]}/ — ${testFileCount} test files` });
+      checks.push({ name: "Tests", category: "Code Quality", points: 8, maxPoints: 8, status: "pass", detail: `${testFileCount} test files across ${contributing.length} dir(s): ${where}` });
     } else if (testFileCount > RUBRIC.testsPartial) {
-      checks.push({ name: "Tests", category: "Code Quality", points: 5, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ — only ${testFileCount} test files` });
+      checks.push({ name: "Tests", category: "Code Quality", points: 5, maxPoints: 8, status: "partial", detail: `only ${testFileCount} test files: ${where}` });
     } else {
-      try {
-        const hasAnyFiles = readdirSync(testDirPath).length > 0;
-        if (hasAnyFiles) {
-          checks.push({ name: "Tests", category: "Code Quality", points: 4, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ has files but no standard test files detected` });
-        } else {
-          checks.push({ name: "Tests", category: "Code Quality", points: 1, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ exists but empty` });
-        }
-      } catch {
-        checks.push({ name: "Tests", category: "Code Quality", points: 1, maxPoints: 8, status: "partial", detail: `${foundTests[0]}/ exists but unreadable` });
+      let hasAnyFiles = false;
+      for (const d of perDir) {
+        try { if (readdirSync(join(p, d.rel)).length > 0) { hasAnyFiles = true; break; } } catch { /* unreadable dir counts as empty */ }
       }
+      checks.push(hasAnyFiles
+        ? { name: "Tests", category: "Code Quality", points: 4, maxPoints: 8, status: "partial", detail: `${where} has files but no standard test files detected` }
+        : { name: "Tests", category: "Code Quality", points: 1, maxPoints: 8, status: "partial", detail: `${where} exists but empty` });
     }
   } else {
     checks.push({ name: "Tests", category: "Code Quality", points: 0, maxPoints: 8, status: "fail", detail: "No test directory" });
   }
 
-  // TypeScript / type checking (5 pts)
-  const tsconfigPath = join(p, "tsconfig.json");
-  if (existsSync(tsconfigPath)) {
-    const tsconfigContent = readFileSync(tsconfigPath, "utf-8").trim();
-    const tsconfigIsSymlink = isSymlink(tsconfigPath);
-    // Detect minimal/reference-only tsconfigs (just project references with no real config)
-    const isSubstantive = tsconfigContent.length > RUBRIC.tsconfigSubstantive && (tsconfigContent.includes('"compilerOptions"') || tsconfigContent.includes('"extends"'));
-    if (tsconfigIsSymlink) {
-      checks.push({ name: "TypeScript", category: "Code Quality", points: 2, maxPoints: 5, status: "partial", detail: "tsconfig.json is a symlink — create root config" });
-    } else if (isSubstantive) {
-      checks.push({ name: "TypeScript", category: "Code Quality", points: 5, maxPoints: 5, status: "pass", detail: "tsconfig.json present" });
+  // TypeScript / type checking (5 pts) — see [SCORE-LANGUAGE-AWARE].
+  // Checks every ecosystem the repo actually uses, so a Flutter app with a Node backend is not
+  // told its Dart analyzer config is a missing tsconfig.
+  {
+    const tsCfg = findConfig(p, ["tsconfig.json"]);
+    const dartCfg = langs.has("dart") ? findConfig(p, ["analysis_options.yaml"]) : null;
+    const pyCfg = langs.has("python") ? findConfig(p, ["mypy.ini", ".mypy.ini", "pyrightconfig.json"]) : null;
+    const pyprojectPath = findConfig(p, ["pyproject.toml"]);
+    const pyproject = pyprojectPath ? readFileSync(join(p, pyprojectPath), "utf-8") : "";
+    const pyInline = langs.has("python") && /\[tool\.(mypy|pyright)\]/.test(pyproject);
+
+    if (tsCfg) {
+      const content = readFileSync(join(p, tsCfg), "utf-8").trim();
+      const substantive = content.length > RUBRIC.tsconfigSubstantive && (content.includes('"compilerOptions"') || content.includes('"extends"'));
+      if (isSymlink(join(p, tsCfg))) {
+        checks.push({ name: "TypeScript", category: "Code Quality", points: 2, maxPoints: 5, status: "partial", detail: `${tsCfg} is a symlink — create a real config` });
+      } else if (substantive) {
+        checks.push({ name: "TypeScript", category: "Code Quality", points: 5, maxPoints: 5, status: "pass", detail: `${tsCfg} present` });
+      } else {
+        checks.push({ name: "TypeScript", category: "Code Quality", points: 3, maxPoints: 5, status: "partial", detail: `${tsCfg} is minimal — add compilerOptions for full type safety` });
+      }
+    } else if (dartCfg) {
+      checks.push({ name: "Type checking", category: "Code Quality", points: 5, maxPoints: 5, status: "pass", detail: `${dartCfg} — Dart analyzer configured` });
+    } else if (pyCfg || pyInline) {
+      checks.push({ name: "Type checking", category: "Code Quality", points: 5, maxPoints: 5, status: "pass", detail: `${pyCfg ?? pyprojectPath} — static type checking configured` });
+    } else if (existsSync(join(p, "jsconfig.json"))) {
+      checks.push({ name: "Type checking", category: "Code Quality", points: 2, maxPoints: 5, status: "partial", detail: "jsconfig.json only" });
+    } else if (langs.has("js") || langs.has("dart") || langs.has("python")) {
+      const want = [langs.has("js") && "tsconfig.json", langs.has("dart") && "analysis_options.yaml", langs.has("python") && "mypy/pyright"].filter(Boolean).join(" or ");
+      checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "fail", detail: `No ${want} found — add static type checking` });
     } else {
-      checks.push({ name: "TypeScript", category: "Code Quality", points: 3, maxPoints: 5, status: "partial", detail: "tsconfig.json is minimal — add compilerOptions for full type safety" });
+      checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "unknown", detail: "❔ No type-checking convention known for this project type — not assessed" });
     }
-  } else if (existsSync(join(p, "jsconfig.json"))) {
-    checks.push({ name: "Type checking", category: "Code Quality", points: 2, maxPoints: 5, status: "partial", detail: "jsconfig.json only" });
-  } else if (lang === "python") {
-    // See [SCORE-LANGUAGE-AWARE]. Python type checking is mypy/pyright, not tsconfig.
-    const pyTypeMarkers = ["mypy.ini", ".mypy.ini", "pyrightconfig.json"];
-    const foundPyType = pyTypeMarkers.filter(m => existsSync(join(p, m)));
-    const pyproject = existsSync(join(p, "pyproject.toml")) ? readFileSync(join(p, "pyproject.toml"), "utf-8") : "";
-    if (foundPyType.length > 0 || /\[tool\.(mypy|pyright)\]/.test(pyproject)) {
-      checks.push({ name: "Type checking", category: "Code Quality", points: 5, maxPoints: 5, status: "pass", detail: `${foundPyType[0] ?? "pyproject.toml"} — static type checking configured` });
-    } else {
-      checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "fail", detail: "Python project with no mypy/pyright config — add one for static type checking" });
-    }
-  } else if (lang === "php" || lang === "other") {
-    checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "unknown", detail: `❔ No type-checking convention known for this project type (${lang}) — not assessed` });
-  } else {
-    checks.push({ name: "Type checking", category: "Code Quality", points: 0, maxPoints: 5, status: "fail", detail: "No tsconfig/jsconfig" });
   }
 
   // Linting config (4 pts) — verifies linting tools are installed, not just config
@@ -1684,16 +1728,21 @@ export function scoreProject(dir: ProjectDirectory): ProjectScore {
     } else {
       checks.push({ name: "Linting", category: "Code Quality", points: 4, maxPoints: 4, status: "pass", detail: foundLint.join(", ") });
     }
-  } else if (lang === "python") {
+  } else if (langs.has("dart") && findConfig(p, ["analysis_options.yaml"])) {
+    // Dart's analyzer IS the linter — analysis_options.yaml is enforced on every build.
+    checks.push({ name: "Linting", category: "Code Quality", points: 4, maxPoints: 4, status: "pass", detail: `${findConfig(p, ["analysis_options.yaml"])} — Dart analyzer lints` });
+  } else if (langs.has("python")) {
     // See [SCORE-LANGUAGE-AWARE]. Python linting is ruff/flake8/pylint, not eslint.
-    const pyLint = ["ruff.toml", ".ruff.toml", ".flake8", ".pylintrc", "tox.ini", "setup.cfg"].filter(l => existsSync(join(p, l)));
-    const pyproject = existsSync(join(p, "pyproject.toml")) ? readFileSync(join(p, "pyproject.toml"), "utf-8") : "";
+    const pyLintCfg = findConfig(p, ["ruff.toml", ".ruff.toml", ".flake8", ".pylintrc", "tox.ini", "setup.cfg"]);
+    const pyLint = pyLintCfg ? [pyLintCfg] : [];
+    const pyprojectRel = findConfig(p, ["pyproject.toml"]);
+    const pyproject = pyprojectRel ? readFileSync(join(p, pyprojectRel), "utf-8") : "";
     if (pyLint.length > 0 || /\[tool\.(ruff|flake8|pylint|black)\]/.test(pyproject)) {
       checks.push({ name: "Linting", category: "Code Quality", points: 4, maxPoints: 4, status: "pass", detail: pyLint[0] ?? "pyproject.toml" });
     } else {
       checks.push({ name: "Linting", category: "Code Quality", points: 0, maxPoints: 4, status: "fail", detail: "Python project with no ruff/flake8/pylint config — add one" });
     }
-  } else if (lang === "other") {
+  } else if (langs.has("other") && langs.size === 1) {
     checks.push({ name: "Linting", category: "Code Quality", points: 0, maxPoints: 4, status: "unknown", detail: "❔ No linting convention known for this project type — not assessed" });
   } else {
     checks.push({ name: "Linting", category: "Code Quality", points: 0, maxPoints: 4, status: "fail", detail: "No lint config (looked for eslint/prettier/phpcs at repo root)" });
