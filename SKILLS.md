@@ -144,9 +144,20 @@
 - **Wired at boundaries** of LOCKED files (didn't touch the locked algorithms): `learnings.ts` save/delete/import, `sessions.ts` save/delete, `activation.ts` activate/deactivate, `loadLicense()` signature_reject + legacy_signature.
 - **`safeAppend()` isolates** audit failures from production hot paths — a failed append logs to stderr only, never throws upward.
 - **Env-var injectable path** — `CONTEXTENGINE_HOME` overrides `homedir()/.contextengine`. Tests run in `mkdtempSync()` and never pollute the real `~/.contextengine`.
-- **CLI** — `contextengine audit-export [--since DATE] [--until DATE] [--format jsonl|csv]` and `audit-verify` (exit code 2 on broken chain — CI/cron monitoring).
+- **CLI** — `contextengine audit-export [--since DATE] [--until DATE] [--format jsonl|csv]` and `audit-verify` (exit code 2 on tamper/orphan — CI/cron monitoring; forks warn but exit 0).
 - **MCP tool** — `audit_verify` so agents can self-check.
-- **LOCK `[AUDIT-CHAIN]`** protects: canonical serialization, SHA-256 chain, appendAudit-must-throw contract.
+- **Verification classifies three distinct findings** (v2.4.3, `[VERIFY-FORK-IS-NOT-TAMPER]`). The chain is append-only but **not guaranteed strictly linear** — concurrent processes can both append onto the same head, branching it. That is not tampering, and conflating the two once caused `audit-verify` to declare 316,000 valid records unverifiable:
+
+  | Condition | Meaning | Verdict |
+  |---|---|---|
+  | record's own hash ≠ hash of its content | content was altered | **TAMPER** — `ok:false` |
+  | `prev_hash` names a hash absent from the log | history deleted/truncated | **ORPHAN** — `ok:false` |
+  | `prev_hash` names a *known earlier* head | two processes appended concurrently | **FORK** — warn, `ok:true` |
+
+  `IntegrityReport` carries `tamperedIndices`, `orphanIndices`, `forkIndices`. Content is hashed against each record's **own** `prev_hash`, so one fork does not cascade into false tamper reports downstream. **Never rewrite the log to linearise forks** — that destroys the evidence the log exists to provide.
+- **Head-of-chain read is O(1)** (`[AUDIT-TAIL-READ-IS-O1]`) — a 64 KB tail seek, not a whole-file read. The old full read ran *inside the append lock* at 215 ms on a 120 MB log and grew unbounded; now 0.3 ms.
+- **No in-process head cache** (`[AUDIT-HEAD-FROM-DISK]`) — the head is read from disk under the lock on every append. The previous cache guarded itself with an *incremented* byte counter compared against real file size, making correctness depend on arithmetic about bytes we believed we wrote.
+- **LOCK `[AUDIT-CHAIN]`** protects: canonical serialization, SHA-256 chain, appendAudit-must-throw contract. **LOCK `[AUDIT-001-WRITE-RACE-FIX]`** protects the cross-process file lock in `appendAudit()`.
 
 ### Policy contract & hook checkers (`src/policy.ts` + `src/hooks.ts`)
 - **`.contextengine/policy.json`** at repo root is the declarative contract that the policy-driven pre-commit checkers consume. Five sections:
