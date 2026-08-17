@@ -35,15 +35,27 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 ## Local dev wiring — READ THIS BEFORE ANSWERING "how do I get the update?"
 
-**Both CE surfaces on this machine run the local repo build, not an npm install.**
+**All FIVE CE surfaces on this machine run the local repo build, not an npm install.**
 
 | Surface | Runs | Refresh after a code change |
 |---|---|---|
 | Terminal `contextengine` | `npm link` → this repo (`lib/node_modules/@compr/contextengine-mcp` is a **symlink** to `/Users/yan/Projects/ContextEngine`, still under the old package name) | `npm run build` — nothing else, no reinstall |
 | VS Code MCP server | `.vscode/mcp.json` → `/Users/yan/Projects/ContextEngine/dist/index.js` (absolute path) | `npm run build`, then **reload the VS Code window** — the MCP process is long-lived and holds the old code until it restarts |
+| **launchd autostart MCP server** | `~/Library/LaunchAgents/com.opscontext.mcp.plist` → the same `dist/index.js` | `npm run build`, then **`launchctl kickstart -k gui/$(id -u)/com.opscontext.mcp`**. A VS Code reload does **NOT** touch this — it is a separate process owned by launchd |
+| Claude Code MCP (project) | `.mcp.json` → `npx @compr/opscontext-mcp` (the **published** package, not this repo) | `npm publish`, then restart Claude Code |
+| Claude Code MCP (global) | `~/.claude/settings.json` → `mcpServers.contextengine` → `npx @compr/opscontext-mcp` | same as above; applies to **every project on this machine** |
 | VS Code extension `css-llc.contextengine` | shells out to the CLI | inherits the link automatically |
 
-So: **`npm run build` updates the tooling; `npm publish` does not.** Publishing only matters for other users. Verify with `ls -la $(dirname $(readlink -f $(which contextengine)))/..` rather than assuming.
+So: **`npm run build` updates the tooling; `npm publish` does not** — except for the two `npx`-based Claude Code entries above, which run the *published* package and therefore DO need a publish.
+
+⚠ **"Reload the VS Code window" is not sufficient on its own.** 2026-08-17: the launchd agent was found still running code loaded on **3 July** — six weeks and four releases stale — because every previous "how do I get the update?" answer listed only three surfaces. Long-lived stale processes are silent: they keep answering, just with old logic, and a long-lived pre-2.4.3 process is the likeliest source of the two unexplained audit-chain forks (SESSION_21 §K/§L).
+
+**Check what is actually running before claiming an update landed:**
+```bash
+ps aux | grep -E "dist/index\.js|opscontext-mcp|contextengine-mcp" | grep -v grep
+launchctl list | grep opscontext
+```
+Compare each process's start time against your last `npm run build`. Anything older is stale.
 
 ⚠ `dist/` is the live artifact here, not a throwaway build output. `scripts/obfuscate-rubric.mjs` rewrites `dist/rubric.js` into its encoded publish form — if you run it manually, finish with a plain `npm run build` so local tooling isn't left running the published artifact.
 
