@@ -1876,15 +1876,51 @@ reviewed, and validated in PR ahead of the hook wiring.`);
 
 async function cliAuditVerify(): Promise<void> {
   const report = verifyChain();
+  const forks = report.forkIndices ?? [];
+
   if (report.ok) {
-    console.log(`✅ Audit chain verified — ${report.total} record(s), hash chain intact.`);
+    console.log(`✅ Audit chain verified — ${report.total} record(s).`);
+    console.log(`   No record was altered, and no history is missing.`);
+    if (forks.length > 0) {
+      // [VERIFY-FORK-IS-NOT-TAMPER] — surface this, but do not call it tampering.
+      console.log(
+        `\n⚠️  ${forks.length} concurrent-append fork(s) detected (not tampering).`,
+      );
+      console.log(
+        `   Two processes read the same chain head and both appended, so the log is`,
+      );
+      console.log(
+        `   branched rather than strictly linear at: ${forks.slice(0, 8).join(", ")}${forks.length > 8 ? `, … (+${forks.length - 8} more)` : ""}`,
+      );
+      console.log(
+        `   Every record's content still hashes correctly, so the tamper-evidence`,
+      );
+      console.log(
+        `   property holds. Do NOT rewrite the log to linearise it — that would destroy`,
+      );
+      console.log(`   the evidence it exists to provide.`);
+    }
     return;
   }
-  console.error(`❌ Audit chain BROKEN at index ${report.breakAtIndex} (of ${report.total}).`);
-  console.error(`   Reason: ${report.breakReason}`);
-  console.error(`\nA broken chain means the log was either edited after the fact, or a record was`);
-  console.error(`partially written during a crash. For compliance-graded evidence, treat all`);
-  console.error(`records from the break onward as unverified.`);
+
+  console.error(`❌ Audit chain FAILED — ${report.total} record(s) checked.`);
+  console.error(`   ${report.breakReason}`);
+  if ((report.tamperedIndices ?? []).length > 0) {
+    const t = report.tamperedIndices!;
+    console.error(`\n   Altered records (content does not match its own hash):`);
+    console.error(`     ${t.slice(0, 10).join(", ")}${t.length > 10 ? `, … (+${t.length - 10} more)` : ""}`);
+    console.error(`   This is tampering: the record's bytes were changed after it was written.`);
+  }
+  if ((report.orphanIndices ?? []).length > 0) {
+    const o = report.orphanIndices!;
+    console.error(`\n   Orphaned records (parent hash absent from the log):`);
+    console.error(`     ${o.slice(0, 10).join(", ")}${o.length > 10 ? `, … (+${o.length - 10} more)` : ""}`);
+    console.error(`   This means earlier records were deleted or the log was truncated.`);
+  }
+  if (forks.length > 0) {
+    console.error(`\n   (Also ${forks.length} concurrent-append fork(s) — benign, see docs.)`);
+  }
+  console.error(`\nFor compliance-graded evidence, treat the affected records as unverified.`);
   process.exit(2);
 }
 

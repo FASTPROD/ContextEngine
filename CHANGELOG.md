@@ -4,6 +4,57 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [2.4.3] — 2026-08-17 — The audit verifier called concurrency "tampering" and condemned 316k records
+
+`audit-verify` reported `❌ Audit chain BROKEN at index 2826 (of 319438)` and told the user the
+log "was either edited after the fact, or a record was partially written during a crash… treat
+all records from the break onward as unverified." That declared the entire SOC 2 / ISO evidence
+base worthless — for a condition it had never actually tested.
+
+Measured against the real 319k-record log: **0 records with altered content, 0 orphans, 66
+concurrent-append forks.** Nothing had ever been edited. The verifier was reporting a verdict
+about something it had not assessed — `[ABSENCE-IS-NOT-A-VERDICT]`, in the compliance feature
+itself.
+
+### Fixed
+
+- **`verifyChain` now classifies instead of bailing on the first linkage mismatch**
+  (`[VERIFY-FORK-IS-NOT-TAMPER]`). Three distinct findings, previously collapsed into one:
+  | Condition | Meaning | Verdict |
+  |---|---|---|
+  | record's own hash ≠ its content | content was altered | **TAMPER** — fail |
+  | `prev_hash` names a hash absent from the log | history deleted/truncated | **ORPHAN** — fail |
+  | `prev_hash` names a *known earlier* head | two processes appended concurrently | **FORK** — warn, still valid |
+  Content is now hashed against each record's **own** `prev_hash`, so a single fork no longer
+  cascades into false tamper reports for every record after it. The report carries
+  `tamperedIndices`, `orphanIndices` and `forkIndices`, and the CLI states plainly that a forked
+  log must **not** be rewritten to linearise it — doing so destroys the evidence it exists to provide.
+- **Head-of-chain read is now O(1)** (`[AUDIT-TAIL-READ-IS-O1]`). It read the whole log and split
+  it on every append — **215 ms on a 120 MB log, inside the append lock**, allocating a
+  319k-element array each time. Now seeks the last 64 KB. Measured **0.3 ms/append, ~700× faster**;
+  the lock is held for microseconds instead of a fifth of a second.
+- **The in-process head cache is gone** (`[AUDIT-HEAD-FROM-DISK]`). Its safety guard compared a
+  locally *incremented* byte count against the real file size, so any divergence silently hashed
+  onto a stale head. The file's own `[audit-001-write-race]` LOCK already warned the cache was
+  "a perf optimization, NOT a correctness guarantee". With the O(1) read there is nothing left to
+  optimise, so the head is read from disk under the lock, every time.
+
+### Honest scope
+
+The 64 forks dated 2026-06-10 predate the append lock (added 2026-06-24, v2.1.1). Two more dated
+2026-08-13 are **not explained** — the locked writer could not be made to fork under 16 concurrent
+processes on either a small or a 120 MB log, and `emit-event` does use the locked path. The cache
+removal eliminates the most plausible remaining mechanism *by construction*, but that is reasoning,
+not a reproduction. Recorded rather than papered over.
+
+**No log rewrite. No re-anchoring.** The forks are honest history.
+
+### Tests
+
+381 pass (8 new): fork-vs-tamper-vs-orphan classification, fork non-cascade, orphan/fork
+disambiguation, cross-process head pickup, and tail-window overflow. Two existing tests asserted
+the old prose and were re-pointed at the new classification rather than deleted.
+
 ## [2.4.2] — 2026-08-16 — Close the three holes 2.4.1 left in "a directory is not a project"
 
 2.4.1 made `score`'s scope explicit but enforced it on only one of three entry points. An

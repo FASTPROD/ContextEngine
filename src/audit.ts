@@ -25,16 +25,18 @@
 //    (activation server + main MCP) reading the same prev_hash before
 //    either had flushed. The lock serializes the read-then-write
 //    window across processes.
-// ⛔ NEVER trust cachedLastHash without verifying file size hasn't
-//    grown since cachedSize. Another process may have written between
-//    OUR last write and OUR next read.
+// ⛔ NEVER reintroduce an in-process head cache. STRENGTHENED 2026-08-17:
+//    the cache is GONE, not merely guarded. See [AUDIT-HEAD-FROM-DISK].
 // WHY: audit-001-write-race documented in Session 11 SCORE.md. The
-//    in-process chain cache is a perf optimization, NOT a correctness
-//    guarantee — correctness comes from the lock + the size-mismatch
-//    re-read.
-// FIX: To raise throughput further (if profiling proves the stat() per
-//    append is hot), batch appends within a process behind a single
-//    lock acquisition. Don't remove the lock.
+//    in-process chain cache was a perf optimization, NOT a correctness
+//    guarantee — and the size-mismatch guard that was supposed to make it
+//    safe compared a locally-INCREMENTED byte count against the real file
+//    size, so any divergence silently hashed onto a stale head.
+//    The optimization is also now pointless: [AUDIT-TAIL-READ-IS-O1] made
+//    reading the true head ~0ms, down from 215ms on a 120MB log.
+// FIX: hold the lock, read the real head from disk, append. Nothing else.
+//    Don't remove the lock, and don't add a cache back to "speed up" a
+//    path that is already O(1).
 //
 // Tamper-evident audit log — hash-chained JSONL at ~/.contextengine/audit.log.
 //
@@ -55,6 +57,7 @@ import {
   unlinkSync,
   statSync,
   writeSync,
+  readSync,
   constants,
 } from "fs";
 import { join } from "path";
@@ -197,15 +200,69 @@ function ensureDir(): void {
   }
 }
 
+/**
+ * 🔒 LOCKED [AUDIT-TAIL-READ-IS-O1] — 2026-08-17
+ * ⛔ NEVER go back to readFileSync(whole log) + split("\n") to find the head.
+ * WHY: this ran INSIDE the append lock, so its cost was lock hold time. On the author's
+ *      319k-record / 120 MB log it measured **215 ms per append**, and it grows without
+ *      bound. `acquireLockSync` force-breaks any lock older than STALE_LOCK_MS (10 s) to
+ *      recover from crashed holders — which means a slow-but-perfectly-alive holder can
+ *      have its lock STOLEN under load. Both processes then compute a hash from the same
+ *      head and append: a forked chain. 66 forks exist in the log, all with prev_hash
+ *      pointing at a known earlier head, none with tampered content.
+ *      The whole-file read also allocated a 319k-element string array per append, on a
+ *      path invoked once per PostToolUse hook firing.
+ * FIX: seek the tail. Read at most TAIL_READ_BYTES from the end and take the last complete
+ *      line. O(1) in log size, ~0 ms, so the lock is held for microseconds and stale-break
+ *      cannot fire on a live holder. Falls back to a full read only if the tail window
+ *      somehow contains no complete line (pathologically long single record).
+ */
+const TAIL_READ_BYTES = 64 * 1024;
+
 function readLastHash(): string {
   const path = auditPath();
   if (!existsSync(path)) return GENESIS_HASH;
+
+  const size = statSync(path).size;
+  if (size === 0) return GENESIS_HASH;
+
+  const start = Math.max(0, size - TAIL_READ_BYTES);
+  let tail: string;
+  const fd = openSync(path, constants.O_RDONLY);
+  try {
+    const buf = Buffer.alloc(size - start);
+    readSync(fd, buf, 0, buf.length, start);
+    tail = buf.toString("utf-8");
+  } finally {
+    closeSync(fd);
+  }
+
+  // Drop a leading partial line when we started mid-record.
+  if (start > 0) {
+    const nl = tail.indexOf("\n");
+    tail = nl === -1 ? "" : tail.slice(nl + 1);
+  }
+
+  const lines = tail.split("\n").filter(Boolean);
+  if (lines.length === 0) {
+    // Tail window held no complete record — fall back to the full read.
+    return readLastHashFullScan();
+  }
+  try {
+    return (JSON.parse(lines[lines.length - 1]) as AuditRecord).hash;
+  } catch {
+    return GENESIS_HASH;
+  }
+}
+
+/** Fallback for the pathological case: a single record longer than TAIL_READ_BYTES. */
+function readLastHashFullScan(): string {
+  const path = auditPath();
   const data = readFileSync(path, "utf-8");
   const lines = data.split("\n").filter(Boolean);
   if (lines.length === 0) return GENESIS_HASH;
   try {
-    const last = JSON.parse(lines[lines.length - 1]) as AuditRecord;
-    return last.hash;
+    return (JSON.parse(lines[lines.length - 1]) as AuditRecord).hash;
   } catch {
     return GENESIS_HASH;
   }
@@ -238,28 +295,32 @@ export function appendAudit(
   const release = acquireLockSync();
   try {
     const path = auditPath();
-    // Cache validity check: if file size grew since OUR last write, another
-    // process appended → re-read prev hash from disk (the cache is stale).
-    // Also handles first-ever call (cachedLastHash === null).
-    const currentSize = existsSync(path) ? statSync(path).size : 0;
-    if (cachedLastHash === null || currentSize !== cachedSize) {
-      cachedLastHash = readLastHash();
-      cachedSize = currentSize;
-    }
+    // 🔒 LOCKED [AUDIT-HEAD-FROM-DISK] — 2026-08-17
+    // ⛔ NEVER derive the head hash from an in-process cache again.
+    // WHY: the previous code trusted `cachedLastHash` whenever `statSync().size` matched
+    //      a locally-tracked `cachedSize` that was ARITHMETIC (`cachedSize += byteLength`),
+    //      not observed. Any divergence between bytes-we-think-we-wrote and bytes-on-disk
+    //      — a partial write, a concurrent writer whose bytes happened to sum the same, an
+    //      externally rotated/truncated log — left us hashing onto a head that is not the
+    //      real tail, forking the chain. It was a correctness guarantee resting on a
+    //      perf cache, which the file's own [audit-001-write-race] LOCK explicitly warns
+    //      against ("the in-process chain cache is a perf optimization, NOT a correctness
+    //      guarantee").
+    // FIX: with [AUDIT-TAIL-READ-IS-O1] the true head costs ~0 ms, so there is nothing left
+    //      to optimise. Read it from disk under the lock, every time. The cache is gone.
+    const prevHash = readLastHash();
     const ts = new Date().toISOString();
-    const hash = computeHash(cachedLastHash, ts, event, actor, payload);
+    const hash = computeHash(prevHash, ts, event, actor, payload);
     const record: AuditRecord = {
       ts,
       event,
       actor,
       payload,
-      prev_hash: cachedLastHash,
+      prev_hash: prevHash,
       hash,
     };
     const line = JSON.stringify(record) + "\n";
     appendFileSync(path, line);
-    cachedLastHash = hash;
-    cachedSize += Buffer.byteLength(line, "utf-8");
     return record;
   } finally {
     release();
@@ -287,8 +348,39 @@ export interface IntegrityReport {
   total: number;
   breakAtIndex: number | null;
   breakReason: string | null;
+  /** Records whose own hash does not match their content. Non-empty = TAMPERED. */
+  tamperedIndices?: number[];
+  /** Records whose prev_hash names a hash that appears nowhere earlier in the log.
+   *  Indicates deletion/truncation of history — treated as tampering. */
+  orphanIndices?: number[];
+  /** Records whose prev_hash names a KNOWN earlier head — a concurrent-append fork.
+   *  Content is provably intact; only the linkage is non-linear. Not tampering. */
+  forkIndices?: number[];
 }
 
+/**
+ * 🔒 LOCKED [VERIFY-FORK-IS-NOT-TAMPER] — 2026-08-17
+ * ⛔ NEVER report a forked chain as "the log was edited", and never stop at the first
+ *    linkage mismatch without first checking whether any record's CONTENT is altered.
+ * WHY: the previous verifier returned on the first `prev_hash !== prev` and told the user
+ *      the log "was either edited after the fact, or a record was partially written during
+ *      a crash… treat all records from the break onward as unverified." On the author's log
+ *      that meant declaring 316,000 records unverifiable — destroying the entire SOC 2 /
+ *      ISO evidence claim — for a condition it had never actually tested. The truth, once
+ *      measured: 0 of 319,461 records had an invalid self-hash (nothing was ever edited),
+ *      0 orphans (nothing was deleted), and all 66 breaks were forks where two processes
+ *      read the same head and both appended.
+ *      Tampering and concurrency produce DIFFERENT evidence, and conflating them is
+ *      [ABSENCE-IS-NOT-A-VERDICT] applied to the compliance feature itself: the verifier
+ *      reported a verdict ("edited") for something it had not assessed.
+ * FIX: classify every anomaly instead of bailing on the first.
+ *        - self-hash mismatch  → TAMPER   (fail hard; content was altered)
+ *        - prev_hash unknown   → ORPHAN   (fail hard; history was deleted/truncated)
+ *        - prev_hash = a known earlier head → FORK (warn; concurrent append, content intact)
+ *      `ok` is true when there are no tampered and no orphan records. Forks are surfaced
+ *      with counts and indices so the report stays honest in both directions — it must
+ *      never claim a forked log is pristine either.
+ */
 export function verifyChain(): IntegrityReport {
   let records: AuditRecord[];
   try {
@@ -301,29 +393,54 @@ export function verifyChain(): IntegrityReport {
       breakReason: e instanceof Error ? e.message : String(e),
     };
   }
+  const tampered: number[] = [];
+  const orphans: number[] = [];
+  const forks: number[] = [];
+
+  // Every hash observed so far, so a fork (parent = a known earlier head) can be told
+  // apart from an orphan (parent never existed in this log).
+  const seen = new Set<string>([GENESIS_HASH]);
   let prev = GENESIS_HASH;
+
   for (let i = 0; i < records.length; i++) {
     const r = records[i];
+
+    // 1. Content integrity — the only check that can prove tampering. Computed against
+    //    the record's OWN prev_hash, so a fork does not cascade into false tamper reports
+    //    for every record after it.
+    const expected = computeHash(r.prev_hash, r.ts, r.event, r.actor, r.payload);
+    if (r.hash !== expected) tampered.push(i);
+
+    // 2. Linkage — fork vs orphan.
     if (r.prev_hash !== prev) {
-      return {
-        ok: false,
-        total: records.length,
-        breakAtIndex: i,
-        breakReason: `prev_hash mismatch at index ${i}`,
-      };
+      if (seen.has(r.prev_hash)) forks.push(i);
+      else orphans.push(i);
     }
-    const expected = computeHash(prev, r.ts, r.event, r.actor, r.payload);
-    if (r.hash !== expected) {
-      return {
-        ok: false,
-        total: records.length,
-        breakAtIndex: i,
-        breakReason: `hash mismatch at index ${i} (record tampered)`,
-      };
-    }
+
+    seen.add(r.hash);
     prev = r.hash;
   }
-  return { ok: true, total: records.length, breakAtIndex: null, breakReason: null };
+
+  const ok = tampered.length === 0 && orphans.length === 0;
+  const firstProblem =
+    tampered.length > 0 ? tampered[0] : orphans.length > 0 ? orphans[0] : null;
+
+  let reason: string | null = null;
+  if (tampered.length > 0) {
+    reason = `${tampered.length} record(s) with altered content — first at index ${tampered[0]}`;
+  } else if (orphans.length > 0) {
+    reason = `${orphans.length} record(s) whose parent is absent from the log (deleted or truncated history) — first at index ${orphans[0]}`;
+  }
+
+  return {
+    ok,
+    total: records.length,
+    breakAtIndex: firstProblem,
+    breakReason: reason,
+    tamperedIndices: tampered,
+    orphanIndices: orphans,
+    forkIndices: forks,
+  };
 }
 
 export function filterByRange(

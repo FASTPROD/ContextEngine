@@ -115,7 +115,11 @@ describe("verifyChain", () => {
     const r = verifyChain();
     expect(r.ok).toBe(false);
     expect(r.breakAtIndex).toBe(1);
-    expect(r.breakReason).toMatch(/hash mismatch/);
+    // [VERIFY-FORK-IS-NOT-TAMPER] — wording changed when the verifier learned to tell
+    // altered content from concurrent appends. Assert the CLASSIFICATION, not the prose.
+    expect(r.breakReason).toMatch(/altered content/);
+    expect(r.tamperedIndices).toEqual([1]);
+    expect(r.forkIndices).toEqual([]); // editing a payload is not a fork
   });
 
   it("detects prev_hash splicing (record removed from middle)", () => {
@@ -131,7 +135,12 @@ describe("verifyChain", () => {
     const r = verifyChain();
     expect(r.ok).toBe(false);
     expect(r.breakAtIndex).toBe(1);
-    expect(r.breakReason).toMatch(/prev_hash mismatch/);
+    // Deleting a record orphans its successor: the successor's parent hash is no longer
+    // anywhere in the log. That is deletion of history, NOT a concurrent-append fork —
+    // the distinction [VERIFY-FORK-IS-NOT-TAMPER] exists to make.
+    expect(r.breakReason).toMatch(/parent is absent|deleted or truncated/);
+    expect(r.orphanIndices).toEqual([1]);
+    expect(r.forkIndices).toEqual([]);
   });
 
   it("detects appended-from-scratch forgery (forged record with bogus prev_hash)", () => {
