@@ -175,6 +175,17 @@ if [[ -n "$CE_CLI" && "$HAS_POLICY" == "true" ]]; then
     exit 1
   fi
 
+  # rule_parity — a rule present in one agent doc must be present in all of
+  # them. Fires only when this commit stages one of the governed docs, so it
+  # never blocks unrelated work. Added 2026-08-19: the checker shipped in
+  # a7deda8 but nothing invoked it, which is a gate that exists and does
+  # nothing — the same "built and disconnected" failure as the delta pipeline
+  # (SESSION_20 section J). Run `contextengine hook rule-parity --all` for a
+  # whole-repo audit in CI.
+  if ! "$CE_CLI" hook rule-parity; then
+    exit 1
+  fi
+
   # NOTE: commit_message_required runs from the commit-msg hook
   # (hooks/commit-msg, mirrored to .git/hooks/commit-msg) — NOT here.
   # Verifier P0 fix (2026-06-26): pre-commit fires BEFORE git writes the

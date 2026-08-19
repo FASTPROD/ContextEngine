@@ -33,6 +33,26 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
 10. **Post-push checkpoint** — after every `git push`, call `end_session` (MCP) or run `npx @compr/opscontext-mcp end-session` (CLI fallback). Enforced by hook (`.claude/settings.json` → PostToolUse Bash).
 
+## MULTI-AGENT COST — read this before fanning out
+
+**Cost follows `calls × context`, not `calls × result`.** Every tool result stays in an agent's
+context for the rest of its life, and every later turn re-reads the whole accumulation. A
+5,936-line reference file searched 11 times is paid for **11 times inside one agent**.
+
+Measured failure, real run: **300 agents, 21.5M tokens — 7.5% real output, 92.5% context
+re-reads.** Median 11 tool calls and 73,675 context tokens per agent, to classify 24 products.
+
+1. **Hand the agent what it needs; do not send it searching.** More than 2 tool calls per agent
+   is an alarm, not a plan. Pre-computing the candidate set took one task from 8,984 → 1,932
+   tokens per item — **4.6×, same model, same output quality**.
+2. **Run ONE unit and read its consumption before scaling.** A quality canary is not a cost
+   canary. `74k × 300 = 22M` was visible in two minutes, before spending any of it.
+3. **Budget the fleet, not just the prompt.** 40 of 300 agents were lost to the session limit —
+   13% of the spend bought nothing.
+
+**Why this is dangerous:** the run looks healthy, the quality canary passes, and nothing in the
+output hints at it. Cost has to be measured directly; it never shows up in the result.
+
 ## Local dev wiring — READ THIS BEFORE ANSWERING "how do I get the update?"
 
 **All FIVE CE surfaces on this machine run the local repo build, not an npm install.**
