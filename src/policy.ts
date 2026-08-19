@@ -119,6 +119,35 @@ export type BypassToken = z.infer<typeof BypassTokenSchema>;
 /**
  * The full policy document — schema version 1.
  */
+/**
+ * 🔒 LOCKED [RULE-PARITY-IS-DOC-TO-DOC] — 2026-08-19
+ * ⛔ NEVER fold this into doc_coverage. They answer different questions.
+ * WHY: doc_coverage maps SOURCE → DOC ("you changed src/audit.ts, update SKILLS.md").
+ *      It cannot see the failure that motivated this: a rule that existed in
+ *      ~/.claude/CLAUDE.md and AGENT_USAGE.md but NOT in .github/copilot-instructions.md
+ *      — so it was invisible to Cursor, Windsurf and Copilot, which read only the latter.
+ *      No source file changed, so no doc_coverage rule could ever fire. The rule was
+ *      written, reviewed, and simply not where the readers look.
+ * FIX: parity between DOCS. If a marker appears in any listed file, it must appear in all
+ *      of them. Deliberately literal-substring, not regex: a marker is a grep-able tag in
+ *      the LOCK tradition, and a regex here would fail open on a typo.
+ */
+export const RuleParitySchema = z.object({
+  id: z.string().min(1).describe("Stable identifier for this parity rule"),
+  marker: z
+    .string()
+    .min(3)
+    .describe("Literal substring that marks the rule's presence, e.g. 'MULTI-AGENT COST'"),
+  required_in: z
+    .array(z.string())
+    .min(2)
+    .describe("Repo-relative doc paths that must agree. Fewer than 2 makes parity meaningless."),
+  severity: z.enum(["block", "warn"]).default("block"),
+  /** When true the marker must be present in EVERY file, even if currently in none. */
+  always_required: z.boolean().default(false),
+  description: z.string().optional(),
+});
+
 export const PolicySchema = z.object({
   version: z.literal(1).describe("Policy schema version. Pin to 1 — bumps require a migration path."),
   extends: z
@@ -131,6 +160,7 @@ export const PolicySchema = z.object({
   deploy_verify_hosts: z.array(DeployVerifyHostSchema).default([]),
   commit_message_required: z.array(CommitMessageRequiredSchema).default([]),
   bypass_tokens: z.array(BypassTokenSchema).default([]),
+  rule_parity: z.array(RuleParitySchema).default([]),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 
@@ -236,6 +266,12 @@ export function formatPolicySummary(policy: Policy): string {
   lines.push(`Bypass tokens: ${policy.bypass_tokens.length}`);
   for (const b of policy.bypass_tokens) {
     lines.push(`  - ${b.id} → TTL ${b.ttl_seconds}s, reason ≥ ${b.requires_reason_min_length} chars`);
+  }
+  lines.push(`Rule-parity rules: ${policy.rule_parity.length}`);
+  for (const r of policy.rule_parity) {
+    lines.push(
+      `  - ${r.id} → marker "${r.marker}" must agree across ${r.required_in.length} file(s) [${r.severity}]${r.always_required ? " (always required)" : ""}`,
+    );
   }
   return lines.join("\n");
 }

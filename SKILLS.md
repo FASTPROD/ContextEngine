@@ -159,6 +159,22 @@
 - **No in-process head cache** (`[AUDIT-HEAD-FROM-DISK]`) — the head is read from disk under the lock on every append. The previous cache guarded itself with an *incremented* byte counter compared against real file size, making correctness depend on arithmetic about bytes we believed we wrote.
 - **LOCK `[AUDIT-CHAIN]`** protects: canonical serialization, SHA-256 chain, appendAudit-must-throw contract. **LOCK `[AUDIT-001-WRITE-RACE-FIX]`** protects the cross-process file lock in `appendAudit()`.
 
+### Rule parity (`policy.rule_parity`)
+- **Problem it solves**: a rule can be written, reviewed and still be invisible. The trigger case: a multi-agent cost rule lived in `~/.claude/CLAUDE.md`, `AGENT_USAGE.md` and memory — but **not** in `.github/copilot-instructions.md`, which is the only one of those Cursor, Windsurf and Copilot read. No source file changed, so `doc_coverage` could never fire.
+- **`doc_coverage` is source → doc. `rule_parity` is doc ↔ doc.** They are not interchangeable (`[RULE-PARITY-IS-DOC-TO-DOC]`).
+- **Contract**: if `marker` appears in *any* file of `required_in`, it must appear in *all* of them. Present in none = not adopted yet = pass, unless `always_required: true`.
+- **Literal substring, not regex** — a marker is a grep-able tag in the LOCK tradition; a regex would fail open on a typo.
+- **Diff-aware** (`[RULE-PARITY-IS-DIFF-AWARE]`): fires only when the commit stages one of the governed docs — the moment parity can break and the author has the context. `--all` audits the whole repo for CI or a deliberate sweep.
+- **Reads the INDEX, not the working tree** (`[RULE-PARITY-READS-THE-INDEX]`): a commit records the staged blob. The first implementation read the worktree, so staging a marker's *removal* while the worktree still held it passed the gate. `--all` reads the worktree by design — it answers "is the repo consistent now", not "is this commit consistent".
+- **CLI**: `contextengine hook rule-parity [--all]`, `CE_JSON=1` for CI. Blocking violations append a `hook.block` audit record.
+
+**Known limits — it proves presence, not agreement:**
+| Case | Behaviour |
+|---|---|
+| Marker inside a code fence or as a "do not write this" example | Counts as present. Choose markers unlikely to appear in examples. |
+| Same marker, contradictory rule text in each file | **Passes.** Parity of presence only; it cannot compare meaning. |
+| Rule lives only outside the repo (e.g. `~/.claude/CLAUDE.md`) | Invisible. Only listed repo-relative paths are checked. |
+
 ### Policy contract & hook checkers (`src/policy.ts` + `src/hooks.ts`)
 - **`.contextengine/policy.json`** at repo root is the declarative contract that the policy-driven pre-commit checkers consume. Five sections:
   - `secret_patterns` — id-tagged regex rules (severity `block` | `warn`), optional `paths` glob scoping (e.g. JWT pattern scoped only to `docs/sessions/**/*.md`)

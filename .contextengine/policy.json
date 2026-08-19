@@ -4,7 +4,10 @@
     {
       "id": "jwt_in_session_doc",
       "pattern": "eyJ[A-Za-z0-9_=-]{20,}\\.[A-Za-z0-9_=-]{20,}\\.[A-Za-z0-9_=-]{20,}",
-      "paths": ["docs/sessions/**/*.md", "session-notes/**/*.md"],
+      "paths": [
+        "docs/sessions/**/*.md",
+        "session-notes/**/*.md"
+      ],
       "severity": "block",
       "description": "JWT-shape leak in a session or plan markdown file. Threat model: the 2026-04-09 Apec incident where a JWT was pasted into a session doc, then panic-commented out at commit time. Hard-block in this exact shape."
     },
@@ -23,25 +26,33 @@
   ],
   "doc_coverage": [
     {
-      "paths": ["src/firewall.ts"],
+      "paths": [
+        "src/firewall.ts"
+      ],
       "requires_section": "SKILLS.md#protocol-firewall",
       "severity": "block",
       "description": "Firewall behavior must stay reflected in SKILLS.md. Replaces the wall-clock 4h staleness gate."
     },
     {
-      "paths": ["src/activation.ts"],
+      "paths": [
+        "src/activation.ts"
+      ],
       "requires_section": "SKILLS.md#activation-and-licensing",
       "severity": "block",
       "description": "Activation flow + PRO gating documented in SKILLS.md."
     },
     {
-      "paths": ["src/audit.ts"],
+      "paths": [
+        "src/audit.ts"
+      ],
       "requires_section": "SKILLS.md#audit-log",
       "severity": "warn",
       "description": "Audit log details. Warn-only initially; will move to block after the SKILLS.md section is fleshed out."
     },
     {
-      "paths": ["src/policy.ts"],
+      "paths": [
+        "src/policy.ts"
+      ],
       "requires_section": "SKILLS.md#policy-contract",
       "severity": "warn",
       "description": "Policy schema. Warn-only initially; SKILLS.md section is a follow-up."
@@ -66,10 +77,29 @@
   "commit_message_required": [
     {
       "id": "multi-agent-for-shared-infra",
-      "paths": ["server/deploy.sh", "server/ecosystem.config.*", "**/nginx*.conf", "compR.fr/deploy*.sh", "compR.fr/setup-symlink-deploy.sh"],
+      "paths": [
+        "server/deploy.sh",
+        "server/ecosystem.config.*",
+        "**/nginx*.conf",
+        "compR.fr/deploy*.sh",
+        "compR.fr/setup-symlink-deploy.sh"
+      ],
       "pattern": "Multi-agent: wf_[a-z0-9-]+|--skip-multi-agent-reason: .+",
       "severity": "block",
       "description": "Multi-agent diagnostic required before changes to shared-infra files (per docs/skills/CLAUDE_MULTI_AGENT_PROMPT.md + Session 15 lesson). Cite workflow ID in commit body OR provide --skip-multi-agent-reason: <reason> for the explicit bypass (logged to audit log)."
+    }
+  ],
+  "rule_parity": [
+    {
+      "id": "multi-agent-cost-discipline",
+      "marker": "MULTI-AGENT COST",
+      "required_in": [
+        "CLAUDE.md",
+        ".github/copilot-instructions.md",
+        "SKILLS.md"
+      ],
+      "severity": "block",
+      "description": "Cost discipline for multi-agent fan-out must be visible to every agent surface. Cursor/Windsurf/Copilot read .github/copilot-instructions.md only \u2014 a rule living solely in CLAUDE.md is invisible to them."
     }
   ]
 }

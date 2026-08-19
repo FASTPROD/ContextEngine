@@ -639,3 +639,192 @@ export function formatDocCoverageViolationsJson(violations: DocCoverageViolation
   });
 }
 
+
+// ---------------------------------------------------------------------------
+// Rule parity — the same invariant must appear in every doc that claims it
+// ---------------------------------------------------------------------------
+
+export interface RuleParityViolation {
+  severity: "block" | "warn";
+  ruleId: string;
+  marker: string;
+  presentIn: string[];
+  missingFrom: string[];
+  reason: "marker-missing-from-some-files" | "marker-required-but-absent-everywhere" | "file-not-found";
+  missingFiles?: string[];
+}
+
+/**
+ * 🔒 LOCKED [RULE-PARITY-IS-DIFF-AWARE] — 2026-08-19
+ * ⛔ NEVER make this fire on commits that touch none of the rule's files.
+ * WHY: parity is a property of the whole repo, so the naive implementation checks the
+ *      working tree on every commit — which means one pre-existing drift blocks every
+ *      unrelated commit until someone fixes it. That is how a useful gate becomes a gate
+ *      everyone disables. doc_coverage already learned this: it only fires when the commit
+ *      touches the rule's source paths.
+ * FIX: fire only when the commit stages a change to at least one file the rule governs.
+ *      Editing one of the three agent docs is exactly the moment parity can break, and
+ *      exactly the moment the author has the context to fix it. `--all` (see cliHookRuleParity)
+ *      audits the whole repo on demand, for CI or a deliberate sweep.
+ *
+ * 🔒 LOCKED [RULE-PARITY-READS-THE-INDEX] — 2026-08-19
+ * ⛔ NEVER evaluate marker presence from the working tree during a pre-commit check.
+ * WHY: the first cut did, with the rationalisation that "for a normal `git commit` the
+ *      working tree IS the post-commit state". That is false whenever staging is partial,
+ *      which is the normal case for anyone using `git add -p`. Demonstrated: stage the
+ *      REMOVAL of the marker from CLAUDE.md, then restore it in the working tree only —
+ *      the gate passed, and the commit that deleted the rule from the file agents read
+ *      went through clean. The check was measuring a state git was not about to record.
+ *      Same family as [SCORE-CANARY]'s pins and [EXEC-FAILURE-IS-NOT-EMPTY]: the tool
+ *      answered confidently about something it had not actually looked at.
+ * FIX: for staged files read the INDEX blob (`git show :path`) — that is literally what
+ *      the commit will contain. Unstaged files keep their worktree content, because the
+ *      commit leaves them untouched. `--all` audits the worktree by design: it answers
+ *      "is the repo consistent right now", not "is this commit consistent".
+ */
+/**
+ * Content of `rel` as it will exist AFTER the pending commit.
+ * Staged → the index blob. Not staged → the working tree (the commit does not touch it).
+ * Returns null when the path will not exist.
+ */
+function contentAfterCommit(
+  repoRoot: string,
+  rel: string,
+  stagedSet: Set<string>,
+  useWorktree: boolean,
+): string | null {
+  if (!useWorktree && stagedSet.has(rel)) {
+    try {
+      return execSync(`git show :"${rel}"`, {
+        cwd: repoRoot,
+        encoding: "utf-8",
+        maxBuffer: 32 * 1024 * 1024,
+      });
+    } catch {
+      // [EXEC-FAILURE-IS-NOT-EMPTY] — "git show failed" is not "the file is absent".
+      // Not a git repo, a corrupt index, or a path git cannot resolve all land here.
+      // Fall through to the working tree rather than reporting a file that plainly
+      // exists as missing. A staged DELETION never reaches this branch: getStagedFiles
+      // filters on --diff-filter=ACMR, so deleted paths are not in stagedSet and are
+      // correctly read as absent from the worktree below.
+    }
+  }
+  const abs = join(repoRoot, rel);
+  if (!existsSync(abs)) return null;
+  return readFileSync(abs, "utf-8");
+}
+
+export function runRuleParity(
+  policy: Policy,
+  files: StagedFile[],
+  repoRoot: string,
+  opts: { all?: boolean } = {},
+): RuleParityViolation[] {
+  const stagedSet = new Set(files.map((f) => f.path));
+  const violations: RuleParityViolation[] = [];
+
+  for (const rule of policy.rule_parity) {
+    // [RULE-PARITY-IS-DIFF-AWARE] — only fire when this commit touches a governed file.
+    if (!opts.all && !rule.required_in.some((p) => stagedSet.has(p))) continue;
+
+    const presentIn: string[] = [];
+    const missingFrom: string[] = [];
+    const missingFiles: string[] = [];
+
+    for (const rel of rule.required_in) {
+      // [RULE-PARITY-READS-THE-INDEX] — what the commit records, not what is on disk.
+      const content = contentAfterCommit(repoRoot, rel, stagedSet, opts.all === true);
+      if (content === null) {
+        missingFiles.push(rel);
+        continue;
+      }
+      if (content.includes(rule.marker)) presentIn.push(rel);
+      else missingFrom.push(rel);
+    }
+
+    if (missingFiles.length > 0) {
+      violations.push({
+        severity: rule.severity,
+        ruleId: rule.id,
+        marker: rule.marker,
+        presentIn,
+        missingFrom,
+        missingFiles,
+        reason: "file-not-found",
+      });
+      continue;
+    }
+
+    // Adopted nowhere. Only a violation when the rule says it is mandatory.
+    if (presentIn.length === 0) {
+      if (rule.always_required) {
+        violations.push({
+          severity: rule.severity,
+          ruleId: rule.id,
+          marker: rule.marker,
+          presentIn,
+          missingFrom,
+          reason: "marker-required-but-absent-everywhere",
+        });
+      }
+      continue;
+    }
+
+    // Present somewhere but not everywhere — the drift this rule exists to catch.
+    if (missingFrom.length > 0) {
+      violations.push({
+        severity: rule.severity,
+        ruleId: rule.id,
+        marker: rule.marker,
+        presentIn,
+        missingFrom,
+        reason: "marker-missing-from-some-files",
+      });
+    }
+  }
+
+  return violations;
+}
+
+export function formatRuleParityViolations(violations: RuleParityViolation[]): string {
+  if (violations.length === 0) return "✅ All rule-parity rules satisfied.";
+  const lines: string[] = [];
+  const blocking = violations.filter((v) => v.severity === "block").length;
+  lines.push(
+    `📐 RULE PARITY: ${violations.length} violation(s) — ${blocking} blocking, ${violations.length - blocking} warning(s).`,
+  );
+  for (const v of violations) {
+    if (v.reason === "file-not-found") {
+      lines.push(
+        `  [${v.severity}] ${v.ruleId}: listed file(s) do not exist → ${v.missingFiles!.join(", ")}`,
+      );
+      continue;
+    }
+    if (v.reason === "marker-required-but-absent-everywhere") {
+      lines.push(
+        `  [${v.severity}] ${v.ruleId}: marker "${v.marker}" is required but present in none of ${v.missingFrom.join(", ")}`,
+      );
+      continue;
+    }
+    lines.push(`  [${v.severity}] ${v.ruleId}: marker "${v.marker}" is out of sync.`);
+    lines.push(`      present in : ${v.presentIn.join(", ")}`);
+    lines.push(`      MISSING from: ${v.missingFrom.join(", ")}`);
+  }
+  return lines.join("\n");
+}
+
+export function formatRuleParityViolationsJson(violations: RuleParityViolation[]): string {
+  return JSON.stringify({
+    check: "rule-parity",
+    violations: violations.length,
+    blocking: violations.filter((v) => v.severity === "block").length,
+    details: violations.map((v) => ({
+      rule_id: v.ruleId,
+      severity: v.severity,
+      reason: v.reason,
+      present_in: v.presentIn,
+      missing_from: v.missingFrom,
+      missing_files: v.missingFiles ?? [],
+    })),
+  });
+}

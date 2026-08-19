@@ -618,12 +618,16 @@ import {
   runSecretScan,
   runDocCoverage,
   runCommitMessageRequired,
+  runRuleParity,
   formatSecretViolations,
   formatDocCoverageViolations,
   formatSecretViolationsJson,
   formatDocCoverageViolationsJson,
   formatCommitMessageViolations,
   formatCommitMessageViolationsJson,
+  formatRuleParityViolations,
+  formatRuleParityViolationsJson,
+  type RuleParityViolation,
 } from "./hooks.js";
 import { safeAppend } from "./audit.js";
 import {
@@ -1432,6 +1436,13 @@ Subcommands:
   doc-coverage   For each policy.doc_coverage rule, check whether the
                  commit touches matching source paths AND the required
                  doc section is staged. Exit 1 on blocking violations.
+  rule-parity [--all]
+                 For each policy.rule_parity rule, check that the marker
+                 is present in EVERY listed doc, not just some. Fires only
+                 when the commit touches one of those docs; --all audits
+                 the whole repo regardless of the diff. Exit 1 on blocking
+                 violations.
+
   commit-message-required [MSG_FILE]
                  For each policy.commit_message_required rule, check
                  whether the commit touches matching source paths AND
@@ -1496,7 +1507,17 @@ tamper-evident audit log at ~/.contextengine/audit.log.`);
     console.error(`Error reading staged diff: ${e instanceof Error ? e.message : String(e)}`);
     process.exit(1);
   }
-  if (stagedFiles.length === 0) return; // nothing to scan
+  // 🔒 LOCKED [RULE-PARITY-ALL-IGNORES-DIFF] — 2026-08-19
+  // ⛔ NEVER let the empty-staged-diff short-circuit swallow an --all audit.
+  // WHY: `hook rule-parity --all` is a whole-repo audit for CI and deliberate sweeps —
+  //      it does not depend on the diff at all. This early return ran first, so on a
+  //      clean tree the command printed NOTHING and exited 0. A compliance check that
+  //      reports success precisely when it did not run is the same failure shape as the
+  //      `Secrets exposure` 6/6 pass in [EXEC-FAILURE-IS-NOT-EMPTY]: silence read as a
+  //      clean bill of health. Caught by running it, not by reading it.
+  // FIX: exempt the diff-independent audits from the short-circuit.
+  const auditsWholeRepo = sub === "rule-parity" && args.includes("--all");
+  if (stagedFiles.length === 0 && !auditsWholeRepo) return; // nothing to scan
 
   if (sub === "secret-scan") {
     const violations = runSecretScan(policy, stagedFiles);
@@ -1533,6 +1554,29 @@ tamper-evident audit log at ~/.contextengine/audit.log.`);
         matched_files: v.matchedFiles,
         requires_section: v.requiresSection,
         reason: v.reason,
+      });
+    }
+    if (blocking.length > 0) process.exit(1);
+    return;
+  }
+
+  if (sub === "rule-parity") {
+    // --all audits every rule regardless of what this commit touches (CI / sweeps).
+    const all = args.includes("--all");
+    const violations = runRuleParity(policy, stagedFiles, repoRoot, { all });
+    if (jsonMode) {
+      process.stdout.write(formatRuleParityViolationsJson(violations) + "\n");
+    } else {
+      console.log(formatRuleParityViolations(violations));
+    }
+    const blocking = violations.filter((v: RuleParityViolation) => v.severity === "block");
+    for (const v of blocking) {
+      safeAppend("hook.block", {
+        check: "rule-parity",
+        rule_id: v.ruleId,
+        reason: v.reason,
+        present_in: v.presentIn,
+        missing_from: v.missingFrom,
       });
     }
     if (blocking.length > 0) process.exit(1);
@@ -2354,7 +2398,7 @@ Usage:
                                        Stream drift / loop / stuck-tool / fabrication alerts from the audit log
   contextengine emit-event <kind> <payload-json> [--actor NAME]
                                        Append a single event to the audit log (for integrations / scripted tests)
-  contextengine hook <secret-scan|doc-coverage>
+  contextengine hook <secret-scan|doc-coverage|rule-parity|commit-message-required>
                                        Run policy-driven pre-commit checks against staged diff
                                        (exit 1 on blocking violation; CE_JSON=1 for CI output)
   contextengine install-skill [--global | --project] [--force]
