@@ -130,7 +130,15 @@ if [[ -n "$STAGED_DIFF" ]]; then
   for entry in "${SECRET_PATTERNS[@]}"; do
     PATTERN="${entry%%|*}"
     DESCRIPTION="${entry##*|}"
-    MATCHES=$(echo "$FILTERED_DIFF" | grep -E '^\+[^+]' | grep -E "$PATTERN" 2>/dev/null)
+    # [LOCKED] [SECRET_SCAN_CASE_INSENSITIVE] - 2026-08-20
+    # [NEVER] drop the -i on this grep.
+    # WHY: case-sensitive, the generic 'password.*=' pattern let
+    #      `PASSWORD = "..." + chr(33) + "..."` (a live sudo password) through the gate in
+    #      agent.invoq.me.ai ccf97fa. Tested against that exact line: -E missed, -iE caught.
+    #      The gap was deployed identically in 25 repos.
+    # FIX: -iE. Every pattern in SECRET_PATTERNS is either a fixed prefix (sk_live_, AKIA,
+    #      ghp_) where case does not matter, or a word (password) where it must not.
+    MATCHES=$(echo "$FILTERED_DIFF" | grep -E '^\+[^+]' | grep -iE "$PATTERN" 2>/dev/null)
     if [[ -n "$MATCHES" ]]; then
       ((SECRET_VIOLATIONS++))
       SECRET_DETAILS+="  🔑 $DESCRIPTION\n"
