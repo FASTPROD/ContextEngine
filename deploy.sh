@@ -49,10 +49,33 @@ deploy_server() {
   # FIX: exclude it, and keep a dated copy beside it on the server before each deploy.
   echo "📦 Syncing server files..."
   ssh $SSH_OPTS "$SERVER" "cp -n $SERVER_DIR/ecosystem.config.cjs $SERVER_DIR/ecosystem.config.cjs.bak 2>/dev/null || true"
+
+  # [LOCKED] [NEVER-REINSTALL-NODE_MODULES-ON-THIS-BOX] - 2026-08-20
+  # [NEVER] run npm install / npm ci here unconditionally.
+  # WHY: crowlrbackend is Debian buster. Its g++ rejects -std=c++20, which
+  #      better-sqlite3 now requires, and prebuild-install finds no prebuilt binary for
+  #      its glibc. The FIRST real run of this script died exactly there. The already
+  #      built better_sqlite3.node from an earlier toolchain still works, so the danger
+  #      is not the failed install, it is a future install that removes the working
+  #      artifact before failing to replace it: the activation server would then not
+  #      start again.
+  # FIX: install only when package.json actually changed, and say so loudly when it
+  #      did, because on this box that means a human has to deal with the toolchain.
+  #      Measured on the run that found this: deps were byte-identical, so the install
+  #      was pure risk with no purpose.
+  LOCAL_PKG_HASH=$(md5 -q server/package.json 2>/dev/null || md5sum server/package.json | cut -d" " -f1)
+  REMOTE_PKG_HASH=$(ssh $SSH_OPTS "$SERVER" "md5sum $SERVER_DIR/package.json 2>/dev/null | cut -d' ' -f1" || echo "none")
+  if [ "$LOCAL_PKG_HASH" = "$REMOTE_PKG_HASH" ]; then
+    echo "   package.json unchanged, skipping npm install (see [NEVER-REINSTALL-NODE_MODULES-ON-THIS-BOX])"
+  else
+    echo "   ⚠️  package.json CHANGED. This box cannot rebuild better-sqlite3."
+    echo "      Handle the dependency change by hand before rerunning; aborting."
+    exit 1
+  fi
   rsync -avz --delete \
     --exclude='node_modules/' --exclude='dist/' \
     --exclude='data/' --exclude='delta-modules/' \
-    --exclude='ecosystem.config.cjs' \
+    --exclude='ecosystem.config.cjs*' \
     -e "ssh $SSH_OPTS" \
     server/ "$SERVER:$SERVER_DIR/"
 
@@ -84,7 +107,6 @@ deploy_server() {
     PM2_BIN=\$(command -v pm2 || ls -d /usr/local/node-v*/bin/pm2 2>/dev/null | head -1)
     if [ ! -x \"\$PM2_BIN\" ]; then echo 'pm2 not found on the box'; exit 1; fi
     cd $SERVER_DIR
-    npm install --include=dev
     ./node_modules/.bin/tsc
     CONTEXTENGINE_DIST=$DIST_DIR node dist/gen-delta.js
     \"\$PM2_BIN\" restart contextengine-api
