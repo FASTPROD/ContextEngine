@@ -17,7 +17,18 @@ deploy_npm() {
 deploy_server() {
   echo "🚀 Deploying activation server to VPS..."
   
-  SSH_OPTS="-o PubkeyAuthentication=no -o StrictHostKeyChecking=no"
+  # [LOCKED] [GANDI_KEY_AUTH_ONLY] - 2026-08-20
+  # [NEVER] reintroduce a password-auth wrapper, or PubkeyAuthentication=no, for
+  #         admin@92.243.24.157.
+  # WHY: that box had SSH password auth on, 387,832 failed attempts logged, and was
+  #      compromised by a cryptominer in Feb 2026. Password auth was disabled 2026-08-20
+  #      after auth.log showed 0 password logins vs 50 publickey logins over 5+ weeks.
+  #      Forcing PubkeyAuthentication=no now fails outright. This script had also been
+  #      carrying the literal placeholder <VPS_PASSWORD>, so deploy_server could not have
+  #      worked as written - key auth is what makes it work again.
+  # FIX: use the ed25519 key (~/.ssh/config Host gandi). sudo on the remote still needs
+  #      the password; that is a separate mechanism and is unaffected.
+  SSH_OPTS="-o StrictHostKeyChecking=no"
   SERVER="admin@92.243.24.157"
   SERVER_DIR="/var/www/contextengine-server"
   DIST_DIR="/var/www/contextengine-dist"
@@ -27,18 +38,18 @@ deploy_server() {
   rsync -avz --delete \
     --exclude='node_modules/' --exclude='dist/' \
     --exclude='data/' --exclude='delta-modules/' \
-    -e "sshpass -p '<VPS_PASSWORD>' ssh $SSH_OPTS" \
+    -e "ssh $SSH_OPTS" \
     server/ "$SERVER:$SERVER_DIR/"
 
   # Sync compiled dist (for gen-delta)
   echo "📦 Syncing dist/ for delta generation..."
   rsync -avz \
-    -e "sshpass -p '<VPS_PASSWORD>' ssh $SSH_OPTS" \
+    -e "ssh $SSH_OPTS" \
     dist/ "$SERVER:$DIST_DIR/"
 
   # Install, build, gen-delta, restart
   echo "🔧 Building on server..."
-  sshpass -p '<VPS_PASSWORD>' ssh $SSH_OPTS "$SERVER" "
+  ssh $SSH_OPTS "$SERVER" "
     cd $SERVER_DIR && \
     npm install --production && \
     npx tsc && \
