@@ -4,12 +4,13 @@ import { join } from "path";
 import { tmpdir } from "os";
 import {
   parseAgentTranscript, classifyStatus, pricingFor, costOf, cacheEfficiency,
-  outputShare, collectRuns, metricsFor, emptyTally, type ModelPricing,
+  outputShare, collectRuns, metricsFor, emptyTally, pricingStatus, type ModelPricing,
 } from "../src/transcript-collector.js";
 import {
   detectContextBurn, detectFanoutWithoutCanary, DEFAULT_COST_THRESHOLDS,
   type CostThresholds,
 } from "../src/detector.js";
+import { DEFAULT_PRICING } from "../src/default-pricing.js";
 
 const OPUS5: ModelPricing = {
   model: "claude-opus-5",
@@ -266,5 +267,73 @@ describe("collectRuns", () => {
 
   it("returns nothing for a root that does not exist", () => {
     expect(collectRuns({ root: join(dir, "nope") })).toEqual([]);
+  });
+});
+
+describe("[NEVER-RENDER-AN-UNKNOWN-AS-A-NUMBER]", () => {
+  const tally = (cr: number, out: number) => ({ ...emptyTally(), cacheRead: cr, output: out });
+
+  it("classifies a fully-priced report as priced", () => {
+    const c = costOf(tally(1_000_000, 10_000), OPUS5);
+    expect(c.unpricedTokens).toBe(0);
+    expect(pricingStatus(c)).toBe("priced");
+  });
+
+  it("classifies a report with NO matching rate as unpriced, never as $0", () => {
+    const c = costOf(tally(1_000_000, 10_000), null);
+    expect(c.total).toBe(0);
+    expect(c.unpricedTokens).toBeGreaterThan(0);
+    expect(pricingStatus(c)).toBe("unpriced"); // must not be presented as money
+  });
+
+  it("classifies a partly-priced report as partial, so the total reads as a floor", () => {
+    const priced = costOf(tally(1_000_000, 10_000), OPUS5);
+    const mixed = { ...priced, unpricedTokens: 500_000 };
+    expect(pricingStatus(mixed)).toBe("partial");
+  });
+
+  /**
+   * The regression this file exists for: 2.5.0 printed `total $0.00` and
+   * `caching saved $0.00 (0%)` over 1.08 BILLION unpriced tokens.
+   */
+  it("never reports a zero total as priced while tokens are unpriced", () => {
+    const c = costOf({ ...emptyTally(), cacheRead: 939_700_000, cacheWrite5m: 117_200_000, output: 24_700_000 }, null);
+    expect(c.total).toBe(0);
+    expect(pricingStatus(c)).not.toBe("priced");
+    expect(pricingStatus(c)).toBe("unpriced");
+  });
+});
+
+describe("[DEFAULT-RATES-SHIP-WITH-THE-PACKAGE]", () => {
+  it("ships a non-empty rate table", () => {
+    expect(DEFAULT_PRICING.length).toBeGreaterThan(0);
+  });
+
+  it("prices every model observed in the real transcript corpus", () => {
+    // Measured 2026-08-19 across 2,310 agent transcripts.
+    for (const m of [
+      "claude-opus-5", "claude-opus-4-8", "claude-fable-5",
+      "claude-sonnet-5", "claude-haiku-4-5-20251001",
+    ]) {
+      expect(pricingFor(m, DEFAULT_PRICING), `${m} must have a shipped rate`).not.toBeNull();
+    }
+  });
+
+  it("keeps the cache multipliers consistent with published pricing", () => {
+    const o = pricingFor("claude-opus-5", DEFAULT_PRICING)!;
+    expect(o.cache_read_per_mtok).toBeCloseTo(o.input_per_mtok * 0.1, 5);
+    expect(o.cache_write_5m_per_mtok).toBeCloseTo(o.input_per_mtok * 1.25, 5);
+    expect(o.cache_write_1h_per_mtok).toBeCloseTo(o.input_per_mtok * 2, 5);
+  });
+
+  it("has NO catch-all, so an unknown vendor still reports unpriced", () => {
+    expect(pricingFor("gpt-9-turbo", DEFAULT_PRICING)).toBeNull();
+  });
+
+  it("makes the default detector thresholds able to price a run", () => {
+    expect(DEFAULT_COST_THRESHOLDS.pricing.length).toBeGreaterThan(0);
+    const c = costOf({ ...emptyTally(), cacheRead: 1e6 }, pricingFor("claude-opus-5", DEFAULT_COST_THRESHOLDS.pricing));
+    expect(c.total).toBeGreaterThan(0);
+    expect(pricingStatus(c)).toBe("priced");
   });
 });

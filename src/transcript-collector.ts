@@ -183,6 +183,29 @@ export function costOf(t: TokenTally, p: ModelPricing | null): CostBreakdown {
   return { input, cacheWrite, cacheRead, output, total: input + cacheWrite + cacheRead + output, withoutCache, unpricedTokens: 0 };
 }
 
+/**
+ * Whether a cost figure can be presented as money at all.
+ *
+ * 🔒 LOCKED [NEVER-RENDER-AN-UNKNOWN-AS-A-NUMBER] — 2026-08-20
+ * ⛔ NEVER print a $0.00 cost row, total, or "caching saved" figure while
+ *    `unpricedTokens > 0`.
+ * WHY: 2.5.0 rendered a full VALUED COST table of $0.00 over 1.08 billion
+ *    unpriced tokens, including "caching saved $0.00 (0%)" — which reads as
+ *    "your caching achieves nothing" when the true reuse was 8x. The token
+ *    accounting was right; the PRESENTATION layer turned "I have no rates"
+ *    into a number. That is Session 21's rule at the display layer: any
+ *    plausible-looking value returned from a branch meaning "I could not
+ *    determine this" is the bug, however reasonable it looks.
+ * FIX: branch on this before formatting. `unpriced` must render the word
+ *    UNPRICED, never a currency amount.
+ */
+export type PricingStatus = "priced" | "partial" | "unpriced";
+
+export function pricingStatus(c: CostBreakdown): PricingStatus {
+  if (c.unpricedTokens === 0) return "priced";
+  return c.total === 0 ? "unpriced" : "partial";
+}
+
 export function emptyTally(): TokenTally {
   return { input: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0, output: 0 };
 }

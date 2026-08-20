@@ -459,5 +459,16 @@ Firing on that ratio would flag every well-cached run ever done. The real pathol
 `cache_creation` and `input_tokens` inflating (cache missed, prefix unstable), not `cache_read`
 inflating (the cache is working). See LOCK `[BURN-IS-COST-WEIGHTED-NOT-VOLUME]`.
 
-Omit a model from `pricing[]` and its tokens are reported as **UNPRICED**, never as $0
-(`[ABSENCE-IS-NOT-A-VERDICT]`).
+**Rates ship with the package.** `src/default-pricing.ts` carries a built-in table (Opus, Fable,
+Sonnet, Haiku families) so `cost` produces real figures out of the box. `agent_cost.pricing` in
+policy.json overrides it outright when present; an `agent_cost` block that omits `pricing`
+falls back to the shipped table rather than pricing nothing. The output always names which
+table is in use, with the date the rates were last checked
+(`[DEFAULT-RATES-SHIP-WITH-THE-PACKAGE]`).
+
+A model matching no rate is reported as **UNPRICED**, never as $0
+(`[ABSENCE-IS-NOT-A-VERDICT]`), and the report refuses to render a currency figure at all when
+*nothing* matched: it prints UNPRICED and names the models to add, because a `total $0.00` with
+`caching saved 0%` over a billion real tokens is a confident wrong answer, not a cheap run
+(`[NEVER-RENDER-AN-UNKNOWN-AS-A-NUMBER]`). Partly-priced reports still show the total, labelled
+as a floor.

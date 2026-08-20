@@ -452,6 +452,7 @@ export type { AuditRecord, AuditEvent };
 
 import type { RunUsage, RunMetrics, ModelPricing } from "./transcript-collector.js";
 import { metricsFor } from "./transcript-collector.js";
+import { DEFAULT_PRICING } from "./default-pricing.js";
 
 export interface CostThresholds {
   billing_mode: "subscription" | "api";
@@ -465,7 +466,8 @@ export interface CostThresholds {
 
 export const DEFAULT_COST_THRESHOLDS: CostThresholds = {
   billing_mode: "subscription",
-  pricing: [],
+  // [DEFAULT-RATES-SHIP-WITH-THE-PACKAGE] — never [] again.
+  pricing: DEFAULT_PRICING,
   min_cache_efficiency: 3,
   max_tool_calls_per_agent: 2,
   max_cost_per_agent_usd: 3,
