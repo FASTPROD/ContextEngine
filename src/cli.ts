@@ -236,6 +236,52 @@ function generateMcpJson(): object {
 // ---------------------------------------------------------------------------
 // Template for pre-commit hook (CE doc freshness + secret scanner)
 // ---------------------------------------------------------------------------
+/**
+ * 🔒 LOCKED [SKIPPING-A-HOOK-MUST-NAME-WHAT-IS-UNENFORCED] — 2026-08-20
+ * ⛔ NEVER print a bare "already exists, skipping" for a hook slot. NEVER overwrite or
+ *    append to a foreign hook either.
+ * WHY: `init` refuses to clobber an existing hook, which is right, but it said so with one
+ *      grey line among a column of green ticks. The user reads "init done" and believes the
+ *      policy gates are live; in that repo they were never installed and enforce nothing.
+ *      This is exactly §E1 arriving through a different door: there, the rule existed and no
+ *      hook called it; here, a hook exists and does not call the rule. Both produce a gate
+ *      that is present in every document and absent at runtime, and neither produces an error.
+ *      A real instance is on this machine: invocme-odoo-connector has a hand-written
+ *      pre-commit, so `init` skipped it, and none of that repo's CE gates have ever run.
+ *      Appending instead is not the fix, and is how that repo ended up with a whole secret
+ *      scanner sitting unreachable behind an earlier `exit 0`.
+ * FIX: on skip, read the existing hook. If it does not invoke the CE CLI, say which gates are
+ *      therefore unenforced and print the one line that wires them in. Silence here reads as
+ *      success.
+ */
+function existingHookInvokesCE(path: string): boolean {
+  try {
+    const body = readFileSync(path, "utf-8");
+    return /\b(contextengine|opscontext)\b/.test(body);
+  } catch {
+    // Unreadable is not proof of absence; say nothing rather than claim a verdict.
+    return true;
+  }
+}
+
+function warnSkippedHook(path: string, slot: "pre-commit" | "commit-msg" | "post-commit"): void {
+  if (existingHookInvokesCE(path)) return;
+  const gates: Record<string, string> = {
+    "pre-commit": "secret-scan, doc-coverage, rule-parity",
+    "commit-msg": "commit-message-required",
+    "post-commit": "audit trail of the push",
+  };
+  const wire: Record<string, string> = {
+    "pre-commit": 'contextengine hook secret-scan && contextengine hook doc-coverage && contextengine hook rule-parity',
+    "commit-msg": 'contextengine hook commit-message-required "$1"',
+    "post-commit": "contextengine end-session",
+  };
+  console.log(`     ⚠️  that hook never calls ContextEngine, so these enforce NOTHING here:`);
+  console.log(`        ${gates[slot]}`);
+  console.log(`        Wire them by adding this line to ${path}:`);
+  console.log(`          ${wire[slot]}`);
+}
+
 function generatePreCommitHook(): string {
   const lines: string[] = [];
   lines.push("#!/bin/zsh");
@@ -535,7 +581,8 @@ async function runInit(): Promise<void> {
       const commitMsgDest = join(hooksDir, "commit-msg");
 
       if (existsSync(preCommitDest)) {
-        console.log("  ⏭  .git/hooks/pre-commit already exists — skipping");
+        console.log("  ⏭  .git/hooks/pre-commit already exists — skipping (never overwritten)");
+        warnSkippedHook(preCommitDest, "pre-commit");
         skipped++;
       } else {
         const answer = isNonInteractive ? "y" : await ask(rl, "  Install pre-commit hook (doc freshness + secret scan)? [Y/n] ");
@@ -550,7 +597,8 @@ async function runInit(): Promise<void> {
       // [COMMIT-MSG-HOOK-MUST-BE-INSTALLED] — without this, every
       // commit_message_required rule is silently unenforced.
       if (existsSync(commitMsgDest)) {
-        console.log("  ⏭  .git/hooks/commit-msg already exists — skipping");
+        console.log("  ⏭  .git/hooks/commit-msg already exists — skipping (never overwritten)");
+        warnSkippedHook(commitMsgDest, "commit-msg");
         skipped++;
       } else {
         const answer = isNonInteractive ? "y" : await ask(rl, "  Install commit-msg hook (commit-message policy gate)? [Y/n] ");
@@ -563,7 +611,8 @@ async function runInit(): Promise<void> {
       }
 
       if (existsSync(postCommitDest)) {
-        console.log("  ⏭  .git/hooks/post-commit already exists — skipping");
+        console.log("  ⏭  .git/hooks/post-commit already exists — skipping (never overwritten)");
+        warnSkippedHook(postCommitDest, "post-commit");
         skipped++;
       } else {
         const answer = isNonInteractive ? "y" : await ask(rl, "  Install post-commit hook (auto-push)? [Y/n] ");

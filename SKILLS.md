@@ -186,6 +186,11 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 - **An unreadable head is never genesis** (`[UNREADABLE-HEAD-IS-NOT-GENESIS]`). Both head readers used to `catch { return GENESIS_HASH }`, so a truncated final record made the next append chain onto genesis and manufacture an orphan. They now throw; `safeAppend()` still isolates call sites.
 - **LOCK `[AUDIT-CHAIN]`** protects: canonical serialization, SHA-256 chain, appendAudit-must-throw contract. **LOCK `[AUDIT-001-WRITE-RACE-FIX]`** protects the cross-process file lock in `appendAudit()`.
 
+### Hook installation (`contextengine init`)
+- **Never overwrites, never appends** to an existing git hook. A foreign hook is left exactly as found.
+- **A skip is announced with its consequence** (`[SKIPPING-A-HOOK-MUST-NAME-WHAT-IS-UNENFORCED]`). If the existing hook does not invoke the CE CLI, `init` names the gates that therefore enforce nothing in that repo and prints the line that wires them in. A bare "already exists, skipping" among a column of green ticks reads as success, and left real repos with documented gates that had never run once.
+- **Appending is not the alternative.** `invocme-odoo-connector` received a secret scanner by append, landing after an earlier unconditional `exit 0`: 120 lines of scanner that never execute, carrying the newer pattern list. Overwrite loses the user's hook, append silently dies behind an early exit, so the only honest option is to skip and say so loudly.
+
 ### Rule parity (`policy.rule_parity`)
 - **Problem it solves**: a rule can be written, reviewed and still be invisible. The trigger case: a multi-agent cost rule lived in `~/.claude/CLAUDE.md`, `AGENT_USAGE.md` and memory — but **not** in `.github/copilot-instructions.md`, which is the only one of those Cursor, Windsurf and Copilot read. No source file changed, so `doc_coverage` could never fire.
 - **`doc_coverage` is source → doc. `rule_parity` is doc ↔ doc.** They are not interchangeable (`[RULE-PARITY-IS-DOC-TO-DOC]`).
