@@ -121,13 +121,23 @@ deploy_server() {
   #         deprecated npm package named `tsc` instead of TypeScript.
   # FIX: install with dev deps, compile with the local tsc binary, and resolve pm2
   #      explicitly, failing loudly if it is missing rather than skipping the restart.
-  echo "🔧 Building on server..."
+  # [LOCKED] [STAMP-THE-DELTA-MANIFEST-WITH-THE-REAL-VERSION] - 2026-08-20
+  # [NEVER] call gen-delta.js without a version argument.
+  # WHY: `const version = process.argv[2] || "1.0.0"`. Called bare, as this script did,
+  #      it stamps the placeholder 1.0.0 over whatever was there. The first successful
+  #      run of this script replaced a manifest reading 1.19.1 with 1.0.0, which is not
+  #      a version of anything. The client-side check added in b696be1 compares that
+  #      field against the installed package version before loading a delta module, so a
+  #      placeholder there means every module is refused once that path is wired.
+  # FIX: pass the client package version, which is what these modules are built from.
+  PKG_VERSION=$(node -p "require('./package.json').version")
+  echo "🔧 Building on server (delta version $PKG_VERSION)..."
   ssh $SSH_OPTS "$SERVER" "
     set -eu
     PM2_BIN=\$(command -v pm2 || ls -d /usr/local/node-v*/bin/pm2 2>/dev/null | head -1)
     if [ ! -x \"\$PM2_BIN\" ]; then echo 'pm2 not found on the box'; exit 1; fi
     cd $SERVER_DIR
-    CONTEXTENGINE_DIST=$DIST_DIR node dist/gen-delta.js
+    CONTEXTENGINE_DIST=$DIST_DIR node dist/gen-delta.js $PKG_VERSION
     \"\$PM2_BIN\" restart contextengine-api
   "
 
