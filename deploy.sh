@@ -34,10 +34,25 @@ deploy_server() {
   DIST_DIR="/var/www/contextengine-dist"
 
   # Sync server files
+  #
+  # [LOCKED] [NEVER-DELETE-THE-PM2-ECOSYSTEM-FILE] - 2026-08-20
+  # [NEVER] drop ecosystem.config.cjs from this exclude list, and [NEVER] commit that
+  #         file to this repo.
+  # WHY: it lives only on the box, so `--delete` was going to remove it on the first
+  #      successful run of this script. A dry-run caught it. `pm2 restart` would still
+  #      have worked from the in-memory process list, so the deploy would have looked
+  #      clean, and the activation server would simply not have come back at the next
+  #      reboot or pm2 resurrect, with nothing in the deploy output pointing at the
+  #      cause. A reboot of this box was already scheduled for the same day.
+  #      It also carries Stripe keys and SMTP config, so it must stay out of git:
+  #      secrets belong in .copilot-credentials.md, never in a repo file.
+  # FIX: exclude it, and keep a dated copy beside it on the server before each deploy.
   echo "📦 Syncing server files..."
+  ssh $SSH_OPTS "$SERVER" "cp -n $SERVER_DIR/ecosystem.config.cjs $SERVER_DIR/ecosystem.config.cjs.bak 2>/dev/null || true"
   rsync -avz --delete \
     --exclude='node_modules/' --exclude='dist/' \
     --exclude='data/' --exclude='delta-modules/' \
+    --exclude='ecosystem.config.cjs' \
     -e "ssh $SSH_OPTS" \
     server/ "$SERVER:$SERVER_DIR/"
 
@@ -48,13 +63,31 @@ deploy_server() {
     dist/ "$SERVER:$DIST_DIR/"
 
   # Install, build, gen-delta, restart
+  #
+  # [LOCKED] [REMOTE-BUILD-NEEDS-DEV-DEPS-AND-AN-ABSOLUTE-PM2] - 2026-08-20
+  # [NEVER] call bare `pm2` over ssh, and [NEVER] pair `npm install --production`
+  #         with `npx tsc` here.
+  # WHY: both were in this script and both would have failed on first contact, which
+  #      nobody had met because the <VPS_PASSWORD> placeholder made deploy_server
+  #      unrunnable from 2026-02-27 to 2026-08-20.
+  #      1. A non-interactive ssh session on crowlrbackend has no pm2 on PATH; the
+  #         binary is under /usr/local/node-v*/bin. Bare `pm2` gives "command not
+  #         found", so the restart silently never happens.
+  #      2. typescript is a devDependency of server/package.json. `npm install
+  #         --production` prunes it, and `npx tsc` then resolves the unrelated,
+  #         deprecated npm package named `tsc` instead of TypeScript.
+  # FIX: install with dev deps, compile with the local tsc binary, and resolve pm2
+  #      explicitly, failing loudly if it is missing rather than skipping the restart.
   echo "🔧 Building on server..."
   ssh $SSH_OPTS "$SERVER" "
-    cd $SERVER_DIR && \
-    npm install --production && \
-    npx tsc && \
-    CONTEXTENGINE_DIST=$DIST_DIR node dist/gen-delta.js && \
-    pm2 restart contextengine-api
+    set -eu
+    PM2_BIN=\$(command -v pm2 || ls -d /usr/local/node-v*/bin/pm2 2>/dev/null | head -1)
+    if [ ! -x \"\$PM2_BIN\" ]; then echo 'pm2 not found on the box'; exit 1; fi
+    cd $SERVER_DIR
+    npm install --include=dev
+    ./node_modules/.bin/tsc
+    CONTEXTENGINE_DIST=$DIST_DIR node dist/gen-delta.js
+    \"\$PM2_BIN\" restart contextengine-api
   "
 
   # Health check
