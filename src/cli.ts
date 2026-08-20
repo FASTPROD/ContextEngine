@@ -624,6 +624,7 @@ async function runInit(): Promise<void> {
 import { loadSources, loadProjectDirs, loadConfig, resolveProjectDir, findProjectRoot, hasProjectMarker, looksLikePath, type KnowledgeSource } from "./config.js";
 import { ingestSources, type Chunk } from "./ingest.js";
 import { searchChunks } from "./search.js";
+import { SERVER_COMMANDS, suggestCommands } from "./cli-commands.js";
 import { collectProjectOps, collectSystemOps } from "./collectors.js";
 import { scanCodeDir } from "./code-chunker.js";
 import {
@@ -679,6 +680,9 @@ import {
   verifyChain,
   filterByRange,
   toCsv,
+  rotateAuditLog,
+  planRotation,
+  listSegments,
 } from "./audit.js";
 import {
   loadRepoPolicy,
@@ -2010,6 +2014,67 @@ reviewed, and validated in PR ahead of the hook wiring.`);
   process.exit(1);
 }
 
+function fmtBytes(n: number): string {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${n} B`;
+}
+
+function cliAuditRotate(args: string[]): void {
+  const keepIdx = args.findIndex((a) => a === "--keep-days");
+  const keepDays = keepIdx >= 0 ? Number(args[keepIdx + 1]) : 30;
+  const maxIdx = args.findIndex((a) => a === "--max-records");
+  const maxRecords = maxIdx >= 0 ? Number(args[maxIdx + 1]) : undefined;
+  const dryRun = args.includes("--dry-run");
+
+  if (!Number.isFinite(keepDays) || keepDays < 1) {
+    console.error("--keep-days must be a number >= 1.");
+    process.exit(1);
+  }
+  if (maxIdx >= 0 && (!Number.isFinite(maxRecords!) || maxRecords! < 1)) {
+    console.error("--max-records must be a number >= 1.");
+    process.exit(1);
+  }
+
+  if (dryRun) {
+    const plan = planRotation({ keepDays, maxRecords });
+    console.log(`\n📦 Audit log rotation — DRY RUN, nothing written\n`);
+    console.log(`  cutoff            records older than ${plan.cutoff}`);
+    console.log(`  size ceiling      ${maxRecords ?? 50000} record(s) kept live at most`);
+    console.log(`  would archive     ${plan.archiveCount} record(s) → ${plan.segmentFile ?? "(nothing)"}`);
+    console.log(`  would keep live   ${plan.keepCount} record(s)`);
+    console.log(`\n  Run again without --dry-run to perform it.\n`);
+    return;
+  }
+
+  const result = rotateAuditLog({ keepDays, maxRecords });
+  if (!result.rotated) {
+    console.log(`\nNothing rotated: ${result.refusedReason}\n`);
+    // Refusing because the chain is damaged is a failure, not a no-op.
+    if (result.refusedReason?.includes("does not verify")) process.exit(2);
+    return;
+  }
+
+  console.log(`\n📦 Audit log rotated\n`);
+  console.log(`  archived          ${result.archiveCount} record(s) → audit-archive/${result.segmentFile}`);
+  console.log(`  segment size      ${fmtBytes(result.bytesArchived)}`);
+  console.log(`  live log now      ${result.keepCount + 1} record(s), ${fmtBytes(result.bytesRemaining)}`);
+  console.log(`  segments on disk  ${listSegments().length}`);
+  console.log(`\n  History is unchanged: archived segments are part of the chain, and`);
+  console.log(`  'audit-verify' reads them. Do not delete or edit them — that is the`);
+  console.log(`  one action that would turn this into missing history.\n`);
+
+  const after = verifyChain();
+  if (after.ok) {
+    console.log(`  ✅ post-rotation verify: ${after.total} record(s), chain intact.\n`);
+  } else {
+    console.error(`  ❌ post-rotation verify FAILED: ${after.breakReason}`);
+    console.error(`     The segment is on disk and nothing was deleted. Do not rotate again.\n`);
+    process.exit(2);
+  }
+}
+
 async function cliAuditVerify(): Promise<void> {
   const report = verifyChain();
   const forks = report.forkIndices ?? [];
@@ -2660,6 +2725,17 @@ async function cliCost(argv: string[]): Promise<void> {
   console.log("");
 }
 
+/** Package version, read from the installed package.json rather than hardcoded. */
+function readPackageVersion(): string {
+  try {
+    const here = new URL("../package.json", import.meta.url);
+    return JSON.parse(readFileSync(here, "utf-8")).version as string;
+  } catch {
+    // No plausible-looking fallback here: an unknown version must read as unknown.
+    return "unknown";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main — route to init, CLI subcommand, or MCP server
 // ---------------------------------------------------------------------------
@@ -2697,6 +2773,12 @@ Usage:
                                        Export hash-chained audit log (evidence aligned with
                                        SOC 2 CC7.2 + ISO 27001 A.12.4.1 — not a certification)
   contextengine audit-verify           Verify audit log chain integrity (tamper detection)
+  contextengine audit-rotate [--keep-days N] [--max-records N] [--dry-run]
+                                       Move old history into an archive segment. Archives
+                                       whatever is older than N days (default 30) OR beyond
+                                       the size ceiling (default 50000 live records),
+                                       whichever is more. The chain stays linear: segments
+                                       are part of the verified history, never deleted.
   contextengine cost [--session ID] [--project NAME] [--run wf_ID] [--days N] [--top N] [--json]
                                        Multi-agent spend from Claude Code transcripts. Always prints
                                        VOLUME (tokens), VALUED COST (API list prices — notional on a
@@ -2875,6 +2957,8 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
     console.error("Error:", err);
     process.exit(1);
   });
+} else if (command === "audit-rotate") {
+  cliAuditRotate(process.argv.slice(3));
 } else if (command === "audit-verify") {
   cliAuditVerify().catch((err) => {
     console.error("Error:", err);
@@ -2979,7 +3063,22 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
     console.log(`\n  🔒 Premium tools locked. Activate: contextengine activate <key> <email>`);
   }
   console.log("");
-} else {
-  // Default: start MCP server
+} else if (command === undefined || SERVER_COMMANDS.includes(command)) {
+  // Documented default: a bare invocation (or the explicit `serve` alias) starts the
+  // stdio MCP server. Every launcher on this machine uses the bare form.
   import("./index.js");
+} else if (command === "--version" || command === "-v" || command === "version") {
+  console.log(readPackageVersion());
+} else {
+  // 🔒 [LOCK] [UNKNOWN-COMMAND-MUST-NOT-START-A-SERVER] — see src/cli-commands.ts
+  // An unrecognised token used to fall through to the MCP server, which then waited on
+  // stdin forever: no error, no exit code, no output. Name it and fail instead.
+  console.error(`Unknown command: ${command}`);
+  const suggestions = suggestCommands(command);
+  if (suggestions.length > 0) {
+    console.error(`Did you mean: ${suggestions.join(", ")}?`);
+  }
+  console.error(`Run 'contextengine help' for the full list.`);
+  console.error(`To start the MCP server, run 'contextengine' with no arguments.`);
+  process.exit(1);
 }

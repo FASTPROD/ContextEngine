@@ -58,6 +58,9 @@ import {
   statSync,
   writeSync,
   readSync,
+  fsyncSync,
+  renameSync,
+  readdirSync,
   constants,
 } from "fs";
 import { join } from "path";
@@ -182,7 +185,9 @@ export type AuditEvent =
   | "notification.fired"
   // Community-rules sync client (shared learnings hybrid, Phase 1)
   | "community.sync_ok"
-  | "community.sync_error";
+  | "community.sync_error"
+  // Log rotation — records which segment a slice of history moved to (added 2026-08-20)
+  | "audit.rotate";
 
 export interface AuditRecord {
   ts: string;
@@ -248,11 +253,37 @@ function readLastHash(): string {
     // Tail window held no complete record — fall back to the full read.
     return readLastHashFullScan();
   }
+  return parseHeadOrThrow(lines[lines.length - 1]);
+}
+
+/**
+ * 🔒 LOCKED [UNREADABLE-HEAD-IS-NOT-GENESIS] — 2026-08-20
+ * ⛔ NEVER return GENESIS_HASH because the last line failed to parse.
+ * WHY: both head readers ended in `catch { return GENESIS_HASH }`. A truncated or corrupt
+ *      final record — a partial write, a full disk, a killed process — therefore made the
+ *      next append chain onto genesis instead of onto the real head. verifyChain() reports
+ *      that as an ORPHAN, i.e. "history was deleted", the hardest failure the log can
+ *      produce, and it would be caused by the writer itself rather than by tampering.
+ *      It is [ABSENCE-IS-NOT-A-VERDICT] on the bedrock path: "I could not read the head"
+ *      was rendered as the specific, plausible claim "there is no history".
+ * FIX: throw. appendAudit() must surface problems loudly (see [AUDIT-CHAIN]); call sites
+ *      that need isolation already use safeAppend(), which logs to stderr and continues.
+ */
+function parseHeadOrThrow(line: string): string {
+  let rec: AuditRecord;
   try {
-    return (JSON.parse(lines[lines.length - 1]) as AuditRecord).hash;
+    rec = JSON.parse(line) as AuditRecord;
   } catch {
-    return GENESIS_HASH;
+    throw new Error(
+      "Audit log tail is not valid JSON — refusing to append onto an unknown head. " +
+        "Inspect the last line of ~/.contextengine/audit.log; a partial final record can be " +
+        "removed by hand, which verifyChain() will then confirm.",
+    );
   }
+  if (typeof rec.hash !== "string" || rec.hash.length !== 64) {
+    throw new Error("Audit log tail has no usable hash — refusing to append onto an unknown head.");
+  }
+  return rec.hash;
 }
 
 /** Fallback for the pathological case: a single record longer than TAIL_READ_BYTES. */
@@ -261,11 +292,8 @@ function readLastHashFullScan(): string {
   const data = readFileSync(path, "utf-8");
   const lines = data.split("\n").filter(Boolean);
   if (lines.length === 0) return GENESIS_HASH;
-  try {
-    return (JSON.parse(lines[lines.length - 1]) as AuditRecord).hash;
-  } catch {
-    return GENESIS_HASH;
-  }
+  // [LOCK] [UNREADABLE-HEAD-IS-NOT-GENESIS] — same rule as the tail reader.
+  return parseHeadOrThrow(lines[lines.length - 1]);
 }
 
 function computeHash(
@@ -327,10 +355,46 @@ export function appendAudit(
   }
 }
 
-export function readAuditLog(): AuditRecord[] {
-  const path = auditPath();
-  if (!existsSync(path)) return [];
-  const data = readFileSync(path, "utf-8");
+/**
+ * 🔒 LOCKED [ROTATION-MUST-NOT-ORPHAN-THE-CHAIN] — 2026-08-20
+ * ⛔ NEVER rotate by truncating, moving or deleting audit.log. NEVER let a rotated log
+ *    read as "history was deleted".
+ * WHY: verifyChain() classifies a record whose prev_hash names a hash absent from the log
+ *      as an ORPHAN, which is a hard failure meaning deleted or truncated history — the
+ *      exact evidence claim SOC 2 CC7.2 / ISO 27001 A.12.4.1 rest on. A `mv audit.log
+ *      audit.log.1` makes the very first record of the new file an orphan, so the naive
+ *      rotation turns a healthy log into a permanent "TAMPERED" verdict for every future
+ *      audit. The log reached 195 MB / 533,987 records with no rotation path precisely
+ *      because the safe shape was never built.
+ * FIX: rotation MOVES a prefix of history into a numbered segment under audit-archive/
+ *      and the canonical history is `segments in order ++ live log`. readAuditLog() reads
+ *      that concatenation by default, so the chain stays linear and verification is
+ *      unchanged. Segments are append-only and never rewritten.
+ *
+ * 🔒 LOCKED [ROTATE-ARCHIVE-BEFORE-TRUNCATE] — 2026-08-20
+ * ⛔ NEVER truncate the live log before the segment file is durably renamed into place.
+ * WHY: the reverse order loses records permanently on a crash between the two steps.
+ *      This order can only ever produce a DUPLICATE (records in both the segment and the
+ *      live log), which the seam de-dup below removes and which loses nothing.
+ * FIX: write segment tmp → fsync → rename → write live remainder tmp → fsync → rename.
+ */
+
+function archiveDir(): string {
+  return join(auditDir(), "audit-archive");
+}
+
+const SEGMENT_RE = /^audit-(\d{4,})\.jsonl$/;
+
+/** Archived segment filenames in chain order (oldest first). */
+export function listSegments(): string[] {
+  const dir = archiveDir();
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => SEGMENT_RE.test(f))
+    .sort((a, b) => Number(SEGMENT_RE.exec(a)![1]) - Number(SEGMENT_RE.exec(b)![1]));
+}
+
+function parseLines(data: string, label: string): AuditRecord[] {
   return data
     .split("\n")
     .filter(Boolean)
@@ -338,10 +402,239 @@ export function readAuditLog(): AuditRecord[] {
       try {
         return JSON.parse(line) as AuditRecord;
       } catch {
-        throw new Error(`Corrupt audit line ${i + 1}: not valid JSON`);
+        throw new Error(`Corrupt audit line ${i + 1} in ${label}: not valid JSON`);
       }
     });
 }
+
+export interface ReadOptions {
+  /** Include archived segments. Default true — callers asking for "the audit log" mean
+   *  the whole history. Hot paths that only care about a recent window pass false. */
+  includeArchives?: boolean;
+}
+
+export function readAuditLog(opts: ReadOptions = {}): AuditRecord[] {
+  const includeArchives = opts.includeArchives !== false;
+  const path = auditPath();
+  const live = existsSync(path) ? parseLines(readFileSync(path, "utf-8"), "audit.log") : [];
+  if (!includeArchives) return live;
+
+  const segments = listSegments();
+  if (segments.length === 0) return live;
+
+  const history: AuditRecord[] = [];
+  let lastSegmentHashes = new Set<string>();
+  for (const f of segments) {
+    const recs = parseLines(readFileSync(join(archiveDir(), f), "utf-8"), f);
+    // 🔒 LOCKED [NO-SPREAD-OVER-A-SEGMENT] — 2026-08-20
+    // ⛔ NEVER use push(...records) on a segment. Found on the first real rotation:
+    //    a 494,152-record segment threw "Maximum call stack size exceeded" because the
+    //    spread passes every element as a separate argument. Every unit test passed —
+    //    they used chains of a few thousand. Push in a loop, whatever the size.
+    for (const r of recs) history.push(r);
+    lastSegmentHashes = new Set(recs.map((r) => r.hash));
+  }
+
+  // Seam de-dup — see [ROTATE-ARCHIVE-BEFORE-TRUNCATE]. A crash after the segment was
+  // renamed but before the live log was truncated leaves the archived prefix present in
+  // both files. Drop only the LEADING run of live records already in the last segment;
+  // anything else is real history and must never be dropped.
+  let start = 0;
+  while (start < live.length && lastSegmentHashes.has(live[start].hash)) start++;
+  // [LOCK] [NO-SPREAD-OVER-A-SEGMENT] — same reason.
+  for (let i = start; i < live.length; i++) history.push(live[i]);
+  return history;
+}
+
+export interface RotationPlan {
+  /** Records that would move to a segment. */
+  archiveCount: number;
+  /** Records that would stay in the live log. */
+  keepCount: number;
+  /** Timestamp cutoff: records strictly older than this are archived. */
+  cutoff: string;
+  segmentFile: string | null;
+  /** Set when the rotation must not run, with the reason. */
+  refusedReason: string | null;
+}
+
+export interface RotationResult extends RotationPlan {
+  rotated: boolean;
+  bytesArchived: number;
+  bytesRemaining: number;
+}
+
+/** Never archive below this many most-recent records, whatever the date cutoff says.
+ *  The live log has to keep enough context for the drift detectors' window. */
+const MIN_LIVE_RECORDS = 2000;
+
+export interface RotateOptions {
+  /** Archive records older than this many days. Minimum 1. */
+  keepDays?: number;
+  /**
+   * Hard ceiling on how many records stay in the live log, whatever the dates say.
+   *
+   * 🔒 LOCKED [DATE-RETENTION-DOES-NOT-BOUND-SIZE] — 2026-08-20
+   * ⛔ NEVER ship rotation with a date rule alone.
+   * WHY: measured on the real log before shipping this — at 80,000 records/day, a 30-day
+   *      window left 390,445 records live and even a 3-day window left 205,422. Date
+   *      retention bounds AGE, not SIZE, so on a busy machine it rotates and changes
+   *      nothing that matters: readAuditLog() still costs seconds and hundreds of MB.
+   *      The feature would have looked like it worked while leaving the problem in place.
+   * FIX: cut at whichever rule archives more, date or count. Count is what actually caps
+   *      the file.
+   */
+  maxRecords?: number;
+  /** Report what would happen and write nothing. */
+  dryRun?: boolean;
+  now?: number;
+}
+
+/** Live-log ceiling when the caller does not set one. ~50k records ≈ 18 MB. */
+const DEFAULT_MAX_LIVE_RECORDS = 50_000;
+
+/**
+ * Plan a rotation without writing anything. Exported so the CLI's dry-run and the real
+ * run share one implementation and cannot disagree.
+ */
+export function planRotation(opts: RotateOptions = {}): RotationPlan {
+  const keepDays = Math.max(1, Math.floor(opts.keepDays ?? 30));
+  const now = opts.now ?? Date.now();
+  const cutoff = new Date(now - keepDays * 86_400_000).toISOString();
+
+  const live = existsSync(auditPath())
+    ? parseLines(readFileSync(auditPath(), "utf-8"), "audit.log")
+    : [];
+
+  let cutByDate = live.findIndex((r) => r.ts >= cutoff);
+  if (cutByDate === -1) cutByDate = live.length; // every record is older than the cutoff
+
+  // [DATE-RETENTION-DOES-NOT-BOUND-SIZE] — whichever rule archives more wins.
+  const maxRecords = Math.max(1, Math.floor(opts.maxRecords ?? DEFAULT_MAX_LIVE_RECORDS));
+  const cutByCount = Math.max(0, live.length - maxRecords);
+
+  let cut = Math.max(cutByDate, cutByCount);
+  // Keep the tail intact regardless of either rule.
+  cut = Math.min(cut, Math.max(0, live.length - MIN_LIVE_RECORDS));
+
+  const next = listSegments().length + 1;
+  return {
+    archiveCount: cut,
+    keepCount: live.length - cut,
+    cutoff,
+    segmentFile: cut > 0 ? `audit-${String(next).padStart(4, "0")}.jsonl` : null,
+    refusedReason: null,
+  };
+}
+
+/**
+ * Move everything older than the cutoff into a numbered archive segment.
+ *
+ * Refuses to run on a chain that does not currently verify: rotating a log with altered
+ * or orphaned records would bake the damage into an append-only segment and make the
+ * cause unrecoverable. Forks are fine — they are concurrency, not tampering.
+ */
+export function rotateAuditLog(opts: RotateOptions = {}): RotationResult {
+  const path = auditPath();
+  const plan = planRotation(opts);
+  const empty: RotationResult = { ...plan, rotated: false, bytesArchived: 0, bytesRemaining: 0 };
+
+  if (!existsSync(path)) {
+    return { ...empty, refusedReason: "no audit log on disk" };
+  }
+  if (plan.archiveCount === 0) {
+    return {
+      ...empty,
+      bytesRemaining: statSync(path).size,
+      refusedReason: `nothing to archive: ${plan.keepCount} record(s) live, within both the retention window and the size ceiling`,
+    };
+  }
+
+  const integrity = verifyChain();
+  if (!integrity.ok) {
+    return {
+      ...empty,
+      refusedReason: `chain does not verify (${integrity.breakReason}) — refusing to archive a damaged log`,
+    };
+  }
+
+  if (opts.dryRun) return { ...plan, rotated: false, bytesArchived: 0, bytesRemaining: 0 };
+
+  ensureDir();
+  const adir = archiveDir();
+  if (!existsSync(adir)) mkdirSync(adir, { recursive: true });
+
+  // Snapshot outside the lock: parsing 500k records is far too slow to hold the append
+  // lock for, and acquireLockSync() force-breaks locks older than STALE_LOCK_MS.
+  const snapshotSize = statSync(path).size;
+  const live = parseLines(readFileSync(path, "utf-8"), "audit.log");
+  const archived = live.slice(0, plan.archiveCount);
+  const remainder = live.slice(plan.archiveCount);
+
+  const segName = plan.segmentFile!;
+  const segTmp = join(adir, `.${segName}.tmp`);
+  const segBody = archived.map((r) => JSON.stringify(r)).join("\n") + "\n";
+  writeFileAndSync(segTmp, segBody);
+  renameSync(segTmp, join(adir, segName));
+
+  // [ROTATE-ARCHIVE-BEFORE-TRUNCATE]: the segment is durable from here on. Only now may
+  // the live log shrink.
+  const release = acquireLockSync();
+  let remainderBody = remainder.map((r) => JSON.stringify(r)).join("\n") + "\n";
+  try {
+    const currentSize = statSync(path).size;
+    if (currentSize > snapshotSize) {
+      // Appends landed while we were writing the segment. They are newer than the cutoff
+      // by construction, so they belong to the remainder. Copy the raw bytes across
+      // rather than re-parsing the whole file.
+      const fd = openSync(path, constants.O_RDONLY);
+      try {
+        const buf = Buffer.alloc(currentSize - snapshotSize);
+        readSync(fd, buf, 0, buf.length, snapshotSize);
+        remainderBody += buf.toString("utf-8");
+      } finally {
+        closeSync(fd);
+      }
+    }
+    const liveTmp = join(auditDir(), ".audit.log.tmp");
+    writeFileAndSync(liveTmp, remainderBody);
+    renameSync(liveTmp, path);
+  } finally {
+    release();
+  }
+
+  // Self-documenting evidence: the rotation itself is an audited event, chained onto the
+  // new head like any other record.
+  appendAudit(
+    "audit.rotate",
+    {
+      segment: segName,
+      archived_records: archived.length,
+      first_hash: archived[0].hash,
+      last_hash: archived[archived.length - 1].hash,
+      cutoff: plan.cutoff,
+    },
+    "system",
+  );
+
+  return {
+    ...plan,
+    rotated: true,
+    bytesArchived: Buffer.byteLength(segBody),
+    bytesRemaining: statSync(path).size,
+  };
+}
+
+function writeFileAndSync(target: string, body: string): void {
+  const fd = openSync(target, "w");
+  try {
+    writeSync(fd, body);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 
 export interface IntegrityReport {
   ok: boolean;

@@ -67,7 +67,10 @@ export function scanRecentEvents(
 ): AuditRecord[] {
   let all: AuditRecord[];
   try {
-    all = readAuditLog();
+    // Live log only. The window is minutes; archived segments are days old by
+    // construction (see [ROTATION-MUST-NOT-ORPHAN-THE-CHAIN], MIN_LIVE_RECORDS floor),
+    // so reading them here would add the whole history to a hot path for zero hits.
+    all = readAuditLog({ includeArchives: false });
   } catch {
     return [];
   }

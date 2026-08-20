@@ -94,6 +94,8 @@ npx . search "query"   # CLI search
 npx . score            # Score THIS project only (writes its SCORE.md)
 npx . score --all      # Score every discovered project — writes into EACH (add --no-save to dry-run)
 npx . audit            # Run compliance audit
+npx . audit-verify     # Verify the hash chain (reads archived segments too)
+npx . audit-rotate --dry-run   # Plan a log rotation; archives history, never deletes it
 npx . cost             # Multi-agent token/cost/capacity report from Claude Code transcripts
 ```
 
