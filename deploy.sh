@@ -79,6 +79,26 @@ deploy_server() {
     -e "ssh $SSH_OPTS" \
     server/ "$SERVER:$SERVER_DIR/"
 
+  # [LOCKED] [COMPILE-LOCALLY-NEVER-ON-THIS-BOX] - 2026-08-20
+  # [NEVER] run tsc on crowlrbackend.
+  # WHY: its node_modules has drifted from server/package.json since February: stripe
+  #      20.3.1 where the manifest pins ^14.25.0, and @types/nodemailer missing entirely.
+  #      tsc there fails on two type errors that do not exist locally, and it cannot be
+  #      repaired by npm install because the box cannot rebuild better-sqlite3
+  #      (see [NEVER-REINSTALL-NODE_MODULES-ON-THIS-BOX]). Worse, tsconfig has no
+  #      noEmitOnError, so the failing run still WROTE a new dist and only the pm2
+  #      restart was skipped: the box was left with new code on disk and old code in
+  #      memory, which the next reboot would have swapped in silently.
+  # FIX: compile here, where deps match the manifest exactly, and ship the artifact.
+  #      Production should not be a build environment anyway.
+  echo "🔨 Compiling server locally..."
+  (cd server && ./node_modules/.bin/tsc)
+
+  echo "📦 Syncing compiled server dist..."
+  rsync -avz \
+    -e "ssh $SSH_OPTS" \
+    server/dist/ "$SERVER:$SERVER_DIR/dist/"
+
   # Sync compiled dist (for gen-delta)
   echo "📦 Syncing dist/ for delta generation..."
   rsync -avz \
@@ -107,7 +127,6 @@ deploy_server() {
     PM2_BIN=\$(command -v pm2 || ls -d /usr/local/node-v*/bin/pm2 2>/dev/null | head -1)
     if [ ! -x \"\$PM2_BIN\" ]; then echo 'pm2 not found on the box'; exit 1; fi
     cd $SERVER_DIR
-    ./node_modules/.bin/tsc
     CONTEXTENGINE_DIST=$DIST_DIR node dist/gen-delta.js
     \"\$PM2_BIN\" restart contextengine-api
   "
