@@ -99,7 +99,90 @@
         "SKILLS.md"
       ],
       "severity": "block",
-      "description": "Cost discipline for multi-agent fan-out must be visible to every agent surface. Cursor/Windsurf/Copilot read .github/copilot-instructions.md only \u2014 a rule living solely in CLAUDE.md is invisible to them."
+      "description": "Cost discipline for multi-agent fan-out must be visible to every agent surface. Cursor/Windsurf/Copilot read .github/copilot-instructions.md only — a rule living solely in CLAUDE.md is invisible to them."
     }
-  ]
+  ],
+  "agent_cost": {
+    "billing_mode": "subscription",
+    "description": "Rates are Anthropic API list prices (dollars per million tokens). This machine runs Claude Code on a Max subscription (verified 2026-08-19: subscriptionType=max, no ANTHROPIC_API_KEY), so `contextengine cost` reports a VALUATION, not spend. Cache read = 0.1x input, cache write 5m = 1.25x, 1h = 2x. No '*' catch-all on purpose: an unknown model must report as UNPRICED, never as $0.",
+    "pricing": [
+      {
+        "model": "claude-opus-5",
+        "input_per_mtok": 5.0,
+        "output_per_mtok": 25.0,
+        "cache_read_per_mtok": 0.5,
+        "cache_write_5m_per_mtok": 6.25,
+        "cache_write_1h_per_mtok": 10.0
+      },
+      {
+        "model": "claude-opus-4-8",
+        "input_per_mtok": 5.0,
+        "output_per_mtok": 25.0,
+        "cache_read_per_mtok": 0.5,
+        "cache_write_5m_per_mtok": 6.25,
+        "cache_write_1h_per_mtok": 10.0
+      },
+      {
+        "model": "claude-opus-4-7",
+        "input_per_mtok": 5.0,
+        "output_per_mtok": 25.0,
+        "cache_read_per_mtok": 0.5,
+        "cache_write_5m_per_mtok": 6.25,
+        "cache_write_1h_per_mtok": 10.0
+      },
+      {
+        "model": "claude-opus-4-6",
+        "input_per_mtok": 5.0,
+        "output_per_mtok": 25.0,
+        "cache_read_per_mtok": 0.5,
+        "cache_write_5m_per_mtok": 6.25,
+        "cache_write_1h_per_mtok": 10.0
+      },
+      {
+        "model": "claude-fable-5",
+        "input_per_mtok": 10.0,
+        "output_per_mtok": 50.0,
+        "cache_read_per_mtok": 1.0,
+        "cache_write_5m_per_mtok": 12.5,
+        "cache_write_1h_per_mtok": 20.0
+      },
+      {
+        "model": "claude-mythos-5",
+        "input_per_mtok": 10.0,
+        "output_per_mtok": 50.0,
+        "cache_read_per_mtok": 1.0,
+        "cache_write_5m_per_mtok": 12.5,
+        "cache_write_1h_per_mtok": 20.0
+      },
+      {
+        "model": "claude-sonnet-5",
+        "input_per_mtok": 3.0,
+        "output_per_mtok": 15.0,
+        "cache_read_per_mtok": 0.3,
+        "cache_write_5m_per_mtok": 3.75,
+        "cache_write_1h_per_mtok": 6.0
+      },
+      {
+        "model": "claude-sonnet-4-6",
+        "input_per_mtok": 3.0,
+        "output_per_mtok": 15.0,
+        "cache_read_per_mtok": 0.3,
+        "cache_write_5m_per_mtok": 3.75,
+        "cache_write_1h_per_mtok": 6.0
+      },
+      {
+        "model": "claude-haiku-4-5",
+        "input_per_mtok": 1.0,
+        "output_per_mtok": 5.0,
+        "cache_read_per_mtok": 0.1,
+        "cache_write_5m_per_mtok": 1.25,
+        "cache_write_1h_per_mtok": 2.0
+      }
+    ],
+    "min_cache_efficiency": 3,
+    "max_tool_calls_per_agent": 2,
+    "max_cost_per_agent_usd": 3,
+    "min_fanout_for_canary": 5,
+    "max_failed_share": 0.05
+  }
 }

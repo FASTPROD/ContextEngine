@@ -33,7 +33,9 @@ export type DriftKind =
   | "drift"
   | "no_insight"
   | "stale_doc_signal"
-  | "silent_failure";
+  | "silent_failure"
+  | "context_burn"
+  | "fanout_without_canary";
 
 export type Severity = "info" | "warn" | "critical";
 
@@ -435,3 +437,160 @@ export const _internal = {
 };
 
 export type { AuditRecord, AuditEvent };
+
+// ─── Transcript-based heuristics (multi-agent cost) ────────────────────────
+//
+// 🔒 LOCKED [TRANSCRIPT-HEURISTICS-ARE-SEPARATE] — 2026-08-19
+// ⛔ NEVER add these to the HEURISTICS array above. Those take AuditRecord[]
+//    from ~/.contextengine/audit.log; these take RunUsage from Claude Code's
+//    own JSONL transcripts. Different source, different cadence, no overlap.
+// WHY: the [DRIFT-HEURISTICS] LOCK requires audit heuristics to stay pure
+//    predicates over an event window. Forcing a transcript reader into that
+//    array would put file I/O over a 120 MB store inside the watcher loop.
+// FIX: call runTranscriptHeuristics() from the `cost` command, not from
+//    detect(). Signals share the DriftSignal shape so the CLI renders both.
+
+import type { RunUsage, RunMetrics, ModelPricing } from "./transcript-collector.js";
+import { metricsFor } from "./transcript-collector.js";
+
+export interface CostThresholds {
+  billing_mode: "subscription" | "api";
+  pricing: ModelPricing[];
+  min_cache_efficiency: number;
+  max_tool_calls_per_agent: number;
+  max_cost_per_agent_usd: number;
+  min_fanout_for_canary: number;
+  max_failed_share: number;
+}
+
+export const DEFAULT_COST_THRESHOLDS: CostThresholds = {
+  billing_mode: "subscription",
+  pricing: [],
+  min_cache_efficiency: 3,
+  max_tool_calls_per_agent: 2,
+  max_cost_per_agent_usd: 3,
+  min_fanout_for_canary: 5,
+  max_failed_share: 0.05,
+};
+
+function mkRun(
+  kind: DriftKind, severity: Severity, reason: string, payload: Record<string, unknown>,
+): DriftSignal {
+  // evidence is AuditRecord[]; transcript signals carry their detail in
+  // payload instead of inventing records that were never written.
+  return { kind, severity, reason, evidence: [], payload, detectedAt: Date.now() };
+}
+
+/**
+ * context_burn — the run is paying for context it is not reusing.
+ *
+ * Fires on cache INEFFICIENCY, tool-call inflation, or per-agent valued cost.
+ * Deliberately does NOT fire on a low output/volume ratio: see
+ * [BURN-IS-COST-WEIGHTED-NOT-VOLUME] in policy.ts.
+ */
+export function detectContextBurn(
+  run: RunUsage, t: CostThresholds, m?: RunMetrics,
+): DriftSignal | null {
+  const x = m ?? metricsFor(run, t.pricing);
+  if (x.agents === 0) return null;
+
+  const reasons: string[] = [];
+  let severity: Severity = "warn";
+
+  const cacheWrite = run.totals.cacheWrite5m + run.totals.cacheWrite1h;
+  // Only meaningful once enough was written to judge reuse.
+  if (cacheWrite > 100_000 && x.cacheEfficiency < t.min_cache_efficiency) {
+    const writeShare = x.cost.total > 0 ? x.cost.cacheWrite / x.cost.total : 0;
+    reasons.push(
+      `cache reused ${x.cacheEfficiency.toFixed(1)}x (floor ${t.min_cache_efficiency}x) — ` +
+      `${(cacheWrite / 1e6).toFixed(1)}M written vs ${(run.totals.cacheRead / 1e6).toFixed(1)}M read, ` +
+      `${(writeShare * 100).toFixed(0)}% of valued cost is cache WRITES`);
+    if (writeShare > 0.5) severity = "critical";
+  }
+
+  if (x.medianToolCalls > t.max_tool_calls_per_agent) {
+    reasons.push(
+      `median ${x.medianToolCalls} tool calls/agent (max ${t.max_tool_calls_per_agent}) — ` +
+      `agents are searching for their inputs instead of being handed them`);
+  }
+
+  const perAgent = x.cost.total / x.agents;
+  if (perAgent > t.max_cost_per_agent_usd) {
+    reasons.push(
+      `$${perAgent.toFixed(2)}/agent valued (max $${t.max_cost_per_agent_usd.toFixed(2)})`);
+  }
+
+  if (!reasons.length) return null;
+  return mkRun("context_burn", severity, `${run.runId}: ${reasons.join("; ")}`, {
+    runId: run.runId, project: run.project, sessionId: run.sessionId,
+    agents: x.agents, medianToolCalls: x.medianToolCalls,
+    cacheEfficiency: Number.isFinite(x.cacheEfficiency) ? x.cacheEfficiency : null,
+    cacheWriteTokens: cacheWrite, cacheReadTokens: run.totals.cacheRead,
+    outputShare: x.outputShare, costUsd: x.cost.total, costPerAgentUsd: perAgent,
+    billingMode: t.billing_mode, costIsNotional: t.billing_mode === "subscription",
+  });
+}
+
+/**
+ * fanout_without_canary — the fleet was launched before any single unit had
+ * reported, so nothing was known about per-agent consumption when the spend
+ * was committed.
+ *
+ * 🔒 LOCKED [CANARY-IS-A-TIME-ORDERING] — 2026-08-19
+ * ⛔ NEVER implement this as "no agent reported". A completed 300-agent run
+ *    has 300 reports and was still un-canaried.
+ * WHY: the rule being enforced is "run ONE unit and read its consumption
+ *    BEFORE scaling". That is a statement about ordering, not about outcomes,
+ *    and it is only checkable by comparing each agent's start time against the
+ *    earliest sibling completion.
+ * FIX: count agents that started before the first report landed. Severity
+ *    rises when agents then died at the usage window — on a subscription that
+ *    is the failure that actually costs something (real case: 15 of 51 agents
+ *    lost in wf_41771d7b, 0 completed).
+ */
+export function detectFanoutWithoutCanary(
+  run: RunUsage, t: CostThresholds, m?: RunMetrics,
+): DriftSignal | null {
+  const x = m ?? metricsFor(run, t.pricing);
+  if (x.agents < t.min_fanout_for_canary) return null;
+  if (x.launchedBeforeFirstReport < t.min_fanout_for_canary) return null;
+
+  const failedShare = x.agents ? x.failed / x.agents : 0;
+  let severity: Severity = "warn";
+  const parts = [
+    `${x.launchedBeforeFirstReport} of ${x.agents} agents launched before any had reported`,
+  ];
+
+  if (x.capacityExhausted > 0) {
+    severity = "critical";
+    parts.push(
+      `${x.capacityExhausted} died at the usage window (${(100 * x.capacityExhausted / x.agents).toFixed(0)}%) — ` +
+      `capacity spent for no result`);
+  } else if (failedShare > t.max_failed_share) {
+    severity = "critical";
+    parts.push(`${x.failed}/${x.agents} returned nothing (${(failedShare * 100).toFixed(0)}%)`);
+  }
+
+  return mkRun("fanout_without_canary", severity, `${run.runId}: ${parts.join("; ")}`, {
+    runId: run.runId, project: run.project, sessionId: run.sessionId,
+    agents: x.agents, launchedBeforeFirstReport: x.launchedBeforeFirstReport,
+    reported: x.reported, failed: x.failed, capacityExhausted: x.capacityExhausted,
+    failedShare, costUsd: x.cost.total,
+    billingMode: t.billing_mode, costIsNotional: t.billing_mode === "subscription",
+  });
+}
+
+/** Run both transcript heuristics over a set of runs. */
+export function runTranscriptHeuristics(
+  runs: RunUsage[], t: CostThresholds = DEFAULT_COST_THRESHOLDS,
+): DriftSignal[] {
+  const out: DriftSignal[] = [];
+  for (const run of runs) {
+    const m = metricsFor(run, t.pricing);
+    const burn = detectContextBurn(run, t, m);
+    if (burn) out.push(burn);
+    const fan = detectFanoutWithoutCanary(run, t, m);
+    if (fan) out.push(fan);
+  }
+  return out;
+}

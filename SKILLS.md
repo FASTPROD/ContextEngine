@@ -414,3 +414,50 @@ code references already point at it._
 - Enforcement nudges in tool responses are more effective than rules in docs — agents actually read tool output
 - Protocol Firewall (response degradation) is the only mechanism that makes agents comply — extensions and rules can be ignored
 - Helmet default CSP blocks inline scripts — extract JS to external files and configure CSP directives explicitly
+
+## Policy contract
+
+`.contextengine/policy.json` is the declarative gate config. Sections:
+`secret_patterns`, `doc_coverage`, `deploy_verify_hosts`, `commit_message_required`,
+`bypass_tokens`, `rule_parity`, `agent_cost`.
+
+**Enforcement surfaces — a rule only runs where a hook calls it.** `contextengine init`
+installs three hooks, and the mapping is not interchangeable:
+
+| Hook | Runs |
+|---|---|
+| `pre-commit` | `secret-scan`, `doc-coverage`, `rule-parity` |
+| `commit-msg` | `commit-message-required` |
+| `post-commit` | auto-push |
+
+`commit_message_required` **cannot** run from pre-commit: git does not populate the commit
+message file until after pre-commit returns. It lived in the policy schema with a working CLI
+subcommand and passing tests for several releases while `init` never generated a commit-msg
+hook — so the rule silently enforced nothing in every repo but the one where the hook had been
+installed by hand. See LOCK `[COMMIT-MSG-HOOK-MUST-BE-INSTALLED]`.
+
+### `agent_cost`
+
+Rates and thresholds for `contextengine cost` and the `context_burn` /
+`fanout_without_canary` detectors. Rates are dollars per million tokens and live here rather
+than in code, so they can be corrected without a release and can describe models the build has
+never heard of (`[PRICING-LIVES-IN-POLICY]`).
+
+| Field | Meaning |
+|---|---|
+| `billing_mode` | `subscription` → cost is a **valuation**, never a debit; capacity is the scarce resource. `api` → real spend. |
+| `pricing[]` | Per model: `input`, `output`, `cache_read`, `cache_write_5m`, `cache_write_1h` per Mtok. Longest-prefix match; `*` is an optional catch-all. |
+| `min_cache_efficiency` | Floor on `cache_read / cache_write`. **Low means the prefix is being rebuilt, not reused.** |
+| `max_tool_calls_per_agent` | Above this, agents are searching for inputs instead of being handed them. |
+| `max_cost_per_agent_usd` | Valued cost ceiling per subagent. |
+| `min_fanout_for_canary` | Below this many agents, a fan-out is too small to need a canary. |
+| `max_failed_share` | Share of agents that may return nothing before it is a failure. |
+
+**Deliberately absent: any threshold on the output/volume token ratio.** A healthy, well-cached
+30-agent workflow measures ~1.8% output by volume, because cache reads are billed at 0.1x input.
+Firing on that ratio would flag every well-cached run ever done. The real pathology is
+`cache_creation` and `input_tokens` inflating (cache missed, prefix unstable), not `cache_read`
+inflating (the cache is working). See LOCK `[BURN-IS-COST-WEIGHTED-NOT-VOLUME]`.
+
+Omit a model from `pricing[]` and its tokens are reported as **UNPRICED**, never as $0
+(`[ABSENCE-IS-NOT-A-VERDICT]`).

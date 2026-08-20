@@ -148,6 +148,66 @@ export const RuleParitySchema = z.object({
   description: z.string().optional(),
 });
 
+/**
+ * Model pricing, in dollars per million tokens.
+ *
+ * 🔒 LOCKED [PRICING-LIVES-IN-POLICY] — 2026-08-19
+ * ⛔ NEVER hardcode a rate in the collector, the detector or the CLI.
+ * WHY: rates change, and the collector must be able to value runs for models
+ *    it has never heard of. A rate baked into a compiled `dist/` is a rate
+ *    nobody can correct without a release.
+ * FIX: rates live in `.contextengine/policy.json` → `agent_cost.pricing`.
+ *    Lookup is longest-prefix with a `*` catch-all; an unmatched model is
+ *    reported as UNPRICED, never silently valued at zero.
+ */
+export const ModelPricingSchema = z.object({
+  model: z.string().min(1).describe("Exact model id, a prefix of one, or '*' as catch-all"),
+  input_per_mtok: z.number().nonnegative(),
+  output_per_mtok: z.number().nonnegative(),
+  cache_read_per_mtok: z.number().nonnegative(),
+  cache_write_5m_per_mtok: z.number().nonnegative(),
+  cache_write_1h_per_mtok: z.number().nonnegative().optional(),
+});
+export type ModelPricingRule = z.infer<typeof ModelPricingSchema>;
+
+/**
+ * Thresholds for the context_burn and fanout_without_canary detectors.
+ *
+ * 🔒 LOCKED [BURN-IS-COST-WEIGHTED-NOT-VOLUME] — 2026-08-19
+ * ⛔ NEVER fire context_burn on a low output/volume ratio alone.
+ * WHY: a healthy 30-agent workflow measures 1.8% output by volume. That looks
+ *    alarming and is not: cache_read is billed at 0.1x input, so those same
+ *    tokens are 28% of cost, and the run cost $35 against $120 without cache.
+ *    Firing on the volume ratio would flag every well-cached run ever done and
+ *    train the user to ignore the alert — the exact failure the
+ *    [DRIFT-HEURISTICS] LOCK in detector.ts exists to prevent.
+ * FIX: fire on cache INEFFICIENCY (cache_read / cache_write below
+ *    min_cache_efficiency — the prefix is being rebuilt, not reused), on tool
+ *    calls per agent, and on valued cost per agent. Real evidence for the
+ *    inefficiency rule: wf_f676d824 spent 68% of $209 on cache WRITES,
+ *    22.7M written against only 8.5M read, across 722 agents.
+ */
+export const AgentCostSchema = z.object({
+  /**
+   * `subscription` — no dollar is debited; cost is a valuation and CAPACITY is
+   * the scarce resource. `api` — cost is a real debit.
+   */
+  billing_mode: z.enum(["subscription", "api"]).default("subscription"),
+  pricing: z.array(ModelPricingSchema).default([]),
+  /** cache_read / cache_write below this means the cache is thrashing. */
+  min_cache_efficiency: z.number().nonnegative().default(3),
+  /** Per-agent tool calls above this means the agent is searching, not working. */
+  max_tool_calls_per_agent: z.number().positive().default(2),
+  /** Valued cost of a single agent, in dollars. */
+  max_cost_per_agent_usd: z.number().nonnegative().default(3),
+  /** Below this many agents, a fan-out is too small to need a canary. */
+  min_fanout_for_canary: z.number().int().positive().default(5),
+  /** Share of agents that may die without a result before this is a failure. */
+  max_failed_share: z.number().min(0).max(1).default(0.05),
+  description: z.string().optional(),
+});
+export type AgentCost = z.infer<typeof AgentCostSchema>;
+
 export const PolicySchema = z.object({
   version: z.literal(1).describe("Policy schema version. Pin to 1 — bumps require a migration path."),
   extends: z
@@ -161,6 +221,7 @@ export const PolicySchema = z.object({
   commit_message_required: z.array(CommitMessageRequiredSchema).default([]),
   bypass_tokens: z.array(BypassTokenSchema).default([]),
   rule_parity: z.array(RuleParitySchema).default([]),
+  agent_cost: AgentCostSchema.optional(),
 });
 export type Policy = z.infer<typeof PolicySchema>;
 

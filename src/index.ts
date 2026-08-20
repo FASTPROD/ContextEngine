@@ -25,6 +25,7 @@ import {
   formatPlan,
   scoreProject,
   formatScoreReport,
+  runScoreCanary,
 } from "./agents.js";
 import {
   saveSession,
@@ -653,6 +654,32 @@ server.tool(
   async ({ project }) => {
     const gate = gateCheck("score_project");
     if (gate) return { content: [{ type: "text" as const, text: gate }] };
+
+    // 🔒 LOCKED [SCORE-CANARY-COVERS-EVERY-SCORER] — 2026-08-19
+    // ⛔ NEVER let a scoring entry point run without the canary.
+    // WHY: [SCORE-CANARY] was wired on the CLI only. This MCP tool — the path
+    //    Claude Code actually scores through — had zero call sites, so a
+    //    drifting scorer would have been caught when a human typed the
+    //    command and missed entirely when an agent called the tool. Session
+    //    21 §H2 found the same shape in the fleet-write guard: a guard that
+    //    covers one caller reads, from the outside, exactly like one that works.
+    // FIX: canary here too. This tool never writes SCORE.md, so a deviation
+    //    is reported rather than fatal — but it is never silent.
+    const canary = runScoreCanary();
+    if (!canary.ok) {
+      return {
+        content: [{
+          type: "text" as const,
+          text:
+            "🚨 Scoring canary FAILED — these scores are NOT trustworthy.\n\n" +
+            canary.deviations.map((d) => `   • ${d}`).join("\n") +
+            (canary.inconclusive
+              ? "\n\nThe canary fixture could not be built, so the scorer is unverified. This is an unknown, not a pass."
+              : "\n\nThe scorer no longer behaves as pinned. Fix the deviation or update the pin deliberately."),
+        }],
+      };
+    }
+
     const projectDirs = loadProjectDirs();
 
     let scores;

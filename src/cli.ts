@@ -13,6 +13,7 @@
  *   contextengine save-learning        Save a learning (terminal fallback for MCP)
  *   contextengine score [project|path] AI-readiness score for one project (default: cwd; --all for fleet)
  *   contextengine audit               Run compliance audit across all projects
+ *   contextengine cost                Multi-agent token/cost/capacity report from transcripts
  *   contextengine help                Show this message
  */
 
@@ -308,6 +309,63 @@ function generatePreCommitHook(): string {
 // ---------------------------------------------------------------------------
 // Template for post-commit hook (auto-push)
 // ---------------------------------------------------------------------------
+/**
+ * Generate the commit-msg hook — the ONLY place `commit_message_required`
+ * can run.
+ *
+ * 🔒 LOCKED [COMMIT-MSG-HOOK-MUST-BE-INSTALLED] — 2026-08-19
+ * ⛔ NEVER ship a `commit_message_required` policy rule without generating
+ *    this hook in the same `init`.
+ * WHY: the rule type, its CLI subcommand, and its tests all existed and all
+ *    passed, but `init` installed only pre-commit and post-commit. Proven by
+ *    execution on 2026-08-19: in a repo created by `contextengine init` with
+ *    a `severity: block` rule on `server/deploy.sh`, committing that file
+ *    with a non-compliant message SUCCEEDED. The gate could not fire because
+ *    nothing called it. It worked in this repo only because a commit-msg
+ *    hook had been installed by hand — so the author's own machine was the
+ *    one place the gap was invisible.
+ * FIX: install commit-msg alongside pre-commit. `commit_message_required`
+ *    cannot run from pre-commit — git does not populate the message file
+ *    until after pre-commit returns (see the subcommand's own note).
+ */
+function generateCommitMsgHook(): string {
+  const lines: string[] = [];
+  lines.push("#!/bin/zsh");
+  lines.push("# ContextEngine — commit-msg policy gate");
+  lines.push("# Runs .contextengine/policy.json `commit_message_required` rules.");
+  lines.push("# MUST live here, not pre-commit: git does not populate the commit");
+  lines.push("# message file until after pre-commit returns.");
+  lines.push("");
+  lines.push('COMMIT_MSG_FILE="$1"');
+  lines.push("");
+  lines.push("find_ce_cli() {");
+  lines.push('  if [[ -x "node_modules/.bin/contextengine" ]]; then');
+  lines.push('    echo "node_modules/.bin/contextengine"');
+  lines.push("    return");
+  lines.push("  fi");
+  lines.push("  if command -v contextengine >/dev/null 2>&1; then");
+  lines.push("    command -v contextengine");
+  lines.push("  fi");
+  lines.push("}");
+  lines.push("");
+  lines.push("CE_CLI=$(find_ce_cli)");
+  lines.push("HAS_POLICY=false");
+  lines.push("[[ -f .contextengine/policy.json ]] && HAS_POLICY=true");
+  lines.push("");
+  lines.push("# No CLI or no policy = nothing to enforce. Stay silent and pass.");
+  lines.push('if [[ -z "$CE_CLI" || "$HAS_POLICY" != "true" ]]; then');
+  lines.push("  exit 0");
+  lines.push("fi");
+  lines.push("");
+  lines.push('if ! "$CE_CLI" hook commit-message-required "$COMMIT_MSG_FILE"; then');
+  lines.push("  exit 1");
+  lines.push("fi");
+  lines.push("");
+  lines.push("exit 0");
+  lines.push("");
+  return lines.join("\n");
+}
+
 function generatePostCommitHook(): string {
   const lines: string[] = [];
   lines.push("#!/bin/zsh");
@@ -474,6 +532,7 @@ async function runInit(): Promise<void> {
       const hooksDir = join(cwd, ".git", "hooks");
       const preCommitDest = join(hooksDir, "pre-commit");
       const postCommitDest = join(hooksDir, "post-commit");
+      const commitMsgDest = join(hooksDir, "commit-msg");
 
       if (existsSync(preCommitDest)) {
         console.log("  ⏭  .git/hooks/pre-commit already exists — skipping");
@@ -484,6 +543,21 @@ async function runInit(): Promise<void> {
           mkdirSync(hooksDir, { recursive: true });
           writeFileSync(preCommitDest, generatePreCommitHook(), { mode: 0o755 });
           console.log("  ✅ Installed .git/hooks/pre-commit");
+          created++;
+        }
+      }
+
+      // [COMMIT-MSG-HOOK-MUST-BE-INSTALLED] — without this, every
+      // commit_message_required rule is silently unenforced.
+      if (existsSync(commitMsgDest)) {
+        console.log("  ⏭  .git/hooks/commit-msg already exists — skipping");
+        skipped++;
+      } else {
+        const answer = isNonInteractive ? "y" : await ask(rl, "  Install commit-msg hook (commit-message policy gate)? [Y/n] ");
+        if (answer.toLowerCase() !== "n") {
+          mkdirSync(hooksDir, { recursive: true });
+          writeFileSync(commitMsgDest, generateCommitMsgHook(), { mode: 0o755 });
+          console.log("  ✅ Installed .git/hooks/commit-msg");
           created++;
         }
       }
@@ -613,6 +687,20 @@ import {
   formatValidationErrors,
   repoPolicyPath,
 } from "./policy.js";
+import {
+  collectRuns,
+  metricsFor,
+  transcriptRoot,
+  emptyTally,
+  addTally,
+  totalTokens,
+  type ModelPricing,
+} from "./transcript-collector.js";
+import {
+  runTranscriptHeuristics,
+  DEFAULT_COST_THRESHOLDS,
+  type CostThresholds,
+} from "./detector.js";
 import {
   getStagedFiles,
   runSecretScan,
@@ -2349,6 +2437,186 @@ function cliStats(): void {
 }
 
 // ---------------------------------------------------------------------------
+// cost — multi-agent spend, read from Claude Code's own transcripts
+// ---------------------------------------------------------------------------
+
+function fmtTok(n: number): string {
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}k`;
+  return String(n);
+}
+
+function fmtDur(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms)) return "—";
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m${String(s % 60).padStart(2, "0")}s`;
+  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
+}
+
+/** Resolve cost thresholds + pricing from policy, falling back to defaults. */
+function loadCostThresholds(cwd: string): { t: CostThresholds; source: string } {
+  const res = loadRepoPolicy(cwd);
+  if (res && res.ok && res.policy.agent_cost) {
+    const a = res.policy.agent_cost;
+    return {
+      t: {
+        billing_mode: a.billing_mode,
+        pricing: a.pricing as ModelPricing[],
+        min_cache_efficiency: a.min_cache_efficiency,
+        max_tool_calls_per_agent: a.max_tool_calls_per_agent,
+        max_cost_per_agent_usd: a.max_cost_per_agent_usd,
+        min_fanout_for_canary: a.min_fanout_for_canary,
+        max_failed_share: a.max_failed_share,
+      },
+      source: ".contextengine/policy.json",
+    };
+  }
+  return { t: DEFAULT_COST_THRESHOLDS, source: "built-in defaults (no agent_cost in policy.json)" };
+}
+
+async function cliCost(argv: string[]): Promise<void> {
+  const flag = (name: string): string | undefined => {
+    const i = argv.indexOf(`--${name}`);
+    return i >= 0 ? argv[i + 1] : undefined;
+  };
+  const json = argv.includes("--json");
+  const topRaw = flag("top");
+  const top = topRaw ? Math.max(1, parseInt(topRaw, 10) || 10) : 10;
+  const daysRaw = flag("days");
+  const since = daysRaw ? Date.now() - parseInt(daysRaw, 10) * 86_400_000 : undefined;
+
+  const cwd = process.cwd();
+  const { t, source } = loadCostThresholds(cwd);
+
+  const runs = collectRuns({
+    session: flag("session"),
+    project: flag("project"),
+    run: flag("run"),
+    since,
+  });
+
+  if (!runs.length) {
+    console.log("No multi-agent runs found in " + transcriptRoot());
+    console.log("(fan-outs only: parent sessions are not counted — this measures delegation)");
+    return;
+  }
+
+  const scored = runs
+    .map((r) => ({ run: r, m: metricsFor(r, t.pricing) }))
+    .sort((a, b) => b.m.cost.total - a.m.cost.total);
+
+  const signals = runTranscriptHeuristics(runs, t);
+
+  if (json) {
+    console.log(JSON.stringify({
+      billing_mode: t.billing_mode,
+      cost_is_notional: t.billing_mode === "subscription",
+      thresholds_source: source,
+      runs: scored.map(({ run, m }) => ({
+        runId: run.runId, kind: run.kind, project: run.project, sessionId: run.sessionId,
+        volume: run.totals, intensity: {
+          agents: m.agents, reported: m.reported, failed: m.failed,
+          capacityExhausted: m.capacityExhausted, toolCalls: m.toolCalls,
+          medianToolCalls: m.medianToolCalls, durationMs: run.durationMs,
+          launchedBeforeFirstReport: m.launchedBeforeFirstReport,
+        },
+        cost: m.cost, cacheEfficiency: Number.isFinite(m.cacheEfficiency) ? m.cacheEfficiency : null,
+        outputShare: m.outputShare,
+      })),
+      signals,
+    }, null, 2));
+    return;
+  }
+
+  // Aggregate across everything in scope.
+  let vol = emptyTally();
+  let agents = 0, toolCalls = 0, failed = 0, capacity = 0, reported = 0;
+  let cost = 0, withoutCache = 0, unpriced = 0;
+  for (const { run, m } of scored) {
+    vol = addTally(vol, run.totals);
+    agents += m.agents; toolCalls += m.toolCalls; failed += m.failed;
+    capacity += m.capacityExhausted; reported += m.reported;
+    cost += m.cost.total; withoutCache += m.cost.withoutCache; unpriced += m.cost.unpricedTokens;
+  }
+  const allTok = totalTokens(vol);
+  const cw = vol.cacheWrite5m + vol.cacheWrite1h;
+
+  console.log("");
+  console.log(`MULTI-AGENT COST — ${scored.length} run(s), ${agents} subagents`);
+  console.log(`thresholds: ${source}`);
+  console.log("");
+
+  // ── 1. VOLUME ───────────────────────────────────────────────────────────
+  console.log("VOLUME (tokens moved)");
+  const volRow = (label: string, n: number) =>
+    console.log(`  ${label.padEnd(16)} ${fmtTok(n).padStart(8)}  ${allTok ? ((100 * n) / allTok).toFixed(1).padStart(5) : "  0.0"}%`);
+  volRow("cache read", vol.cacheRead);
+  volRow("cache write", cw);
+  volRow("input (fresh)", vol.input);
+  volRow("output", vol.output);
+  console.log(`  ${"total".padEnd(16)} ${fmtTok(allTok).padStart(8)}`);
+  console.log("");
+
+  // ── 2. VALUED COST ──────────────────────────────────────────────────────
+  const notional = t.billing_mode === "subscription";
+  console.log(`VALUED COST (API list prices)${notional ? " — NOTIONAL, NOT BILLED" : ""}`);
+  if (notional) {
+    console.log("  This machine runs Claude Code on a subscription: no dollar below is");
+    console.log("  debited. Use these figures to compare approaches, not as spend.");
+  }
+  const costRow = (label: string, n: number) =>
+    console.log(`  ${label.padEnd(16)} ${("$" + n.toFixed(2)).padStart(8)}  ${cost ? ((100 * n) / cost).toFixed(1).padStart(5) : "  0.0"}%`);
+  let ci = 0, ccw = 0, ccr = 0, co = 0;
+  for (const { m } of scored) { ci += m.cost.input; ccw += m.cost.cacheWrite; ccr += m.cost.cacheRead; co += m.cost.output; }
+  costRow("cache read", ccr);
+  costRow("cache write", ccw);
+  costRow("input (fresh)", ci);
+  costRow("output", co);
+  console.log(`  ${"total".padEnd(16)} ${("$" + cost.toFixed(2)).padStart(8)}`);
+  console.log(`  ${"without cache".padEnd(16)} ${("$" + withoutCache.toFixed(2)).padStart(8)}  ` +
+    `caching saved $${(withoutCache - cost).toFixed(2)} (${withoutCache ? (100 * (1 - cost / withoutCache)).toFixed(0) : "0"}%)`);
+  if (unpriced > 0) console.log(`  ⚠ ${fmtTok(unpriced)} tokens UNPRICED (no matching model in policy) — not counted above`);
+  console.log("");
+
+  // ── 3. INTENSITY (the capacity proxy) ───────────────────────────────────
+  console.log(`INTENSITY (capacity proxy${notional ? " — the scarce resource here" : ""})`);
+  console.log(`  subagents        ${String(agents).padStart(8)}`);
+  console.log(`  reported         ${String(reported).padStart(8)}`);
+  console.log(`  returned nothing ${String(failed).padStart(8)}${failed ? `  (${((100 * failed) / agents).toFixed(0)}% of the fleet)` : ""}`);
+  console.log(`  died at window   ${String(capacity).padStart(8)}${capacity ? "  ← capacity spent for no result" : ""}`);
+  console.log(`  tool calls       ${String(toolCalls).padStart(8)}  (${(toolCalls / Math.max(1, agents)).toFixed(1)}/agent)`);
+  console.log(`  cache reuse      ${(cw ? (vol.cacheRead / cw).toFixed(1) + "x" : "—").padStart(8)}  ${cw && vol.cacheRead / cw < t.min_cache_efficiency ? "← below floor, prefix is being rebuilt" : "(higher is better)"}`);
+  console.log("");
+
+  // ── Top runs ────────────────────────────────────────────────────────────
+  console.log(`TOP RUNS BY VALUED COST (${Math.min(top, scored.length)} of ${scored.length})`);
+  console.log(`  ${"cost".padStart(8)} ${"agents".padStart(6)} ${"dead".padStart(4)} ${"tools".padStart(5)} ${"reuse".padStart(6)} ${"dur".padStart(7)}  run`);
+  for (const { run, m } of scored.slice(0, top)) {
+    const reuse = Number.isFinite(m.cacheEfficiency) ? m.cacheEfficiency.toFixed(1) + "x" : "—";
+    console.log(
+      `  ${("$" + m.cost.total.toFixed(2)).padStart(8)} ${String(m.agents).padStart(6)} ` +
+      `${String(m.failed).padStart(4)} ${String(m.medianToolCalls).padStart(5)} ${reuse.padStart(6)} ` +
+      `${fmtDur(run.durationMs).padStart(7)}  ${run.runId} ${run.project.replace(/^-Users-yan-/, "")}`);
+  }
+  console.log("");
+
+  // ── Signals ─────────────────────────────────────────────────────────────
+  if (!signals.length) {
+    console.log("✅ No context_burn or fanout_without_canary signals.");
+  } else {
+    const crit = signals.filter((s) => s.severity === "critical");
+    console.log(`SIGNALS — ${signals.length} (${crit.length} critical)`);
+    for (const s of signals.slice(0, 20)) {
+      console.log(`  ${s.severity === "critical" ? "🔴" : "⚠️ "} [${s.kind}] ${s.reason}`);
+    }
+    if (signals.length > 20) console.log(`  … ${signals.length - 20} more (use --json)`);
+  }
+  console.log("");
+}
+
+// ---------------------------------------------------------------------------
 // Main — route to init, CLI subcommand, or MCP server
 // ---------------------------------------------------------------------------
 const command = process.argv[2];
@@ -2385,6 +2653,12 @@ Usage:
                                        Export hash-chained audit log (evidence aligned with
                                        SOC 2 CC7.2 + ISO 27001 A.12.4.1 — not a certification)
   contextengine audit-verify           Verify audit log chain integrity (tamper detection)
+  contextengine cost [--session ID] [--project NAME] [--run wf_ID] [--days N] [--top N] [--json]
+                                       Multi-agent spend from Claude Code transcripts. Always prints
+                                       VOLUME (tokens), VALUED COST (API list prices — notional on a
+                                       subscription) and INTENSITY (agents, tool calls, deaths at the
+                                       usage window), because volume and cost tell opposite stories.
+                                       Flags context_burn + fanout_without_canary.
   contextengine policy <validate|show> [args]
                                        Author + validate the declarative .contextengine/policy.json
   contextengine init-extension-secret [--force]
@@ -2416,6 +2690,7 @@ Usage:
                                        Accepts a project name or a directory path.
                                        --all scores every discovered project (writes to each).
   contextengine audit                  Run compliance audit (Pro)
+  contextengine cost                   Multi-agent token/cost/capacity report
   contextengine activate <key> <email> Activate a Pro license
   contextengine deactivate             Remove license and premium modules
   contextengine stats                  Show live MCP session stats (value meter)
@@ -2493,6 +2768,11 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
   const allFlag = args.includes("--all");
   const project = args.filter(a => !a.startsWith("--"))[0];
   cliScore(project, htmlFlag, !noSaveFlag, allFlag).catch((err) => {
+    console.error("Error:", err);
+    process.exit(1);
+  });
+} else if (command === "cost") {
+  cliCost(process.argv.slice(3)).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });
