@@ -814,6 +814,9 @@ server.tool(
     const summary: string[] = [];
     summary.push(`Audit chain: ${report.ok ? "✅ INTACT" : "❌ BROKEN"}`);
     summary.push(`Total records: ${report.total}`);
+    if ((report.redactedIndices ?? []).length > 0) {
+      summary.push(`Redacted and acknowledged on the chain: ${report.redactedIndices!.length} record(s), not counted as altered`);
+    }
     if (since || until) {
       summary.push(`Range filter: ${since ?? "start"} → ${until ?? "now"}  (${filtered.length} record(s) in range)`);
     }

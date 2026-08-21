@@ -187,7 +187,8 @@ export type AuditEvent =
   | "community.sync_ok"
   | "community.sync_error"
   // Log rotation — records which segment a slice of history moved to (added 2026-08-20)
-  | "audit.rotate";
+  | "audit.rotate"
+  | "audit.redact";
 
 export interface AuditRecord {
   ts: string;
@@ -761,6 +762,10 @@ export interface IntegrityReport {
   /** Records whose prev_hash names a KNOWN earlier head — a concurrent-append fork.
    *  Content is provably intact; only the linkage is non-linear. Not tampering. */
   forkIndices?: number[];
+  /** Records whose content was altered AND whose alteration is acknowledged by a later, intact
+   *  `audit.redact` record binding the original hash to the current content. Not counted as
+   *  tampering. */
+  redactedIndices?: number[];
 }
 
 /**
@@ -826,6 +831,33 @@ export function verifyChain(): IntegrityReport {
     prev = r.hash;
   }
 
+  // 3. Acknowledged redactions. [LOCK] [REDACTION-IS-A-CHAINED-RECORD]
+  //    An `audit.redact` record that is itself intact binds (original hash -> hash of the
+  //    redacted content). A tampered record matching such a binding is "redacted", not
+  //    "altered". Binding to the current content means a second edit after the acknowledgement
+  //    makes it tampered again.
+  const tamperedSet = new Set(tampered);
+  const acks = new Map<string, string>();
+  for (let i = 0; i < records.length; i++) {
+    const r = records[i];
+    if (r.event !== "audit.redact" || tamperedSet.has(i)) continue;
+    const list = (r.payload as { redacted?: Array<{ hash?: unknown; content_hash?: unknown }> }).redacted;
+    if (!Array.isArray(list)) continue;
+    for (const e of list) {
+      if (typeof e.hash === "string" && typeof e.content_hash === "string") acks.set(e.hash, e.content_hash);
+    }
+  }
+  const redacted: number[] = [];
+  const stillTampered: number[] = [];
+  for (const i of tampered) {
+    const r = records[i];
+    const bound = acks.get(r.hash);
+    if (bound && bound === computeHash(r.prev_hash, r.ts, r.event, r.actor, r.payload)) redacted.push(i);
+    else stillTampered.push(i);
+  }
+  tampered.length = 0;
+  tampered.push(...stillTampered);
+
   const ok = tampered.length === 0 && orphans.length === 0;
   const firstProblem =
     tampered.length > 0 ? tampered[0] : orphans.length > 0 ? orphans[0] : null;
@@ -845,7 +877,49 @@ export function verifyChain(): IntegrityReport {
     tamperedIndices: tampered,
     orphanIndices: orphans,
     forkIndices: forks,
+    redactedIndices: redacted,
   };
+}
+
+/**
+ * Acknowledge that records were deliberately redacted (a secret removed from their content).
+ *
+ * [LOCKED] [REDACTION-IS-A-CHAINED-RECORD] — 2026-08-21
+ * [NEVER] let the verifier accept an allow-list that lives outside the chain (a file, an env
+ *         var, a CLI flag) as grounds to stop calling an altered record altered.
+ * WHY: on 2026-08-20 a credentials sweep replaced a password with [REDACTED_SECRET] in 3
+ *      archived records. Correct, but the chain can only see "content no longer matches its
+ *      hash", so the compliance report read "tampering" for a deliberate act nobody recorded.
+ *      An out-of-band allow-list would fix the wording and destroy the property: anyone who
+ *      can edit the log can edit the list.
+ * FIX: the acknowledgement is an `audit.redact` record, appended to the chain like any other,
+ *      naming the original hash of each redacted record and the hash of its redacted content.
+ *      It can only be written after the fact, only for records that are actually altered, and
+ *      a further edit breaks the binding. The verifier reports such records as "redacted",
+ *      counts them separately, and `ok` ignores them; everything else stays "altered".
+ */
+export function acknowledgeRedaction(
+  indices: number[],
+  reason: string,
+  actor = "system",
+): { acknowledged: number[]; rejected: Array<{ index: number; why: string }>; record: AuditRecord | null } {
+  if (!reason.trim()) throw new Error("a reason is required");
+  const records = readAuditLog();
+  const acknowledged: number[] = [];
+  const rejected: Array<{ index: number; why: string }> = [];
+  const entries: Array<{ index: number; hash: string; content_hash: string; ts: string; event: string }> = [];
+  for (const i of [...new Set(indices)].sort((a, b) => a - b)) {
+    const r = records[i];
+    if (!r) { rejected.push({ index: i, why: "no such record" }); continue; }
+    const current = computeHash(r.prev_hash, r.ts, r.event, r.actor, r.payload);
+    if (current === r.hash) { rejected.push({ index: i, why: "content is intact, nothing to acknowledge" }); continue; }
+    if (r.event === "audit.redact") { rejected.push({ index: i, why: "an acknowledgement cannot itself be redacted" }); continue; }
+    acknowledged.push(i);
+    entries.push({ index: i, hash: r.hash, content_hash: current, ts: r.ts, event: r.event });
+  }
+  if (entries.length === 0) return { acknowledged, rejected, record: null };
+  const record = appendAudit("audit.redact", { reason, redacted: entries }, actor);
+  return { acknowledged, rejected, record };
 }
 
 export function filterByRange(

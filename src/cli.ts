@@ -732,6 +732,7 @@ import {
   rotateAuditLog,
   planRotation,
   listSegments,
+  acknowledgeRedaction,
 } from "./audit.js";
 import {
   loadRepoPolicy,
@@ -2107,13 +2108,40 @@ function cliAuditRotate(args: string[]): void {
   }
 }
 
+/** Acknowledge deliberately redacted audit records on the chain. [LOCK] [REDACTION-IS-A-CHAINED-RECORD] */
+function cliAuditRedactAck(args: string[]): void {
+  const idxAt = args.indexOf("--index");
+  const reasonAt = args.indexOf("--reason");
+  const raw = idxAt >= 0 ? args[idxAt + 1] ?? "" : "";
+  const reason = reasonAt >= 0 ? args[reasonAt + 1] ?? "" : "";
+  const indices = raw.split(",").map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n >= 0);
+  if (indices.length === 0 || !reason.trim()) {
+    console.error(`usage: contextengine audit-redact-ack --index <i,j,k> --reason "<what was removed and why>"`);
+    console.error(`   Indices are the ones 'audit-verify' lists as altered. Only altered records can be acknowledged.`);
+    process.exit(1);
+  }
+  const r = acknowledgeRedaction(indices, reason, "cli");
+  for (const x of r.rejected) console.error(`  ✗ ${x.index}: ${x.why}`);
+  if (!r.record) {
+    console.error(`\nNothing acknowledged.`);
+    process.exit(1);
+  }
+  console.log(`\n✅ Acknowledged ${r.acknowledged.length} redacted record(s): ${r.acknowledged.join(", ")}`);
+  console.log(`   Chained as audit.redact, hash ${r.record.hash.slice(0, 16)}…`);
+  const after = verifyChain();
+  console.log(`   audit-verify now: ${after.ok ? "OK" : "FAILED"}, ${(after.redactedIndices ?? []).length} redacted, ${(after.tamperedIndices ?? []).length} altered.`);
+}
+
 async function cliAuditVerify(): Promise<void> {
   const report = verifyChain();
   const forks = report.forkIndices ?? [];
 
+  const redacted = report.redactedIndices ?? [];
   if (report.ok) {
     console.log(`✅ Audit chain verified — ${report.total} record(s).`);
-    console.log(`   No record was altered, and no history is missing.`);
+    console.log(redacted.length === 0
+      ? `   No record was altered, and no history is missing.`
+      : `   No history is missing. ${redacted.length} record(s) redacted and acknowledged on the chain (indices ${redacted.slice(0, 8).join(", ")}${redacted.length > 8 ? ", …" : ""}), 0 altered.`);
     if (forks.length > 0) {
       // [VERIFY-FORK-IS-NOT-TAMPER] — surface this, but do not call it tampering.
       console.log(
@@ -2143,6 +2171,11 @@ async function cliAuditVerify(): Promise<void> {
     console.error(`\n   Altered records (content does not match its own hash):`);
     console.error(`     ${t.slice(0, 10).join(", ")}${t.length > 10 ? `, … (+${t.length - 10} more)` : ""}`);
     console.error(`   This is tampering: the record's bytes were changed after it was written.`);
+    console.error(`   If this was a deliberate redaction of a secret, acknowledge it on the chain:`);
+    console.error(`     contextengine audit-redact-ack --index ${t.slice(0, 3).join(",")} --reason "<what was removed and why>"`);
+  }
+  if (redacted.length > 0) {
+    console.error(`\n   Also ${redacted.length} redacted record(s), acknowledged on the chain, not counted above.`);
   }
   if ((report.orphanIndices ?? []).length > 0) {
     const o = report.orphanIndices!;
@@ -2611,6 +2644,7 @@ Usage:
                                        Export hash-chained audit log (evidence aligned with
                                        SOC 2 CC7.2 + ISO 27001 A.12.4.1 — not a certification)
   contextengine audit-verify           Verify audit log chain integrity (tamper detection)
+  contextengine audit-redact-ack       Acknowledge deliberately redacted records on the chain (--index i,j --reason "...")
   contextengine audit-rotate [--keep-days N] [--max-records N] [--dry-run]
                                        Move old history into an archive segment. Archives
                                        whatever is older than N days (default 30) OR beyond
@@ -2795,6 +2829,8 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
     console.error("Error:", err);
     process.exit(1);
   });
+} else if (command === "audit-redact-ack") {
+  cliAuditRedactAck(process.argv.slice(3));
 } else if (command === "audit-rotate") {
   cliAuditRotate(process.argv.slice(3));
 } else if (command === "audit-verify") {
