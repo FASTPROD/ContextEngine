@@ -49,7 +49,10 @@ for d in "$HOME"/Projects/*/ "$HOME/COMPR" "$HOME/FASTPROD"; do
   total=$(wc -l < "$h" | tr -d ' ')
   [ -n "$first_exit" ] && [ "$first_exit" -lt "$total" ] && dead=" (DEAD CODE after line $first_exit)"
   local_note=""
-  for k in "${KNOWN_LOCAL_LOGIC[@]}"; do [ "$k" = "$name" ] && local_note=" [drops local logic, see script header]"; done
+  # ${arr[@]+"${arr[@]}"} is the bash 3.2 idiom for "expand, or nothing if empty":
+  # under set -u a plain "${arr[@]}" on an empty array aborts with "unbound variable".
+  # This exact line killed the first real --apply before its first loop iteration.
+  for k in ${KNOWN_LOCAL_LOGIC[@]+"${KNOWN_LOCAL_LOGIC[@]}"}; do [ "$k" = "$name" ] && local_note=" [drops local logic, see script header]"; done
 
   if [ "$MODE" != "--apply" ]; then
     printf "  ⚠️  %-28s drifted%s%s\n" "$name" "$dead" "$local_note"; ((updated++)); continue
