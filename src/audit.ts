@@ -552,10 +552,30 @@ export function rotateAuditLog(opts: RotateOptions = {}): RotationResult {
 
   const integrity = verifyChain();
   if (!integrity.ok) {
-    return {
-      ...empty,
-      refusedReason: `chain does not verify (${integrity.breakReason}) — refusing to archive a damaged log`,
-    };
+    // [LOCKED] [ROTATE-REFUSES-LIVE-DAMAGE-ONLY] — 2026-08-21
+    // [NEVER] refuse a rotation for damage that sits entirely inside segments already archived.
+    // WHY: on 2026-08-20 a credentials sweep replaced a password literal with [REDACTED_SECRET]
+    //      in 3 records of audit-0001.jsonl. Correct, deliberate, and permanent: the verifier
+    //      reports them as altered for good. A whole-chain refusal then blocks every future
+    //      rotation, the live log grows without bound (170k records a day later, 3x the
+    //      ceiling) and the detectors slow down again, which is the failure rotation exists to
+    //      prevent. Archived segments are already immutable by policy; refusing to archive new
+    //      records protects nothing there.
+    // FIX: refuse only when an altered or orphaned record is in the live log, the part about to
+    //      be rewritten. Damage confined to segments is reported, not treated as a veto.
+    const firstLive = integrity.total - plan.archiveCount - plan.keepCount;
+    const bad = [...(integrity.tamperedIndices ?? []), ...(integrity.orphanIndices ?? [])];
+    const inLive = bad.filter((i) => i >= firstLive);
+    if (inLive.length > 0) {
+      return {
+        ...empty,
+        refusedReason: `chain does not verify (${integrity.breakReason}) — ${inLive.length} damaged record(s) in the live log, refusing to archive a damaged log`,
+      };
+    }
+    console.error(
+      `[ContextEngine] ⚠ audit rotation: ${bad.length} known damaged record(s) in archived segments ` +
+        `(first at ${bad[0]}); none in the live log, rotating.`,
+    );
   }
 
   if (opts.dryRun) return { ...plan, rotated: false, bytesArchived: 0, bytesRemaining: 0 };
@@ -623,6 +643,98 @@ export function rotateAuditLog(opts: RotateOptions = {}): RotationResult {
     bytesArchived: Buffer.byteLength(segBody),
     bytesRemaining: statSync(path).size,
   };
+}
+
+/**
+ * Startup auto-rotation for the MCP server.
+ *
+ * [LOCKED] [AUTO-ROTATE-HYSTERESIS-AND-ONE-RUNNER] — 2026-08-21
+ * [NEVER] trigger at the same count the rotation keeps, and never let two servers rotate at once.
+ * WHY: rotation was manual and the live log crossed the 50k ceiling in ~15h, so the drift
+ *      detectors' per-tick read slowed by the day between hand runs. A startup hook fixes the
+ *      cadence, but (a) triggering at 50k and rotating down to 50k would cut a handful of
+ *      records into a new segment on every start, and (b) three MCP servers start together
+ *      on this machine (VS Code, launchd, Claude Code); each would plan on the same oversized
+ *      file and the late ones would archive records the first one had already kept.
+ * FIX: trigger at AUTO_ROTATE_TRIGGER (2x the ceiling), rotate down to the ceiling, so a
+ *      rotation buys ~a day of quiet. A dedicated rotate lock (O_EXCL, stale after 10 min,
+ *      long enough to verify a 500k-record chain) makes late starters return "in progress"
+ *      without touching the log. Opt out with CONTEXTENGINE_AUTO_ROTATE=0.
+ */
+export const AUTO_ROTATE_TRIGGER = 2 * DEFAULT_MAX_LIVE_RECORDS;
+const ROTATE_LOCK_STALE_MS = 10 * 60_000;
+
+function rotateLockPath(): string {
+  return join(auditDir(), "audit.rotate.lock");
+}
+
+/** Count newline-terminated lines without parsing. The live log is small by construction. */
+export function countLiveRecords(): number {
+  const path = auditPath();
+  if (!existsSync(path)) return 0;
+  const buf = readFileSync(path);
+  let n = 0;
+  for (let i = 0; i < buf.length; i++) if (buf[i] === 10) n++;
+  return n;
+}
+
+export interface AutoRotateOutcome {
+  action: "disabled" | "below_trigger" | "in_progress" | "rotated" | "refused" | "error";
+  liveRecords: number;
+  detail: string;
+  result?: RotationResult;
+}
+
+export function autoRotateAuditLog(opts: { trigger?: number; maxRecords?: number } = {}): AutoRotateOutcome {
+  const trigger = opts.trigger ?? AUTO_ROTATE_TRIGGER;
+  const maxRecords = opts.maxRecords ?? DEFAULT_MAX_LIVE_RECORDS;
+
+  if (process.env.CONTEXTENGINE_AUTO_ROTATE === "0") {
+    return { action: "disabled", liveRecords: -1, detail: "CONTEXTENGINE_AUTO_ROTATE=0" };
+  }
+  const liveRecords = countLiveRecords();
+  if (liveRecords <= trigger) {
+    return { action: "below_trigger", liveRecords, detail: `${liveRecords} live record(s), trigger is ${trigger}` };
+  }
+
+  // One runner at a time. O_EXCL create is the primitive; a stale file is an orphan from a
+  // crashed rotation, not a live one.
+  const lock = rotateLockPath();
+  let fd: number;
+  try {
+    ensureDir();
+    try {
+      fd = openSync(lock, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      const age = Date.now() - statSync(lock).mtimeMs;
+      if (age < ROTATE_LOCK_STALE_MS) {
+        return { action: "in_progress", liveRecords, detail: `another rotation holds ${lock} (${Math.round(age / 1000)}s old)` };
+      }
+      unlinkSync(lock);
+      fd = openSync(lock, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+    }
+  } catch (e) {
+    return { action: "error", liveRecords, detail: `rotate lock: ${(e as Error).message}` };
+  }
+  try {
+    try { writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`); } catch { /* contents are a courtesy */ }
+    closeSync(fd);
+    const result = rotateAuditLog({ maxRecords });
+    if (!result.rotated) {
+      return { action: "refused", liveRecords, detail: result.refusedReason ?? "not rotated", result };
+    }
+    return {
+      action: "rotated",
+      liveRecords,
+      detail: `archived ${result.archiveCount} record(s) to ${result.segmentFile}, ${result.keepCount + 1} live`,
+      result,
+    };
+  } catch (e) {
+    return { action: "error", liveRecords, detail: (e as Error).message };
+  } finally {
+    try { unlinkSync(lock); } catch { /* already gone */ }
+  }
 }
 
 function writeFileAndSync(target: string, body: string): void {

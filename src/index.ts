@@ -35,7 +35,7 @@ import {
   formatSession,
   formatSessionList,
 } from "./sessions.js";
-import { verifyChain, readAuditLog, filterByRange } from "./audit.js";
+import { verifyChain, readAuditLog, filterByRange, autoRotateAuditLog } from "./audit.js";
 import { startEventIngestServer } from "./http-server.js";
 import { detect } from "./detector.js";
 import { buildCostReport } from "./cost-report.js";
@@ -1459,6 +1459,20 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[ContextEngine] 🚀 MCP server running on stdio (keyword search ready)");
+
+  // 3a. Audit log auto-rotation. Deferred so the first requests are answered before the
+  // synchronous verify + rewrite (a few seconds on a 500k-record chain) blocks the loop.
+  // [LOCK] [AUTO-ROTATE-HYSTERESIS-AND-ONE-RUNNER]
+  setTimeout(() => {
+    try {
+      const o = autoRotateAuditLog();
+      if (o.action === "rotated" || o.action === "refused" || o.action === "error" || o.action === "in_progress") {
+        console.error(`[ContextEngine] 📦 audit auto-rotate (${o.action}): ${o.detail}`);
+      }
+    } catch (err) {
+      console.error(`[ContextEngine] ⚠ audit auto-rotate failed: ${(err as Error).message}`);
+    }
+  }, 3_000).unref();
 
   // 3b. Write server-meta.json so the VS Code extension can read tool count
   // without needing an active MCP session. Single source of truth =
