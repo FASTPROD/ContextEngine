@@ -4,7 +4,7 @@
 
 ## When to use
 
-- Modifying MCP server tools (20 tools in `src/index.ts` — `delete_session` + `audit_verify` added in 2026-06)
+- Modifying MCP server tools (22 tools in `src/index.ts`, the list is `ALL_TOOLS` in `src/tools-manifest.ts`; `agent_cost` added 2026-08-21)
 - Updating CLI subcommands (21 commands in `src/cli.ts` — `delete-session`, `audit-export`, `audit-verify`, `export-learnings`, `policy validate|show`, `hook secret-scan|doc-coverage` added 2026-06)
 - Changing search/ranking logic (`src/search.ts`, `src/embeddings.ts`)
 - Working on the learnings store (`src/learnings.ts`)
@@ -449,8 +449,12 @@ installed by hand. See LOCK `[COMMIT-MSG-HOOK-MUST-BE-INSTALLED]`.
 
 ### `agent_cost`
 
-Rates and thresholds for `contextengine cost` and the `context_burn` /
-`fanout_without_canary` detectors. Rates are dollars per million tokens and live here rather
+Rates and thresholds for `contextengine cost`, the MCP tool `agent_cost`, and the
+`context_burn` / `fanout_without_canary` detectors. CLI and MCP tool share one renderer,
+`src/cost-report.ts` (`buildCostReport()` returns `{text, json}`; LOCK
+`[COST-REPORT-ONE-RENDERER]`, 2026-08-21, the day after the CLI shipped). The MCP tool takes
+`days`, `project`, `session`, `run`, `top`, `json`; it is free, it reads the caller's own
+transcripts under `~/.claude/projects`, nothing leaves the machine. Rates are dollars per million tokens and live here rather
 than in code, so they can be corrected without a release and can describe models the build has
 never heard of (`[PRICING-LIVES-IN-POLICY]`).
 

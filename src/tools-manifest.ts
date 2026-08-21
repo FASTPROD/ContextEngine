@@ -40,6 +40,7 @@ export const ALL_TOOLS = [
   "delete_session",
   "audit_verify",
   "drift_status",
+  "agent_cost",
   "end_session",
   "save_learning",
   "list_learnings",

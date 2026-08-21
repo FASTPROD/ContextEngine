@@ -38,6 +38,7 @@ import {
 import { verifyChain, readAuditLog, filterByRange } from "./audit.js";
 import { startEventIngestServer } from "./http-server.js";
 import { detect } from "./detector.js";
+import { buildCostReport } from "./cost-report.js";
 import {
   saveLearning,
   searchLearnings,
@@ -825,6 +826,30 @@ server.tool(
       summary.push("break onward as unverified.");
     }
     return respond("audit_verify", summary.join("\n"));
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool: agent_cost (multi-agent token / cost / capacity report)
+// ---------------------------------------------------------------------------
+// Same renderer as `contextengine cost`. [LOCK] [COST-REPORT-ONE-RENDERER]
+// Free tool: it reads the caller's own Claude Code transcripts on this machine,
+// nothing leaves it. Added 2026-08-21, one day after the CLI (707fcc8).
+server.tool(
+  "agent_cost",
+  "Multi-agent cost report from Claude Code's own transcripts on this machine: tokens moved (cache read/write, fresh input, output), valued cost at API list prices (marked NOTIONAL on a subscription, UNPRICED when no rate matches), capacity intensity (subagents, failed, died at window, tool calls per agent, cache reuse), top runs, and context_burn / fanout_without_canary signals. Call it after a fan-out to read what it consumed, or before one to compare with the last. Thresholds come from .contextengine/policy.json agent_cost, else built-in defaults.",
+  {
+    days: z.number().int().positive().optional().describe("Only runs started within the last N days"),
+    project: z.string().optional().describe("Filter by project slug as it appears in ~/.claude/projects (e.g. -Users-yan-Projects-ContextEngine)"),
+    session: z.string().optional().describe("Filter by parent session id"),
+    run: z.string().optional().describe("Filter by run id (wf_... or task group id)"),
+    top: z.number().int().positive().max(50).optional().describe("How many runs to list (default 10)"),
+    json: z.boolean().optional().describe("Return the structured JSON report instead of the text one"),
+  },
+  async ({ days, project, session, run, top, json }) => {
+    const report = buildCostReport({ days, project, session, run, top });
+    if (json && report.json) return respond("agent_cost", JSON.stringify(report.json, null, 2));
+    return respond("agent_cost", report.text);
   }
 );
 
