@@ -153,8 +153,18 @@ log "Phase 4 — PM2 restart"
 
 # Use restart (graceful) not start. If the process doesn't exist yet,
 # fall back to start. PM2's exit code distinguishes the two.
+# [LOCKED] [PM2-START-FROM-ECOSYSTEM-ONLY] 2026-08-21
+# [NEVER] fall back to a bare `pm2 start dist/server.js`.
+# WHY: STRIPE_* and SMTP_* live only in ecosystem.config.cjs on the box (never in git).
+#      On crowlr2 the process had been started bare, so health reported
+#      stripeEnabled:false with no error anywhere; `pm2 restart` keeps whatever env the
+#      process was born with, so the defect survives every deploy until someone
+#      restarts from the ecosystem file. Found and fixed by the admin.CROWLR agent.
+# FIX: restart if running; if absent, start from ecosystem.config.cjs or fail loudly.
 ssh_run "$PM2_BIN restart $PM2_PROCESS_NAME 2>/dev/null \
-          || $PM2_BIN start $REMOTE_DIR/dist/server.js --name $PM2_PROCESS_NAME"
+          || { test -f $REMOTE_DIR/ecosystem.config.cjs \
+               && cd $REMOTE_DIR && $PM2_BIN start ecosystem.config.cjs --only $PM2_PROCESS_NAME; } \
+          || { echo 'no running process and no ecosystem.config.cjs on the box'; exit 1; }"
 ssh_run "$PM2_BIN save --force 2>&1 | tail -1"
 
 # ===================================================================
@@ -172,6 +182,13 @@ if [[ $DRY_RUN -eq 0 ]]; then
       # Must report status: healthy
       if echo "$HEALTH" | grep -q '"status":"healthy"'; then
         log "  ✅ /health reports healthy"
+        # Env sanity: stripeEnabled:false means the process runs without its
+        # ecosystem env. [LOCK] [PM2-START-FROM-ECOSYSTEM-ONLY]
+        if echo "$HEALTH" | grep -q '"stripeEnabled":true'; then
+          log "  ✅ stripeEnabled:true, ecosystem env loaded"
+        else
+          warn "stripeEnabled is not true: process likely started without ecosystem.config.cjs env."
+        fi
         # Verify the Ed25519 marker is in the PM2 logs
         ED_OK=$(ssh -i "$SSH_KEY" "$SERVER" \
           "tail -100 /home/debian/.pm2/logs/contextengine-api-out.log | grep -c 'Ed25519 license-signing key loaded'" 2>/dev/null || echo 0)
