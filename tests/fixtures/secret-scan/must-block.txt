@@ -6,3 +6,10 @@ db_password: Sup3rS3cret!
 admin_password=Xk9#mPq2vL
 | password | Tr0ub4dor&3 |
 | Password | `P@ssw0rd2026` |
+DB_PASSWORD=Sup3rS3cret!
+passwd = "Sup3rS3cret!"
+pwd = "Sup3rS3cret!"
+PASS = "Sup3rS3cret!"
+client_secret = "Sup3rS3cret!"
++password = "Sup3rS3cret!"
+++password = "Sup3rS3cret!"

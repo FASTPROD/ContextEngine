@@ -26,8 +26,9 @@ MARKER='Cr0wlr_Pr0d_'
 
 # Repos whose hook carries local logic beyond the scanner. Listed so the operator
 # knows what the replacement drops; each one was checked by hand before listing.
-#   PLANK.io   : a gate that prunes one-off rules from .claude/settings.json
-declare -a KNOWN_LOCAL_LOGIC=("PLANK.io")
+# PLANK.io's settings.json gate was ported into the common hook on 2026-08-21, so it
+# no longer loses anything. Empty today; keep the mechanism.
+declare -a KNOWN_LOCAL_LOGIC=()
 
 updated=0; current=0; failed=0; skipped=0
 for d in "$HOME"/Projects/*/ "$HOME/COMPR" "$HOME/FASTPROD"; do
@@ -65,12 +66,17 @@ for d in "$HOME"/Projects/*/ "$HOME/COMPR" "$HOME/FASTPROD"; do
   probe="$d/.ce-scan-probe.$$"
   key="db_pass""word"
   printf '%s: Pr0be%sS3cret\n' "$key" "$$" > "$probe"
-  ( cd "$d" && git add -f "$(basename "$probe")" >/dev/null 2>&1 && .git/hooks/pre-commit >/dev/null 2>&1 )
+  # Two conditions, both required: the hook exits non-zero AND its output names the
+  # secret scanner. Exit code alone is not proof: in a repo missing its CE docs the
+  # doc-freshness phase also blocks, and a probe with a code extension would have
+  # "passed" this check for the wrong reason. The probe carries no code extension for
+  # the same reason; keep it that way.
+  hook_out=$( cd "$d" && git add -f "$(basename "$probe")" >/dev/null 2>&1 && .git/hooks/pre-commit 2>&1 )
   rc=$?
   ( cd "$d" && git reset -q HEAD "$(basename "$probe")" >/dev/null 2>&1 )
   rm -f "$probe"
 
-  if [ $rc -ne 0 ]; then
+  if [ $rc -ne 0 ] && echo "$hook_out" | grep -q "SECRET SCANNER"; then
     printf "  ✅ %-28s replaced, blocks a planted secret%s%s\n" "$name" "$dead" "$local_note"; ((updated++))
   else
     cp "$bak" "$h"

@@ -19,3 +19,18 @@ final password = passwordController.text;
 obscureText: true, // password field
 current_password: str = Field(min_length=8)
 <Route path="/reset-password" />
+pwd = os.getcwd()
+cd "$(pwd)/build"
+pass
+    pass  # TODO
+if not passed: pass
+secret_name = "db-credentials"
+passphrase_required = True
+`**Password**: \`...\``, not `MYSQL_PASS="..."`.
+password = "..."
+password: ***
+DB_PASSWORD=xxxxxxxx
+password = "CHANGEME"
+password: REDACTED
+password = '...'
+passwd: '***'
