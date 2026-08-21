@@ -1,8 +1,19 @@
-// LOCKED — verified March 3 2026 — activation + delta decryption + machine fingerprint + heartbeat
+// LOCKED — verified March 3 2026 — activation + machine fingerprint + heartbeat
 // DO NOT RE-AUDIT — E2E tested Feb 23 2026, all 4 Pro tools verified
+//
+// [LOCKED] [DELTA-RETIRED] — 2026-08-21
+// [NEVER] reintroduce a client-side "delta bundle" (download, decrypt, cache, import premium code).
+// WHY: from 0f12967 (2026-02-20) to 2.5.3 the client fetched an AES-encrypted bundle on activation,
+//      wrote it to ~/.contextengine/delta/, and never imported it: loadDeltaModule() had no caller,
+//      index.ts and cli.ts import agents.js / search.js / firewall.js from the package. Yet gateCheck
+//      refused premium tools when the unused cache was missing, and a stale cache needed its own
+//      guard (the former [DELTA-VERSION-PIN], 2026-08-14). Dead weight with live failure modes.
+// FIX: the gate is the signed licence alone (Ed25519, machine-bound, expiry, daily heartbeat).
+//      The moat is the gate plus BSL-1.1, as CLAUDE.md rule 3 states. Retired on Yan's decision,
+//      SESSION_23. deactivate() still empties a legacy ~/.contextengine/delta/ so old caches go away.
 
 /**
- * Activation & Delta Module System
+ * Activation System
  *
  * The npm package ships with core functionality (search, sessions, learnings,
  * operational collectors). PRO unlocks the four high-value tools that consume
@@ -25,16 +36,15 @@
  *
  * On activation:
  *   1. License key is validated against the ContextEngine API
- *   2. Server returns a signed delta bundle (encrypted JS modules)
- *   3. Delta is cached locally at ~/.contextengine/delta/
- *   4. Premium tools become available
+ *   2. Server returns a signed licence (Ed25519), saved to ~/.contextengine/license.json
+ *   3. Premium tools become available
+ * The server may still include a `delta` field in its response; it is ignored. [LOCK] [DELTA-RETIRED]
  */
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync } from "fs";
-import { join, dirname } from "path";
+import { join } from "path";
 import { homedir } from "os";
-import { fileURLToPath } from "url";
-import { createHash, createDecipheriv } from "crypto";
+import { createHash } from "crypto";
 import { safeAppend } from "./audit.js";
 import { verifyLicenseSignature } from "./license-sig.js";
 
@@ -42,35 +52,17 @@ import { verifyLicenseSignature } from "./license-sig.js";
 // Constants
 // ---------------------------------------------------------------------------
 
-const DELTA_DIR = join(homedir(), ".contextengine", "delta");
-
-/**
- * Version of the running package. Read from package.json at module load, the same way
- * agents.ts does it, so [DELTA-VERSION-PIN] compares against the real installed version
- * rather than a constant someone forgets to bump.
- */
-const PACKAGE_VERSION: string = (() => {
-  try {
-    const here = dirname(fileURLToPath(import.meta.url));
-    return JSON.parse(readFileSync(join(here, "..", "package.json"), "utf-8")).version ?? "unknown";
-  } catch {
-    return "unknown";
-  }
-})();
+// Legacy cache location, only ever cleaned now. [LOCK] [DELTA-RETIRED]
+const LEGACY_DELTA_DIR = join(homedir(), ".contextengine", "delta");
 const LICENSE_FILE = join(homedir(), ".contextengine", "license.json");
 const ACTIVATION_API_BASE = process.env.CONTEXTENGINE_API || "https://api.compr.ch/contextengine";
 const ACTIVATION_API = `${ACTIVATION_API_BASE}/activate`;
 const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily check
 
-// Premium modules that require activation.
 // NOTE: collectors.ts runs unconditionally during reindex for all users
-// (operational data feeds search_context for everyone). The PRO tools below
-// in PREMIUM_TOOLS are what consume that data for scoring/audit/cross-project
+// (operational data feeds search_context for everyone). The PRO tools in
+// PREMIUM_TOOLS are what consume that data for scoring/audit/cross-project
 // reports. Keep the gate at the tool layer, not the data-collection layer.
-export const PREMIUM_MODULES = [
-  "agents",      // scorer, auditor, port checker, HTML report formatters
-  "search-adv",  // advanced BM25 with tuned parameters
-] as const;
 
 // Tools that require activation. Re-exported from the central manifest so
 // the count and the name list have a SINGLE source of truth. Adding a new
@@ -98,15 +90,6 @@ export interface LicenseInfo {
 interface ActivationResponse {
   success: boolean;
   license: LicenseInfo;
-  delta: {
-    version: string;
-    modules: Array<{
-      name: string;
-      payload: string;      // base64-encoded encrypted module
-      checksum: string;     // SHA-256 of decrypted content
-    }>;
-    iv: string;             // AES initialization vector
-  };
   error?: string;
 }
 
@@ -251,9 +234,6 @@ export async function activate(licenseKey: string, email: string): Promise<{
     // Save license
     saveLicense(data.license);
 
-    // Decrypt and store delta modules
-    await installDelta(data.delta, data.license.key);
-
     safeAppend("activation.activate", {
       plan: data.license.plan,
       email: data.license.email,
@@ -269,132 +249,6 @@ export async function activate(licenseKey: string, email: string): Promise<{
     };
   } catch (err) {
     return { success: false, message: `Activation error: ${(err as Error).message}` };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Delta module management
-// ---------------------------------------------------------------------------
-
-async function installDelta(
-  delta: ActivationResponse["delta"],
-  licenseKey: string
-): Promise<void> {
-  if (!existsSync(DELTA_DIR)) mkdirSync(DELTA_DIR, { recursive: true });
-
-  // Derive decryption key from license key
-  const derivedKey = createHash("sha256")
-    .update(licenseKey + getMachineId())
-    .digest();
-
-  const iv = Buffer.from(delta.iv, "hex");
-
-  for (const mod of delta.modules) {
-    const encrypted = Buffer.from(mod.payload, "base64");
-    
-    // AES-256-CBC decrypt
-    const decipher = createDecipheriv("aes-256-cbc", derivedKey, iv);
-    let decrypted = decipher.update(encrypted);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-    
-    const content = decrypted.toString("utf-8");
-    
-    // Verify checksum
-    const checksum = createHash("sha256").update(content).digest("hex");
-    if (checksum !== mod.checksum) {
-      throw new Error(`Delta module ${mod.name} checksum mismatch — possible tampering`);
-    }
-
-    // Write to delta directory
-    writeFileSync(join(DELTA_DIR, `${mod.name}.mjs`), content);
-  }
-
-  // Write version marker
-  writeFileSync(
-    join(DELTA_DIR, "manifest.json"),
-    JSON.stringify({
-      version: delta.version,
-      installedAt: new Date().toISOString(),
-      modules: delta.modules.map((m) => m.name),
-    })
-  );
-
-  console.error(
-    `[ContextEngine] 📦 Delta v${delta.version} installed (${delta.modules.length} modules)`
-  );
-}
-
-/**
- * Check if delta modules are installed and valid.
- */
-export function isDeltaInstalled(): boolean {
-  const manifestPath = join(DELTA_DIR, "manifest.json");
-  if (!existsSync(manifestPath)) return false;
-  
-  try {
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-    // Verify all expected module files exist
-    for (const modName of manifest.modules) {
-      if (!existsSync(join(DELTA_DIR, `${modName}.mjs`))) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Version of the delta bundle currently cached on disk, or null if none/unreadable.
- * Exported so callers can report the mismatch rather than guess at it.
- */
-export function installedDeltaVersion(): string | null {
-  try {
-    const manifest = JSON.parse(readFileSync(join(DELTA_DIR, "manifest.json"), "utf-8"));
-    return typeof manifest.version === "string" ? manifest.version : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Dynamically import a delta module.
- * Returns null if not activated, module missing, or the cached delta is stale.
- *
- * 🔒 LOCKED [DELTA-VERSION-PIN] — 2026-08-14
- * ⛔ NEVER import a delta module without checking its manifest version against this package.
- * WHY: the cache at ~/.contextengine/delta/ is written once at activation and never expires. On
- *      the author's own machine it held version 1.19.1 while the installed package was 2.3.1 —
- *      two months and three sessions of scorer fixes out of date. Because this function imported
- *      whatever .mjs happened to be on disk, wiring it up would have silently run the OLD scorer
- *      inside the NEW package: no error, no symptom, just quietly wrong scores. The canary cannot
- *      catch this — a stale delta carries its own stale canary and its own stale pins, so it
- *      passes against itself.
- * FIX: refuse to load a delta whose version does not match the running package, and say so on
- *      stderr. A stale module is an unknown, not a usable one — [ABSENCE-IS-NOT-A-VERDICT]
- *      applied to code delivery rather than to a check result.
- */
-export async function loadDeltaModule(name: string): Promise<any | null> {
-  if (!isDeltaInstalled()) return null;
-
-  const cached = installedDeltaVersion();
-  if (cached !== PACKAGE_VERSION) {
-    console.error(
-      `[ContextEngine] ⚠ Delta module "${name}" is version ${cached ?? "unknown"} but this package is ` +
-        `${PACKAGE_VERSION} — refusing to load a stale module. Re-run \`contextengine activate\` to refresh.`
-    );
-    return null;
-  }
-
-  const modulePath = join(DELTA_DIR, `${name}.mjs`);
-  if (!existsSync(modulePath)) return null;
-
-  try {
-    // Dynamic import of the decrypted module
-    const moduleUrl = `file://${modulePath}`;
-    return await import(moduleUrl);
-  } catch (err) {
-    console.error(`[ContextEngine] ⚠ Failed to load delta module ${name}:`, (err as Error).message);
-    return null;
   }
 }
 
@@ -453,10 +307,10 @@ export function deactivate(): void {
   // Remove license
   if (existsSync(LICENSE_FILE)) unlinkSync(LICENSE_FILE);
 
-  // Remove delta modules
-  if (existsSync(DELTA_DIR)) {
-    for (const file of readdirSync(DELTA_DIR)) {
-      unlinkSync(join(DELTA_DIR, file));
+  // Remove a legacy delta cache if one is still around. [LOCK] [DELTA-RETIRED]
+  if (existsSync(LEGACY_DELTA_DIR)) {
+    for (const file of readdirSync(LEGACY_DELTA_DIR)) {
+      unlinkSync(join(LEGACY_DELTA_DIR, file));
     }
   }
 
@@ -482,9 +336,8 @@ export function getActivationStatus(): {
   machineId: string;
 } {
   const license = loadLicense();
-  const deltaInstalled = isDeltaInstalled();
-  
-  if (!license || !deltaInstalled) {
+
+  if (!license) {
     return {
       activated: false,
       plan: "community",
@@ -527,11 +380,6 @@ export function gateCheck(toolName: string): string | null {
       `Free tools available: search_context, list_sources, read_source, reindex, ` +
       `save_session, load_session, list_sessions, end_session, save_learning, ` +
       `list_learnings, import_learnings`;
-  }
-  
-  if (!isDeltaInstalled()) {
-    return `🔒 Premium modules not installed. Re-activate:\n` +
-      `npx contextengine activate ${license.key} ${license.email}`;
   }
   
   return null;

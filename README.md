@@ -539,7 +539,7 @@ Everything happens locally — search, scoring, learnings, sessions, embeddings.
 | Email | Activation only | Tie the licence to an account |
 | Package version | Activation only | Serve a compatible module bundle |
 | Platform/arch (e.g., `darwin/arm64`) | Activation only | Compatibility check |
-| Delta bundle version | Daily heartbeat | Detect an out-of-date module cache |
+| Licence bundle version | Daily heartbeat | Compatibility marker carried in the signed licence |
 
 That is the complete list. The activation request sends exactly six fields and the heartbeat exactly three — enforced by a lock comment in `src/activation.ts` that forbids adding a seventh field reflecting usage.
 

@@ -1,29 +1,28 @@
 import { describe, it, expect } from "vitest";
 import {
-  PREMIUM_MODULES,
   PREMIUM_TOOLS,
   requiresActivation,
   gateCheck,
-  loadDeltaModule,
-  installedDeltaVersion,
 } from "../src/activation.js";
+import * as activation from "../src/activation.js";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
-describe("PREMIUM_MODULES", () => {
-  it("contains expected premium modules", () => {
-    // NOTE: 'collectors' is intentionally NOT premium — collectors run for all
-    // users during reindex (data feeds search_context for free tier too).
-    // PRO gates the four tools in PREMIUM_TOOLS that consume that data.
-    expect(PREMIUM_MODULES).toContain("agents");
-    expect(PREMIUM_MODULES).toContain("search-adv");
-    expect(PREMIUM_MODULES).not.toContain("collectors");
+// [LOCK] [DELTA-RETIRED]
+describe("delta bundle is retired", () => {
+  it("exports no delta machinery", () => {
+    const names = Object.keys(activation);
+    for (const n of names) expect(n.toLowerCase()).not.toContain("delta");
+    expect(names).not.toContain("PREMIUM_MODULES");
   });
 
-  it("has no duplicates", () => {
-    const unique = new Set(PREMIUM_MODULES);
-    expect(unique.size).toBe(PREMIUM_MODULES.length);
+  it("source has no decrypt, no delta import, no gate on a delta cache", () => {
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "..", "src", "activation.ts"), "utf-8");
+    expect(src).not.toMatch(/createDecipheriv/);
+    expect(src).not.toMatch(/function (isDeltaInstalled|loadDeltaModule|installDelta|installedDeltaVersion)\b/);
+    expect(src).not.toMatch(/Premium modules not installed/);
   });
 });
 
@@ -72,27 +71,5 @@ describe("gateCheck", () => {
       expect(result.length).toBeGreaterThan(0);
     }
     // If null, it means user has a valid license — also acceptable
-  });
-});
-
-// 🔒 [DELTA-VERSION-PIN]
-describe("delta module version pinning", () => {
-  const pkgVersion = JSON.parse(
-    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf-8")
-  ).version as string;
-
-  it("never loads a delta whose version does not match the running package", async () => {
-    // Holds on any machine: with no delta installed the version is null (!== pkgVersion) and the
-    // loader must return null; with a stale delta cached — the real 1.19.1-vs-2.3.1 case that
-    // prompted this guard — it must also refuse rather than silently run a two-month-old scorer.
-    const cached = installedDeltaVersion();
-    if (cached !== pkgVersion) {
-      expect(await loadDeltaModule("agents")).toBeNull();
-    }
-  });
-
-  it("reports the cached version as a string or null, never undefined", () => {
-    const v = installedDeltaVersion();
-    expect(v === null || typeof v === "string").toBe(true);
   });
 });

@@ -19,7 +19,7 @@
 - Dual search: BM25 keyword (instant) + semantic embeddings (Xenova `all-MiniLM-L6-v2`)
 - Sources auto-discovered from 7 file patterns — `contextengine.json` is optional
 - Learnings: append-only JSON in `~/.contextengine/learnings.json`
-- Delta modules: premium code extracted by `gen-delta.ts`, encrypted per-machine (AES-256-CBC)
+- Premium code ships in the package; the gate is the signed licence. The client-side delta bundle was retired 2026-08-21 (LOCK `[DELTA-RETIRED]`); the server still emits one, ignored
 
 ### MULTI-AGENT COST — read this before fanning out
 
@@ -137,12 +137,12 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 
 ### Activation and licensing (`src/activation.ts` + `src/license-sig.ts` + `server/src/license-sig.ts`)
 - **Three free tiers** unlock paid tools: PREMIUM_TOOLS = `score_project`, `run_audit`, `check_ports`, `list_projects`. Everything else is free. The list is a re-export of `PREMIUM_TOOL_NAMES` from `src/tools-manifest.ts` (single source of truth that also feeds the VS Code info panel via `~/.contextengine/server-meta.json` — added in 2.1.3 to eliminate display drift on tool count).
-- **PREMIUM_MODULES = `agents` + `search-adv`** only. Collectors deliberately ship to free users (the docstring at the top of `src/activation.ts` documents this — alignment with reality landed in the 2026-06 hygiene pass).
+- **No premium module list any more.** `PREMIUM_MODULES` went with the delta bundle (below). Collectors run for free users during reindex; only the four tools are gated.
 - **Activation flow** (`activate(key, email)`):
   1. POSTs `{key, email, machineId, version, platform, arch}` to `api.compr.ch/contextengine/activate`. **🔒 LOCK `[ACTIVATION-PAYLOAD-NO-USAGE-DATA]` (2026-06-24)** — these 6 fields are the COMPLETE payload, by deliberate product commitment. Adding a 7th field that reflects user usage (project paths, prompt text, tool inventory, learning IDs) breaks the marketing-data-isolation promise enshrined in `docs/about.md`. Any future feature that genuinely needs server-side telemetry MUST use a separate per-user opt-in endpoint, never bundle into this hot path.
-  2. Server validates the license against `licenses.db`, increments activation count, returns `{license, delta}` with the delta modules encrypted (AES-256-CBC; key = SHA-256(licenseKey + machineId), IV per-activation).
+  2. Server validates the license against `licenses.db`, increments activation count, returns `{license, delta}`. The `delta` field is legacy (AES-256-CBC bundle) and the client ignores it since 2.5.4; the server stops emitting it once the new Gandi box is up.
   3. Server signs the canonical license payload with **Ed25519** (LOCK `[LICENSE-SIG-SERVER]`); signature is 88-char base64.
-  4. Client decrypts + installs delta modules under `~/.contextengine/delta/`, saves the license to `~/.contextengine/license.json`.
+  4. Client saves the license to `~/.contextengine/license.json`. That file, verified, is the whole gate.
 - **`loadLicense()` verification** has three outcomes via `verifyLicenseSignature()` in `src/license-sig.ts` (LOCK `[LICENSE-SIG]`):
   - `ed25519` → cryptographically verified, full trust.
   - `legacy-grandfathered` → **NO LONGER REACHABLE since the flag day was hit 2026-06-11 (2.0.1 release).** The 64-char hex shape now returns `ok: false` with a reactivation pointer in the reason string. The `legacy-grandfathered` variant is kept in the type union for backward compat with existing audit log records carrying `activation.legacy_signature` events from before the flag day.
@@ -152,9 +152,8 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 - **Canonical payload is byte-pinned** — `canonicalPayload()` is duplicated identically in client + server license-sig.ts. Each side has a test asserting a known-input → known-output reference string. Drift between the two is the one thing that silently breaks every license.
 - **Deploy runbook**: `docs/deploy/ED25519_MIGRATION.md` covers private-key transfer to VPS, server deploy, live verification, rollback, and flag-day plan for retiring legacy-signature acceptance.
 - **Adversarial test coverage** in `tests/license-sig.test.ts` pins the exact privilege-escalation scenarios the 2026-06 audit named: forged enterprise license without signature → rejected; guessed-zero signature → rejected; pro license with plan field rewritten after signing → rejected.
-- **🔒 LOCK `[DELTA-VERSION-PIN]` (2026-08-14)** — `loadDeltaModule()` refuses any cached delta whose `manifest.json` version differs from the running package, and reports the mismatch on stderr (`installedDeltaVersion()` exposes the cached value so callers report rather than guess). **Why:** `~/.contextengine/delta/` is written once at activation and never expires. The author's own machine held a **1.19.1** delta under a **2.3.1** package — two months and three sessions of scorer fixes out of date. The old `loadDeltaModule` checked no version at all and imported whatever `.mjs` was on disk, so wiring it up would have run the old scorer inside the new package for every licensed user: no error, no symptom, just quietly wrong scores. **The `[SCORE-CANARY]` cannot catch this** — a stale delta carries its own stale canary and its own stale pins, so it passes against itself. A stale module is an unknown, never a usable one.
-- **`rubric.js` must stay in the `gen-delta` bundle** — `agents.mjs` does `import { RUBRIC } from "./rubric.js"`. An incomplete bundle either fails to import or silently resolves against the shipped copy, which would reintroduce exactly the divergence the pin exists to prevent.
-- **Load path is still unproven.** `installDelta()` is exercised in production (this machine has a real cached bundle), but `loadDeltaModule()` has never been called by anything — `index.ts` and `cli.ts` import `./agents.js` statically. Before switching to dynamic gated loading: exclude `dist/agents.*`/`dist/rubric.*` from npm `files`, add real tests for install+load, and **re-run `gen-delta` and redeploy first** — otherwise every licensed machine sits on a refused stale delta and loses the PRO tools entirely.
+- **🔒 LOCK `[DELTA-RETIRED]` (2026-08-21)**, replaces `[DELTA-VERSION-PIN]` (2026-08-14). From `0f12967` (2026-02-20) through 2.5.3 the client fetched an encrypted bundle on activation, cached it at `~/.contextengine/delta/`, and never imported it: `loadDeltaModule()` had no caller, `index.ts` and `cli.ts` import `agents.js` / `search.js` / `firewall.js` statically (this section said so on 2026-08-14, under "Load path is still unproven"). Meanwhile `gateCheck()` refused the PRO tools when that unused cache was missing, and the stale-cache guard existed only to protect a load that never happened. Retired on Yan's decision, SESSION_23: `installDelta`, `isDeltaInstalled`, `installedDeltaVersion`, `loadDeltaModule`, `PREMIUM_MODULES` and the `createDecipheriv` import are gone; `deactivate()` still empties a legacy cache dir. `tests/activation.test.ts` pins the absence. **Never reintroduce a client-side bundle.** If premium code must one day be withheld from the tarball, that is a new design (neutered strings in `dist/`, canonical rubric on the server, CLAUDE.md rule 3), not a revival of this one.
+- Server side, `server/src/delta-files.ts` (LOCK `[DELTA-MANIFEST-IS-THE-LIST]`, same day) made the served file list follow `gen-delta`'s manifest instead of a second hardcoded list. Kept until the server drops the field; harmless either way.
 
 ### Audit log (`src/audit.ts`)
 - **Hash-chained JSONL** at `~/.contextengine/audit.log`. Each record `{ts, event, actor, payload, prev_hash, hash}`. Genesis hash is 64 zeros.
@@ -334,7 +333,7 @@ code references already point at it._
 - **Chunking** — Markdown-aware section splitting with 4-line overlap at boundaries
 
 ### Security & Cryptography
-- **AES-256-CBC** — delta module encryption (key = SHA-256 of licenseKey + machineId)
+- **AES-256-CBC** — server-side only now, encrypts the legacy `delta` field nobody reads (LOCK `[DELTA-RETIRED]`)
 - **Machine Fingerprinting** — SHA-256 hash of platform, arch, homedir, username
 - **Express Security** — Helmet headers, CORS whitelist, rate limiting (express-rate-limit)
 - **Input Validation** — license format regex, charset/length checks on all user input
@@ -391,7 +390,7 @@ code references already point at it._
 - **Append-only store** — learnings in `~/.contextengine/learnings.json`, never overwritten
 - **Activation gate** — premium tools check license before execution
 - **Offline grace** — 7-day window without heartbeat before lockout
-- **Delta modules** — premium code extracted, AES-encrypted per-machine, decrypted at runtime
+- **Delta modules** — retired client-side 2026-08-21; premium code ships in the package behind the licence gate
 - **Dual doc-path resolution** — agent docs are scored wherever a project keeps them: `resolveDocPath()` in `src/agents.ts` checks `.github/` first (Copilot's official read path), repo root second. `contextengine init` writes `SKILLS.md` at the root, so a `.github/`-only lookup scores existing files as "Missing". LOCK `[DOC-PATH-DUAL]`, 7 tests in `tests/scoring.test.ts`.
 
 ### Key Learnings Applied

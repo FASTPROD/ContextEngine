@@ -17,6 +17,8 @@ MCP (Model Context Protocol) server that indexes project documentation and sourc
 
    **Planned hardening (not yet built):** keep the canonical rubric text on the VPS and ship a build whose strings are neutered — meaningless labels that still let the tool compute and run. That obscures intent without pretending the code is hidden. Until that exists, assume everything in `dist/` is public.
 
+   **Client-side delta bundle retired 2026-08-21** (LOCK `[DELTA-RETIRED]` in `src/activation.ts`): it was downloaded on activation and never imported, from its first commit. The gate is the signed licence alone. Do not bring the bundle back; the planned hardening above is the only sanctioned path.
+
    _(Updated 2026-08-14. The previous rule required excluding files that were being published anyway, so it was unenforceable and quietly false for at least three releases.)_
 
 4. **All `exec()` calls must use hardcoded strings** — `agents.ts` and `collectors.ts` use `execSync` for git/docker/pm2 data collection. Never interpolate user input into shell commands.
