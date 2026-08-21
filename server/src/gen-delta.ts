@@ -17,6 +17,8 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { minify } from "terser";
 
+import { deltaModuleName } from "./delta-files.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -110,7 +112,7 @@ async function main(): Promise<void> {
   const manifest = {
     version,
     generatedAt: new Date().toISOString(),
-    modules: modules.map((m) => m.replace(".mjs", "")),
+    modules: modules.map(deltaModuleName),
     moduleFiles: modules,
     obfuscated: true,
   };

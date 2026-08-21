@@ -31,6 +31,7 @@ import {
 } from "./stripe.js";
 import { loadPrivateKey, signLicensePayload } from "./license-sig.js";
 import { createCommunityRulesRouter } from "./community-rules-server.js";
+import { loadDeltaModulesFrom } from "./delta-files.js";
 
 // Load the Ed25519 private key once at startup. Fail loud if missing —
 // never silently degrade to "no signature" mode.
@@ -141,27 +142,14 @@ function encryptModule(
 
 /**
  * Load delta module source files from the delta-modules directory.
- * These are the premium algorithms that get encrypted per-machine.
+ * The file list comes from manifest.json written by gen-delta. [LOCK] [DELTA-MANIFEST-IS-THE-LIST]
  */
 function loadDeltaModules(): Array<{ name: string; content: string }> {
   if (!existsSync(DELTA_DIR)) {
     console.warn(`⚠ Delta directory not found: ${DELTA_DIR}`);
     return [];
   }
-
-  const modules: Array<{ name: string; content: string }> = [];
-  const files = ["agents.mjs", "collectors.mjs", "search-adv.mjs"];
-
-  for (const file of files) {
-    const filePath = join(DELTA_DIR, file);
-    if (existsSync(filePath)) {
-      const content = readFileSync(filePath, "utf-8");
-      const name = file.replace(".mjs", "");
-      modules.push({ name, content });
-    }
-  }
-
-  return modules;
+  return loadDeltaModulesFrom(DELTA_DIR);
 }
 
 // ---------------------------------------------------------------------------
