@@ -453,7 +453,7 @@ Rates and thresholds for `contextengine cost`, the MCP tool `agent_cost`, and th
 `context_burn` / `fanout_without_canary` detectors. CLI and MCP tool share one renderer,
 `src/cost-report.ts` (`buildCostReport()` returns `{text, json}`; LOCK
 `[COST-REPORT-ONE-RENDERER]`, 2026-08-21, the day after the CLI shipped). The MCP tool takes
-`days`, `project`, `session`, `run`, `top`, `json`; it is free, it reads the caller's own
+`days`, `project`, `session`, `run`, `top`, `json`, `policy_dir` (the repo whose policy.json supplies thresholds; the daemon's cwd is `/Users/yan` under launchd, not a repo, so without it the report uses built-in defaults and says so on its `thresholds:` line); it is free, it reads the caller's own
 transcripts under `~/.claude/projects`, nothing leaves the machine. Rates are dollars per million tokens and live here rather
 than in code, so they can be corrected without a release and can describe models the build has
 never heard of (`[PRICING-LIVES-IN-POLICY]`).

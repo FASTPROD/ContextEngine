@@ -43,4 +43,14 @@ describe("cost report, one renderer for CLI and MCP", () => {
     const manifest = readFileSync(join(root, "src", "tools-manifest.ts"), "utf-8");
     expect(manifest).toContain('"agent_cost"');
   });
+
+  it("thresholds follow the directory passed, not the process cwd", () => {
+    const here = buildCostReport({ days: 1 }, root);
+    const nowhere = buildCostReport({ days: 1 }, "/");
+    if (here.runs > 0) {
+      // This repo has an agent_cost block in .contextengine/policy.json; "/" has none.
+      expect(here.text).toContain("thresholds: .contextengine/policy.json");
+      expect(nowhere.text).toContain("built-in defaults");
+    }
+  });
 });

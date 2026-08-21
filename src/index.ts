@@ -845,9 +845,12 @@ server.tool(
     run: z.string().optional().describe("Filter by run id (wf_... or task group id)"),
     top: z.number().int().positive().max(50).optional().describe("How many runs to list (default 10)"),
     json: z.boolean().optional().describe("Return the structured JSON report instead of the text one"),
+    policy_dir: z.string().optional().describe("Absolute path of the repo whose .contextengine/policy.json supplies agent_cost thresholds and rates. Default: the MCP server's working directory, which under launchd is the home dir, not a repo; the report names which source it used on its 'thresholds:' line"),
   },
-  async ({ days, project, session, run, top, json }) => {
-    const report = buildCostReport({ days, project, session, run, top });
+  async ({ days, project, session, run, top, json, policy_dir }) => {
+    // [COST-POLICY-DIR-IS-EXPLICIT] — the daemon's cwd is not a project. Without this the MCP
+    // surface silently priced with built-in defaults while the CLI in the repo read policy.json.
+    const report = buildCostReport({ days, project, session, run, top }, policy_dir || process.cwd());
     if (json && report.json) return respond("agent_cost", JSON.stringify(report.json, null, 2));
     return respond("agent_cost", report.text);
   }
