@@ -1466,7 +1466,9 @@ async function main() {
   // 3a. Audit log auto-rotation. Deferred so the first requests are answered before the
   // synchronous verify + rewrite (a few seconds on a 500k-record chain) blocks the loop.
   // [LOCK] [AUTO-ROTATE-HYSTERESIS-AND-ONE-RUNNER]
-  setTimeout(() => {
+  // Measured 2026-08-21: ~13k records/hour on this machine, so the 100k trigger is hours
+  // away, not a day; a server that is never restarted must still rotate. Hourly recheck.
+  const runAutoRotate = () => {
     try {
       const o = autoRotateAuditLog();
       if (o.action === "rotated" || o.action === "refused" || o.action === "error" || o.action === "in_progress") {
@@ -1475,7 +1477,9 @@ async function main() {
     } catch (err) {
       console.error(`[ContextEngine] ⚠ audit auto-rotate failed: ${(err as Error).message}`);
     }
-  }, 3_000).unref();
+  };
+  setTimeout(runAutoRotate, 3_000).unref();
+  setInterval(runAutoRotate, 60 * 60_000).unref();
 
   // 3b. Write server-meta.json so the VS Code extension can read tool count
   // without needing an active MCP session. Single source of truth =
