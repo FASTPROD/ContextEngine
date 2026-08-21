@@ -10,3 +10,12 @@ password: ""
 # the password field is required
 password_min_length = 12
 PasswordResetToken = generate_token()
+hashed_password = get_password_hash(payload.password)
+if not verify_password(form.password, user.hashed_password):
+const [password, setPassword] = useState("")
+<input type="password" name="new_password" autocomplete="new-password" />
+passwordController = TextEditingController();
+final password = passwordController.text;
+obscureText: true, // password field
+current_password: str = Field(min_length=8)
+<Route path="/reset-password" />

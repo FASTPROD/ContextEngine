@@ -112,7 +112,7 @@ SECRET_PATTERNS=(
   #      placeholder conventions that docs legitimately use. Change any of them only
   #      together with the fixtures, and only when scripts/test-secret-scan.sh passes.
   '(^|[^a-z])[a-z_]*password\s*[:=]\s*['"'"'"][^'"'"'"]{3,}['"'"'"]:::Hardcoded password (quoted value)'
-  '(^|[^a-z])[a-z_]*password\s*[:=]\s*[^[:space:]'"'"'"<$({\[][^[:space:]]{5,}:::Hardcoded password (bare value)'
+  '(^|[^a-z])[a-z_]*password\s*[:=]\s*[^[:space:]'"'"'"<$({\[][^[:space:](.\[]{4,}([[:space:]]|$|[,;]):::Hardcoded password (bare value)'
   '["'"'"']?password[a-z_]*["'"'"']?\s*:\s*["'"'"'][^"'"'"']{6,}["'"'"']:::Hardcoded password (JSON/YAML key)'
   '\|\s*password\s*\|\s*`?[^|<[:space:]`][^|]*\|:::Hardcoded password (markdown table cell)'
 )
