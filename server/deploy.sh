@@ -1,7 +1,7 @@
 #!/bin/bash
-# OpsContext Activation Server — Production Deploy to Gandi VPS
+# OpsContext Activation Server, Production Deploy to crowlr2 (OVH)
 # Run from your Mac: ./server/deploy.sh
-# Requires: SSH access to admin@92.243.24.157
+# Requires: SSH access to debian@137.74.175.123 (alias crowlr2)
 #
 # Hardened 2026-06-11 after a production path bug + bare-pm2 issue:
 #   - Builds LOCALLY (server-side tsc was failing on missing devDeps)
@@ -19,11 +19,21 @@ set -euo pipefail
 # ===================================================================
 # Config
 # ===================================================================
-SERVER="admin@92.243.24.157"
+# [LOCKED] [CROWLR2-TARGET] 2026-08-21
+# [NEVER] point SERVER back at admin@92.243.24.157 (old Gandi) or reuse the
+#         /usr/local/node-v18 pm2 path.
+# WHY: activation server migrated to crowlr2 on 2026-08-20 (DNS api.compr.ch
+#      -> 137.74.175.123, pm2 contextengine-api online, licenses.db live there).
+#      Old Gandi is frozen, 30-day grace; a deploy there would diverge licenses.db
+#      from production. Verified from the Mac 2026-08-21: health 200 from
+#      137.74.175.123, pm2 at /usr/bin/pm2, node v20.20.2, dirs owned debian.
+# FIX: SERVER/PM2_BIN below are the only truth. Box hosts 13 sites: rsync
+#      targets must stay under /var/www/contextengine-* (never a bare /var/www).
+SERVER="debian@137.74.175.123"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
 REMOTE_DIR="/var/www/contextengine-server"
 REMOTE_CE_DIST="/var/www/contextengine-dist"
-PM2_BIN="/usr/local/node-v18.19.0-linux-x64/bin/pm2"
+PM2_BIN="/usr/bin/pm2"
 PM2_PROCESS_NAME="contextengine-api"
 HEALTH_URL="https://api.compr.ch/contextengine/health"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
