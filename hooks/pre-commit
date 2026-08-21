@@ -83,25 +83,48 @@ fi
 
 # Layer 3: CE inline patterns (always)
 SECRET_PATTERNS=(
-  'sshpass -p [^*"$]|Hardcoded sshpass password (use SSHPASS env var)'
-  'whsec_[A-Za-z0-9]{20,}|Stripe webhook secret (use .env)'
-  'sk_live_[A-Za-z0-9]{20,}|Stripe live secret key (use .env)'
-  'sk_test_[A-Za-z0-9]{20,}|Stripe test secret key (use .env)'
-  'AIzaSy[A-Za-z0-9_-]{30,}|Google API key (use .env)'
-  'gsk_[A-Za-z0-9]{20,}|Groq API key (use .env)'
-  'ghp_[A-Za-z0-9]{36,}|GitHub personal access token (use .env)'
-  'glpat-[A-Za-z0-9_-]{20,}|GitLab personal access token (use .env)'
-  'xoxb-[0-9]{10,}|Slack bot token (use .env)'
-  'xoxp-[0-9]{10,}|Slack user token (use .env)'
-  'AKIA[A-Z0-9]{16}|AWS access key ID (use .env)'
-  'pk_live_[A-Za-z0-9]{20,}|Stripe publishable live key (use .env)'
-  'SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}|SendGrid API key (use .env)'
-  'Cr0wlr_Pr0d_[A-Za-z0-9!@#$%^&*_]+|Production DB password (use .copilot-credentials.md)'
-  'C0ldEm@il_[A-Za-z0-9!@#$%^&*_]+|COLDemail DB password (use .copilot-credentials.md)'
-  'password.*=.*[A-Za-z0-9!@#$%^&*]{8,}|Possible hardcoded password in assignment'
+  'sshpass -p [^*"$]:::Hardcoded sshpass password (use SSHPASS env var)'
+  'whsec_[A-Za-z0-9]{20,}:::Stripe webhook secret (use .env)'
+  'sk_live_[A-Za-z0-9]{20,}:::Stripe live secret key (use .env)'
+  'sk_test_[A-Za-z0-9]{20,}:::Stripe test secret key (use .env)'
+  'AIzaSy[A-Za-z0-9_-]{30,}:::Google API key (use .env)'
+  'gsk_[A-Za-z0-9]{20,}:::Groq API key (use .env)'
+  'ghp_[A-Za-z0-9]{36,}:::GitHub personal access token (use .env)'
+  'glpat-[A-Za-z0-9_-]{20,}:::GitLab personal access token (use .env)'
+  'xoxb-[0-9]{10,}:::Slack bot token (use .env)'
+  'xoxp-[0-9]{10,}:::Slack user token (use .env)'
+  'AKIA[A-Z0-9]{16}:::AWS access key ID (use .env)'
+  'pk_live_[A-Za-z0-9]{20,}:::Stripe publishable live key (use .env)'
+  'SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}:::SendGrid API key (use .env)'
+  'Cr0wlr_Pr0d_[A-Za-z0-9!@#$%^&*_]+:::Production DB password (use .copilot-credentials.md)'
+  'C0ldEm@il_[A-Za-z0-9!@#$%^&*_]+:::COLDemail DB password (use .copilot-credentials.md)'
+  # [LOCKED] [PASSWORD-PATTERNS-ARE-VALUE-INDEPENDENT] - 2026-08-20
+  # [NEVER] reduce these to a single 'password.*=' shape, and [NEVER] require 8
+  #         contiguous value characters.
+  # WHY: the previous pattern was `password.*=.*[chars]{8,}`. Run against a fixture bench
+  #      (scripts/test-secret-scan.sh) it missed 6 of 8 lines it should block, including
+  #      `PASSWORD = "abc" + chr(33) + "def"`, the exact line that walked a live sudo
+  #      password through this gate in agent.invoq.me.ai ccf97fa: the `+ chr(33) +`
+  #      breaks the 8-contiguous-character run. It also missed every colon form
+  #      (YAML, JSON, docs) and every markdown table cell, and it BLOCKED
+  #      `password = os.environ["DB_PASSWORD"]`, which is the correct practice.
+  # FIX: three value-independent shapes, a quoted-value form, and an allowlist for the
+  #      placeholder conventions that docs legitimately use. Change any of them only
+  #      together with the fixtures, and only when scripts/test-secret-scan.sh passes.
+  '(^|[^a-z])[a-z_]*password\s*[:=]\s*['"'"'"][^'"'"'"]{3,}['"'"'"]:::Hardcoded password (quoted value)'
+  '(^|[^a-z])[a-z_]*password\s*[:=]\s*[^[:space:]'"'"'"<$({\[][^[:space:]]{5,}:::Hardcoded password (bare value)'
+  '["'"'"']?password[a-z_]*["'"'"']?\s*:\s*["'"'"'][^"'"'"']{6,}["'"'"']:::Hardcoded password (JSON/YAML key)'
+  '\|\s*password\s*\|\s*`?[^|<[:space:]`][^|]*\|:::Hardcoded password (markdown table cell)'
 )
 
-SKIP_FILES='(\.copilot-credentials\.md|\.env$|\.env\.local|\.env\.example|pre-commit$)'
+# Lines matching this are never reported, whatever the patterns say. Keep it to
+# placeholder conventions, never to specific values.
+SECRET_ALLOWLIST='(<see [^>]+>|<hidden>|<redacted>|<your[^>]*>|<placeholder>|\$\{[A-Z_]+\}|os\.environ|process\.env|getenv\(|see credentials|see \.copilot-credentials)'
+
+# tests/fixtures/secret-scan/ holds deliberately fake secrets that this scanner must
+# block; exempting it is the one legitimate use of this list. Every entry in there is
+# a synthetic string chosen for the bench, never a real value.
+SKIP_FILES='(\.copilot-credentials\.md|\.env$|\.env\.local|\.env\.example|pre-commit$|tests/fixtures/secret-scan/)'
 STAGED_DIFF=$(git diff --cached --diff-filter=ACMR -U0 2>/dev/null)
 STAGED_FILE_LIST=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
@@ -128,8 +151,8 @@ if [[ -n "$STAGED_DIFF" ]]; then
   done <<< "$STAGED_DIFF"
 
   for entry in "${SECRET_PATTERNS[@]}"; do
-    PATTERN="${entry%%|*}"
-    DESCRIPTION="${entry##*|}"
+    PATTERN="${entry%%:::*}"
+    DESCRIPTION="${entry##*:::}"
     # [LOCKED] [SECRET_SCAN_CASE_INSENSITIVE] - 2026-08-20
     # [NEVER] drop the -i on this grep.
     # WHY: case-sensitive, the generic 'password.*=' pattern let
@@ -138,7 +161,7 @@ if [[ -n "$STAGED_DIFF" ]]; then
     #      The gap was deployed identically in 25 repos.
     # FIX: -iE. Every pattern in SECRET_PATTERNS is either a fixed prefix (sk_live_, AKIA,
     #      ghp_) where case does not matter, or a word (password) where it must not.
-    MATCHES=$(echo "$FILTERED_DIFF" | grep -E '^\+[^+]' | grep -iE "$PATTERN" 2>/dev/null)
+    MATCHES=$(echo "$FILTERED_DIFF" | grep -E '^\+[^+]' | grep -iE "$PATTERN" 2>/dev/null | grep -viE "$SECRET_ALLOWLIST" 2>/dev/null)
     if [[ -n "$MATCHES" ]]; then
       ((SECRET_VIOLATIONS++))
       SECRET_DETAILS+="  🔑 $DESCRIPTION\n"

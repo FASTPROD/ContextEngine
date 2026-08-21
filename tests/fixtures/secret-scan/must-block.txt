@@ -1,0 +1,8 @@
+password = "Tr0ub4dor&3"
+PASSWORD = "abc" + chr(33) + "def"
+db_password: Sup3rS3cret!
+  password: "hunter22"
+"password": "n0tS0Secret",
+admin_password=Xk9#mPq2vL
+| password | Tr0ub4dor&3 |
+| Password | `P@ssw0rd2026` |
