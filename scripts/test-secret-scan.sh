@@ -10,6 +10,12 @@ fi
 set -u
 cd "$(dirname "$0")/.."
 HOOK=hooks/pre-commit
+# [NO-HEX-ESCAPES-IN-ANY-PATTERN]: a \xNN escape is a pattern that works on one shell only.
+if grep -nE '\\x[0-9A-Fa-f]{2}' "$HOOK" | grep -vE '^\s*[0-9]+:\s*#' | grep -q .; then
+  echo "FAIL: hex escape found in $HOOK (see [NO-HEX-ESCAPES-IN-ANY-PATTERN]):"
+  grep -nE '\\x[0-9A-Fa-f]{2}' "$HOOK" | grep -vE '^\s*[0-9]+:\s*#'
+  exit 1
+fi
 # Extract the patterns array exactly as the hook defines it.
 eval "$(sed -n '/^SECRET_PATTERNS=(/,/^)/p' "$HOOK")"
 # Extract the allowlist if the hook defines one.

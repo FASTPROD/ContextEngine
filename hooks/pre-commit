@@ -117,6 +117,17 @@ SECRET_PATTERNS=(
   '\|\s*password\s*\|\s*`?[^|<[:space:]`][^|]*\|:::Hardcoded password (markdown table cell)'
 )
 
+# [LOCKED] [NO-HEX-ESCAPES-IN-ANY-PATTERN] - 2026-08-21
+# [NEVER] write \x27, \x22 or any \xNN escape in SECRET_PATTERNS or SECRET_ALLOWLIST.
+#         Use a literal character, and close/reopen the single quote for an apostrophe.
+# WHY: grep -E does not interpret \xNN. Under zsh the escape happened to match, under
+#      bash it silently matched nothing, so a pattern could pass the bench on one shell
+#      and be dead on the other. This bug was fixed once on 2026-08-20 in the value
+#      patterns, then REINTRODUCED the same day in this allowlist, and the bench stayed
+#      green because it only exercised double quotes. A fix that is not locked is a fix
+#      that comes back.
+# FIX: scripts/test-secret-scan.sh now runs under both shells and requires agreement,
+#      and it fails if a \x escape appears anywhere in the hook.
 # Lines matching this are never reported, whatever the patterns say. Keep it to
 # placeholder conventions, never to specific values.
 SECRET_ALLOWLIST='(<see [^>]+>|<hidden>|<redacted>|<your[^>]*>|<placeholder>|\$\{[A-Z_]+\}|os\.environ|process\.env|getenv\(|see credentials|see \.copilot-credentials|[:=][[:space:]]*['"'"'"]?(\.\.\.+|\*{3,}|x{3,}|REDACTED|CHANGEME|changeme|xxx+)['"'"'"]?)'
