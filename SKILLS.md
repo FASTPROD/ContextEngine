@@ -153,7 +153,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 - **Deploy runbook**: `docs/deploy/ED25519_MIGRATION.md` covers private-key transfer to VPS, server deploy, live verification, rollback, and flag-day plan for retiring legacy-signature acceptance.
 - **Adversarial test coverage** in `tests/license-sig.test.ts` pins the exact privilege-escalation scenarios the 2026-06 audit named: forged enterprise license without signature → rejected; guessed-zero signature → rejected; pro license with plan field rewritten after signing → rejected.
 - **🔒 LOCK `[DELTA-RETIRED]` (2026-08-21)**, replaces `[DELTA-VERSION-PIN]` (2026-08-14). From `0f12967` (2026-02-20) through 2.5.3 the client fetched an encrypted bundle on activation, cached it at `~/.contextengine/delta/`, and never imported it: `loadDeltaModule()` had no caller, `index.ts` and `cli.ts` import `agents.js` / `search.js` / `firewall.js` statically (this section said so on 2026-08-14, under "Load path is still unproven"). Meanwhile `gateCheck()` refused the PRO tools when that unused cache was missing, and the stale-cache guard existed only to protect a load that never happened. Retired on Yan's decision, SESSION_23: `installDelta`, `isDeltaInstalled`, `installedDeltaVersion`, `loadDeltaModule`, `PREMIUM_MODULES` and the `createDecipheriv` import are gone; `deactivate()` still empties a legacy cache dir. `tests/activation.test.ts` pins the absence. **Never reintroduce a client-side bundle.** If premium code must one day be withheld from the tarball, that is a new design (neutered strings in `dist/`, canonical rubric on the server, CLAUDE.md rule 3), not a revival of this one.
-- Server side, `server/src/delta-files.ts` (LOCK `[DELTA-MANIFEST-IS-THE-LIST]`, same day) made the served file list follow `gen-delta`'s manifest instead of a second hardcoded list. Kept until the server drops the field; harmless either way.
+- Server side, `server/src/delta-files.ts` (LOCK `[DELTA-MANIFEST-IS-THE-LIST]`, same day) made the served file list follow `gen-delta`'s manifest instead of a second hardcoded list. Server side retired 2026-08-21 (LOCK `[DELTA-RETIRED-SERVER]`, `server/src/server.ts`): no delta loading, no `gen-delta`, `deltaVersion` is the constant `retired` in the signed payload.
 
 ### Audit log (`src/audit.ts`)
 - **Hash-chained JSONL** at `~/.contextengine/audit.log`. Each record `{ts, event, actor, payload, prev_hash, hash}`. Genesis hash is 64 zeros.
@@ -366,8 +366,8 @@ code references already point at it._
 ### Deploy Automation
 - **Root `deploy.sh`** — unified script: `npm` (publish), `server` (VPS rsync + PM2), `all`
 - **VPS auth** — sshpass password-based SSH (key passphrase lost)
-- **rsync excludes** — `node_modules/`, `data/`, `delta-modules/` preserved on server
-- **Post-deploy** — `npm install` + `npx tsc` + gen-delta on VPS, PM2 restart
+- **rsync excludes** — `node_modules/`, `data/` preserved on server
+- **Post-deploy** — `npm install` on VPS (compiled locally), PM2 restart
 
 ### CLI Capabilities (v1.16.0)
 - **15 subcommands** — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `save-session`, `load-session`, `list-sessions`, `end-session`, `import-learnings`, `audit`, `activate`, `deactivate`, `status`

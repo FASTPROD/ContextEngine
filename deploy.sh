@@ -29,9 +29,10 @@ deploy_server() {
   # FIX: use the ed25519 key (~/.ssh/config Host gandi). sudo on the remote still needs
   #      the password; that is a separate mechanism and is unaffected.
   SSH_OPTS="-o StrictHostKeyChecking=no"
-  SERVER="admin@92.243.24.157"
+  # [LOCK] [CROWLR2-TARGET] (server/deploy.sh): activation server lives on crowlr2
+  # since 2026-08-20. Old Gandi admin@92.243.24.157 is frozen, never deploy there.
+  SERVER="debian@137.74.175.123"
   SERVER_DIR="/var/www/contextengine-server"
-  DIST_DIR="/var/www/contextengine-dist"
 
   # Sync server files
   #
@@ -99,13 +100,7 @@ deploy_server() {
     -e "ssh $SSH_OPTS" \
     server/dist/ "$SERVER:$SERVER_DIR/dist/"
 
-  # Sync compiled dist (for gen-delta)
-  echo "📦 Syncing dist/ for delta generation..."
-  rsync -avz \
-    -e "ssh $SSH_OPTS" \
-    dist/ "$SERVER:$DIST_DIR/"
-
-  # Install, build, gen-delta, restart
+  # Install, build, restart
   #
   # [LOCKED] [REMOTE-BUILD-NEEDS-DEV-DEPS-AND-AN-ABSOLUTE-PM2] - 2026-08-20
   # [NEVER] call bare `pm2` over ssh, and [NEVER] pair `npm install --production`
@@ -121,6 +116,8 @@ deploy_server() {
   #         deprecated npm package named `tsc` instead of TypeScript.
   # FIX: install with dev deps, compile with the local tsc binary, and resolve pm2
   #      explicitly, failing loudly if it is missing rather than skipping the restart.
+  # gen-delta removed 2026-08-21: [LOCK] [DELTA-RETIRED-SERVER] in server/src/server.ts.
+  # The STAMP-THE-DELTA-MANIFEST lock below is kept as history; its call site is gone.
   # [LOCKED] [STAMP-THE-DELTA-MANIFEST-WITH-THE-REAL-VERSION] - 2026-08-20
   # [NEVER] call gen-delta.js without a version argument.
   # WHY: `const version = process.argv[2] || "1.0.0"`. Called bare, as this script did,
@@ -130,14 +127,12 @@ deploy_server() {
   #      field against the installed package version before loading a delta module, so a
   #      placeholder there means every module is refused once that path is wired.
   # FIX: pass the client package version, which is what these modules are built from.
-  PKG_VERSION=$(node -p "require('./package.json').version")
-  echo "🔧 Building on server (delta version $PKG_VERSION)..."
+  echo "🔧 Restarting on server..."
   ssh $SSH_OPTS "$SERVER" "
     set -eu
     PM2_BIN=\$(command -v pm2 || ls -d /usr/local/node-v*/bin/pm2 2>/dev/null | head -1)
     if [ ! -x \"\$PM2_BIN\" ]; then echo 'pm2 not found on the box'; exit 1; fi
     cd $SERVER_DIR
-    CONTEXTENGINE_DIST=$DIST_DIR node dist/gen-delta.js $PKG_VERSION
     \"\$PM2_BIN\" restart contextengine-api
   "
 

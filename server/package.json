@@ -2,15 +2,14 @@
   "name": "@compr/contextengine-activation-server",
   "version": "1.0.0",
   "private": true,
-  "description": "License activation & delta module server for ContextEngine Pro",
+  "description": "License activation server for ContextEngine Pro",
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch & node --watch dist/server.js",
     "start": "node dist/server.js",
-    "seed": "node dist/seed.js",
-    "gen-delta": "node dist/gen-delta.js"
+    "seed": "node dist/seed.js"
   },
   "dependencies": {
     "@types/nodemailer": "^7.0.11",

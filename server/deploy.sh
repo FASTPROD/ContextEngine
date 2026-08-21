@@ -32,7 +32,6 @@ set -euo pipefail
 SERVER="debian@137.74.175.123"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
 REMOTE_DIR="/var/www/contextengine-server"
-REMOTE_CE_DIST="/var/www/contextengine-dist"
 PM2_BIN="/usr/bin/pm2"
 PM2_PROCESS_NAME="contextengine-api"
 HEALTH_URL="https://api.compr.ch/contextengine/health"
@@ -81,13 +80,6 @@ log "  Local server build..."
   die "Local server build failed — fix before deploying"
 }
 
-# Local main project build (for delta generation)
-log "  Local main project build..."
-(cd "$PROJECT_ROOT" && npm run build > /tmp/deploy-main-build.log 2>&1) || {
-  cat /tmp/deploy-main-build.log >&2
-  die "Local main project build failed"
-}
-
 # Ed25519 private key must be present (it rides along in the rsync below;
 # without it, the server refuses to start)
 if [[ ! -f "$SCRIPT_DIR/.secrets/ed25519-license-private.pem" ]]; then
@@ -131,16 +123,9 @@ log "Phase 1 — rsync to server"
 run rsync -az \
   --exclude='node_modules/' \
   --exclude='data/' \
-  --exclude='delta-modules/' \
   --exclude='.gitignore' \
   -e "ssh -i $SSH_KEY" \
   "$SCRIPT_DIR/" "$SERVER:$REMOTE_DIR/"
-
-# Main project compiled dist for the delta-module generator
-log "  Main project dist for gen-delta..."
-run rsync -az \
-  -e "ssh -i $SSH_KEY" \
-  "$PROJECT_ROOT/dist/" "$SERVER:$REMOTE_CE_DIST/"
 
 # Verify private key landed with correct permissions
 if [[ $DRY_RUN -eq 0 ]]; then
@@ -159,12 +144,7 @@ log "Phase 2 — runtime deps on server"
 
 ssh_run "cd $REMOTE_DIR && npm install --omit=dev --no-audit --no-fund --silent 2>&1 | tail -3"
 
-# ===================================================================
-# Phase 3: Regenerate delta modules (only if main project changed)
-# ===================================================================
-log "Phase 3 — gen-delta"
-
-ssh_run "cd $REMOTE_DIR && mkdir -p delta-modules && CONTEXTENGINE_DIST=$REMOTE_CE_DIST node dist/gen-delta.js 2>&1 | tail -5"
+# Phase 3 (gen-delta) removed 2026-08-21. [LOCK] [DELTA-RETIRED-SERVER] in src/server.ts
 
 # ===================================================================
 # Phase 4: PM2 restart (using FULL path — bare pm2 isn't on non-TTY PATH)
@@ -194,7 +174,7 @@ if [[ $DRY_RUN -eq 0 ]]; then
         log "  ✅ /health reports healthy"
         # Verify the Ed25519 marker is in the PM2 logs
         ED_OK=$(ssh -i "$SSH_KEY" "$SERVER" \
-          "tail -100 /home/admin/.pm2/logs/contextengine-api-out.log | grep -c 'Ed25519 license-signing key loaded'" 2>/dev/null || echo 0)
+          "tail -100 /home/debian/.pm2/logs/contextengine-api-out.log | grep -c 'Ed25519 license-signing key loaded'" 2>/dev/null || echo 0)
         if [[ "$ED_OK" -gt 0 ]]; then
           log "  ✅ Ed25519 key load confirmed in PM2 logs"
         else
@@ -206,7 +186,7 @@ if [[ $DRY_RUN -eq 0 ]]; then
     if [[ $i -eq 6 ]]; then
       warn "Server did not return healthy /health after 30s. Check PM2 logs."
       ssh -i "$SSH_KEY" "$SERVER" \
-        "tail -25 /home/admin/.pm2/logs/contextengine-api-error.log" 2>&1 | tail -15
+        "tail -25 /home/debian/.pm2/logs/contextengine-api-error.log" 2>&1 | tail -15
       die "Deploy verification FAILED. Server may be in a broken state — manual intervention required."
     fi
     log "  (attempt $i — waiting for server...)"

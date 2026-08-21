@@ -2,14 +2,13 @@
  * ContextEngine Activation Server
  *
  * Endpoints:
- *   POST /contextengine/activate               — validate license, return encrypted delta
+ *   POST /contextengine/activate               — validate license, return signed licence
  *   POST /contextengine/heartbeat              — periodic license check
  *   GET  /contextengine/health                 — health check
  *   POST /contextengine/create-checkout-session — Stripe Checkout for purchasing a plan
  *   POST /contextengine/webhook                — Stripe webhook (auto-provisions license)
  *
  * Database: SQLite (licenses.db) — simple, no external deps
- * Delta: Pre-built encrypted module bundles in ./delta-modules/
  */
 
 import express from "express";
@@ -17,7 +16,6 @@ import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import Database from "better-sqlite3";
-import { createHash, createCipheriv, randomBytes } from "crypto";
 import { existsSync, readFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -31,7 +29,6 @@ import {
 } from "./stripe.js";
 import { loadPrivateKey, signLicensePayload } from "./license-sig.js";
 import { createCommunityRulesRouter } from "./community-rules-server.js";
-import { loadDeltaModulesFrom } from "./delta-files.js";
 
 // Load the Ed25519 private key once at startup. Fail loud if missing —
 // never silently degrade to "no signature" mode.
@@ -46,7 +43,14 @@ const __dirname = dirname(__filename);
 // ---------------------------------------------------------------------------
 const PORT = parseInt(process.env.ACTIVATION_PORT || "8010", 10);
 const DB_PATH = process.env.DB_PATH || join(__dirname, "..", "data", "licenses.db");
-const DELTA_DIR = process.env.DELTA_DIR || join(__dirname, "..", "delta-modules");
+// [LOCKED] [DELTA-RETIRED-SERVER] 2026-08-21
+// [NEVER] reintroduce delta-modules loading, encryption, manifest reads or gen-delta.
+// WHY: the client never imported the bundle (see src/activation.ts [DELTA-RETIRED]); the
+//      server kept shipping ~5 encrypted modules on every activation and returned HTTP 500
+//      when delta-modules/ was absent, so a fresh box without gen-delta could not activate.
+// FIX: deltaVersion stays in the signed payload as a constant so existing clients verify
+//      the signature unchanged. Heartbeat never reports an update.
+const DELTA_VERSION = "retired";
 const ALLOWED_ORIGINS = [
   "https://compr.ch",
   "https://api.compr.ch",
@@ -112,45 +116,6 @@ function initDB(): Database.Database {
 // ---------------------------------------------------------------------------
 // Delta module encryption
 // ---------------------------------------------------------------------------
-
-/**
- * Encrypt a module's source code for a specific license+machine combo.
- * Key derivation: SHA-256(licenseKey + machineId) → AES-256-CBC key
- */
-function encryptModule(
-  content: string,
-  licenseKey: string,
-  machineId: string
-): { payload: string; iv: string; checksum: string } {
-  const derivedKey = createHash("sha256")
-    .update(licenseKey + machineId)
-    .digest();
-
-  const iv = randomBytes(16);
-  const cipher = createCipheriv("aes-256-cbc", derivedKey, iv);
-  let encrypted = cipher.update(content, "utf-8");
-  encrypted = Buffer.concat([encrypted, cipher.final()]);
-
-  const checksum = createHash("sha256").update(content).digest("hex");
-
-  return {
-    payload: encrypted.toString("base64"),
-    iv: iv.toString("hex"),
-    checksum,
-  };
-}
-
-/**
- * Load delta module source files from the delta-modules directory.
- * The file list comes from manifest.json written by gen-delta. [LOCK] [DELTA-MANIFEST-IS-THE-LIST]
- */
-function loadDeltaModules(): Array<{ name: string; content: string }> {
-  if (!existsSync(DELTA_DIR)) {
-    console.warn(`⚠ Delta directory not found: ${DELTA_DIR}`);
-    return [];
-  }
-  return loadDeltaModulesFrom(DELTA_DIR);
-}
 
 // ---------------------------------------------------------------------------
 // Audit logging
@@ -374,40 +339,9 @@ app.post("/contextengine/activate", (req, res) => {
       logAudit(db, "activate_refresh", key, machineId, ip, `Version: ${version}`);
     }
 
-    // 5. Load and encrypt delta modules
-    const deltaModules = loadDeltaModules();
-    if (deltaModules.length === 0) {
-      logAudit(db, "activate_no_delta", key, machineId, ip, "Delta modules not found on server");
-      return res.status(500).json({ success: false, error: "Delta modules unavailable — contact support" });
-    }
+    const deltaVersion = DELTA_VERSION;
 
-    // Use a shared IV for this activation (all modules encrypted together)
-    const iv = randomBytes(16);
-    const derivedKey = createHash("sha256")
-      .update(key + machineId)
-      .digest();
-
-    const encryptedModules = deltaModules.map((mod) => {
-      const cipher = createCipheriv("aes-256-cbc", derivedKey, iv);
-      let encrypted = cipher.update(mod.content, "utf-8");
-      encrypted = Buffer.concat([encrypted, cipher.final()]);
-
-      return {
-        name: mod.name,
-        payload: encrypted.toString("base64"),
-        checksum: createHash("sha256").update(mod.content).digest("hex"),
-      };
-    });
-
-    // 6. Read delta version from manifest
-    const manifestPath = join(DELTA_DIR, "manifest.json");
-    let deltaVersion = "1.0.0";
-    if (existsSync(manifestPath)) {
-      const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-      deltaVersion = manifest.version || deltaVersion;
-    }
-
-    // 7. Generate Ed25519 signature over the canonical license payload.
+    // 5. Generate Ed25519 signature over the canonical license payload.
     //    The client's verifyLicenseSignature() in src/license-sig.ts checks
     //    this with the bundled public key. Pre-Ed25519 SHA-256 hashes are
     //    grandfathered on the client until the documented flag day.
@@ -423,7 +357,7 @@ app.post("/contextengine/activate", (req, res) => {
       PRIVATE_KEY,
     );
 
-    // 8. Return activation response
+    // 6. Return activation response
     const response = {
       success: true,
       license: {
@@ -436,11 +370,6 @@ app.post("/contextengine/activate", (req, res) => {
         lastHeartbeat: new Date().toISOString(),
         deltaVersion,
         signature,
-      },
-      delta: {
-        version: deltaVersion,
-        modules: encryptedModules,
-        iv: iv.toString("hex"),
       },
     };
 
@@ -485,21 +414,12 @@ app.post("/contextengine/heartbeat", (req, res) => {
     // Update heartbeat
     updateHeartbeat.run(deltaVersion || activation.version, license.id, machineId);
 
-    // Check if there's a newer delta version available
-    const manifestPath = join(DELTA_DIR, "manifest.json");
-    let latestDelta = deltaVersion;
-    let updateAvailable = false;
-    if (existsSync(manifestPath)) {
-      const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-      latestDelta = manifest.version;
-      updateAvailable = deltaVersion !== latestDelta;
-    }
-
+    // Delta retired: nothing to update. [LOCK] [DELTA-RETIRED-SERVER]
     return res.json({
       valid: true,
       expiresAt: license.expires_at,
-      updateAvailable,
-      latestDelta,
+      updateAvailable: false,
+      latestDelta: DELTA_VERSION,
     });
   } catch (err) {
     console.error("Heartbeat error:", err);
@@ -574,14 +494,12 @@ if (isStripeEnabled()) {
 // GET /contextengine/health
 // ---------------------------------------------------------------------------
 app.get("/contextengine/health", (_req, res) => {
-  const deltaModules = loadDeltaModules();
   const licenseCount = (db.prepare("SELECT COUNT(*) as count FROM licenses WHERE is_active = 1").get() as any).count;
   const activationCount = (db.prepare("SELECT COUNT(*) as count FROM activations WHERE is_revoked = 0").get() as any).count;
 
   res.json({
     status: "healthy",
     service: "contextengine-activation",
-    deltaModules: deltaModules.length,
     activeLicenses: licenseCount,
     activeActivations: activationCount,
     stripeEnabled: isStripeEnabled(),
@@ -622,11 +540,9 @@ app.get("/contextengine/success", (_req, res) => {
 // Start server
 // ---------------------------------------------------------------------------
 const server = app.listen(PORT, () => {
-  const deltaModules = loadDeltaModules();
   console.log(`🔑 ContextEngine Activation Server`);
   console.log(`   Port: ${PORT}`);
   console.log(`   DB: ${DB_PATH}`);
-  console.log(`   Delta modules: ${deltaModules.length} loaded from ${DELTA_DIR}`);
   console.log(`   Ready.\n`);
 });
 
