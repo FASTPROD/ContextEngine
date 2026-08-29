@@ -34,3 +34,6 @@ password = "CHANGEME"
 password: REDACTED
 password = '...'
 passwd: '***'
+resetPassword: '/resetpassword',
+changePassword: "/change-password"
+forgotPassword: '/forgot-password',

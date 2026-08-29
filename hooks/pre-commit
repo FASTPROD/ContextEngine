@@ -130,7 +130,26 @@ SECRET_PATTERNS=(
 #      and it fails if a \x escape appears anywhere in the hook.
 # Lines matching this are never reported, whatever the patterns say. Keep it to
 # placeholder conventions, never to specific values.
-SECRET_ALLOWLIST='(<see [^>]+>|<hidden>|<redacted>|<your[^>]*>|<placeholder>|\$\{[A-Z_]+\}|os\.environ|process\.env|getenv\(|see credentials|see \.copilot-credentials|[:=][[:space:]]*['"'"'"]?(\.\.\.+|\*{3,}|x{3,}|REDACTED|CHANGEME|changeme|xxx+)['"'"'"]?)'
+#
+# [LOCKED] [ALLOWLIST-ROUTE-PATH-IS-LETTERS-ONLY-NEVER-DIGITS] - 2026-08-29
+# [NEVER] admit a digit to this branch's character class, and [NEVER] drop the leading
+#         slash requirement.
+# WHY: a router table legitimately writes  resetPassword: '/resetpassword'  and the
+#      quoted-value pattern cannot tell that from a credential. Found while forking the
+#      Crowlr app, where this shape blocked every commit touching the route table.
+#      The first draft of this branch was [a-z0-9/_-] and argued that excluding uppercase
+#      kept credentials out. That argument was WRONG and the bench caught it: this
+#      allowlist is applied with `grep -viE`, so -i makes [a-z] match uppercase too and
+#      password: "/Sup3rS3cret" walked straight through. The character class carries the
+#      entire safety burden, so it has to hold up under -i, where only the digit and
+#      symbol exclusions actually mean anything.
+#      Digit-free plus symbol-free plus slash-leading is the real discriminator: every
+#      credential shape this gate exists for (Tr0ub4dor&3, Sup3rS3cret!, Xk9#mPq2vL,
+#      P@ssw0rd2026) carries a digit or a symbol and still blocks. All of those, and the
+#      slash-prefixed variants that defeated the first draft, are must-block fixtures.
+# FIX: keep it anchored to [:=] + quote + slash + letters. A route path needing a digit
+#      is rare enough to be worth a second look; fix the calling code, not this line.
+SECRET_ALLOWLIST='(<see [^>]+>|<hidden>|<redacted>|<your[^>]*>|<placeholder>|\$\{[A-Z_]+\}|os\.environ|process\.env|getenv\(|see credentials|see \.copilot-credentials|[:=][[:space:]]*['"'"'"]?(\.\.\.+|\*{3,}|x{3,}|REDACTED|CHANGEME|changeme|xxx+)['"'"'"]?|[:=][[:space:]]*['"'"'"]/[a-z/_-]*['"'"'"])'
 
 # [LOCKED] [A-STAGED-ENV-FILE-IS-A-VIOLATION-NOT-AN-EXEMPTION] - 2026-08-21
 # [NEVER] put .env, .env.local or the credentials file back in this skip list.
@@ -144,7 +163,21 @@ SECRET_ALLOWLIST='(<see [^>]+>|<hidden>|<redacted>|<your[^>]*>|<placeholder>|\$\
 #      exempting it from content scanning was redundant at best.
 # FIX: exempt only the fixture bench (synthetic secrets by design) and this hook's own
 #      source. .env.example is still scanned: if it holds a real value, that is a leak.
-SKIP_FILES='(pre-commit$|tests/fixtures/secret-scan/)'
+#
+# [LOCKED] [SKIP-LOCALES-IS-DIRECTORY-SCOPED-JSON-ONLY] - 2026-08-29
+# [NEVER] loosen this to *.json, to a bare 'locales', or to any path outside a
+#         locales/ or i18n/ directory.
+# WHY: an i18n dictionary is a list of UI strings, and a job board's dictionary
+#      necessarily contains "password": "mot de passe" seven times over. Those lines are
+#      indistinguishable from a credential by regex, so the gate fired on every commit
+#      touching translations in the Crowlr app. A gate that cries wolf on routine work is
+#      how --no-verify becomes a habit, which costs more than this exemption.
+#      The blind spot is real and bounded: a secret pasted into a translation file would
+#      not be caught here. It is still caught by gitleaks (layer 1) when installed, and
+#      such a file has no reason to hold one.
+# FIX: require the parent directory to be exactly locales/ or i18n/ and the file to be
+#      .json. src/locales/en.json is exempt; config/locales.json and secrets.json are not.
+SKIP_FILES='(pre-commit$|tests/fixtures/secret-scan/|(^|/)(locales|i18n)/[^/]+\.json$)'
 STAGED_DIFF=$(git diff --cached --diff-filter=ACMR -U0 2>/dev/null)
 STAGED_FILE_LIST=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)
 
