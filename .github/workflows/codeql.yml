@@ -11,8 +11,14 @@ name: CodeQL
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   schedule:
     # Mondays 02:00 UTC = 04:00 Europe/Paris. Catches new advisories disclosed
     # since the last push even if the code hasn't changed.
