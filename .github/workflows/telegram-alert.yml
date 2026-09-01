@@ -1,0 +1,61 @@
+name: Telegram alert
+
+# Telegram message when a watched workflow FAILS. Added 2026-09-01 (owner GO).
+#
+# WHY a separate workflow instead of a step inside each pipeline: this file can
+# never break a green build. It observes via workflow_run and touches nothing.
+#
+# WHY the `workflows:` list is explicit: GitHub's docs do not state that
+# omitting the key covers every workflow, so it is enumerated rather than
+# guessed. ADD NEW WORKFLOW NAMES HERE BY HAND, matching their `name:` exactly
+# (punctuation included) or the alert silently never fires for them.
+#
+# Untrusted values (workflow name, branch, commit title) are passed through env
+# and never interpolated into the shell, to avoid script injection.
+#
+# Secrets required on this repo (FASTPROD is a user account, so there are no
+# org-wide secrets): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID. Same bot as the
+# Uptime Kuma alerts. Set them with scripts/set-telegram-secrets.sh in
+# admin.CROWLR. If a secret is missing this job fails loudly rather than
+# staying silent.
+#
+# workflow_dispatch is kept so the wiring can be tested without breaking CI.
+
+on:
+  workflow_run:
+    workflows: ["CI", "CodeQL", "Doc Freshness"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  notify:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Telegram message
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WF_TITLE: ${{ github.event.workflow_run.display_title }}
+          WF_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -u
+          if [ -z "$TOKEN" ] || [ -z "$CHAT" ]; then
+            echo "::error::TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set on this repo"
+            exit 1
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            TEXT=$(printf '[test] Telegram CI alerts are wired for %s.' "$REPO")
+          else
+            TEXT=$(printf 'CI FAILED: %s\nworkflow: %s\nbranch: %s\ncommit: %s\n%s' \
+              "$REPO" "$WF_NAME" "$WF_BRANCH" "$WF_TITLE" "$WF_URL")
+          fi
+          curl -sS --fail -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" \
+            -d chat_id="$CHAT" --data-urlencode "text=$TEXT" -o /dev/null
+          echo "Telegram alert sent for $REPO"
