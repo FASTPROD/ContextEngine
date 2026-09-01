@@ -493,3 +493,13 @@ as a floor.
 ## 2026-09-01: CI failures alert on Telegram
 
 `.github/workflows/telegram-alert.yml` sends a Telegram message when a watched workflow fails. It is a separate `workflow_run` watcher, so it cannot break the pipelines it observes. **The watched workflow names are listed explicitly in that file: add a new workflow name there by hand, or it will never alert for it** (GitHub does not document that omitting the list covers everything). Secrets `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` are the same bot that Uptime Kuma uses; they are set fleet-wide by `admin.CROWLR/scripts/set-telegram-secrets.sh` (check-only by default). If a secret is missing the job fails loudly rather than staying silent.
+
+## 2026-09-01: two gotchas in this repo's own CI
+
+1. **The Doc Freshness gate checks BOTH `SKILLS.md` and `SCORE.md`** against an
+   8h threshold. Updating only SKILLS.md in a commit turns CI red on SCORE.md.
+   Update both, or expect a red pipeline (and now a Telegram alert).
+2. **`npx @compr/opscontext-mcp score` does NOT work from inside this repo**
+   (`sh: opscontext: command not found`: the local package shadows the
+   published bin and its bin is not linked). Use the repo's own build:
+   `node dist/cli.js score`, which writes SCORE.md in place.
