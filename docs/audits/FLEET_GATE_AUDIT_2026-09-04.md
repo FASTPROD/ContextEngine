@@ -133,9 +133,10 @@ no gate at all, which is a different problem from having the wrong one.
 Two fleet-level fixes are worth more than any single migration, and neither is a policy
 file:
 
-- Put the CLI where the hook's own PATH can find it (a symlink into `/usr/local/bin`),
-  so the policy path cannot degrade silently. Better: make the hook say so when
-  `HAS_POLICY` is true and `CE_CLI` is empty, instead of falling through quietly.
+- Put the CLI where the hook's own PATH can find it, **as a shim and never as a bare
+  symlink** - see the update below, where a symlink was tried and made things worse.
+  DONE 2026-09-04. Still worth doing on top: make the hook say so when `HAS_POLICY` is
+  true and `CE_CLI` is empty, instead of falling through quietly.
 - Run `scripts/sync-hooks.sh` (check mode) on a schedule, or from CI, and let it fail.
   A drift report nobody runs is the same shape as the disconnected `rule-parity`
   checker this repo already fixed once.
@@ -155,3 +156,73 @@ file:
   history actually used `--no-verify` (git records no such marker).
 - Repo scope was `~/Projects/*`, `~/COMPR`, `~/FASTPROD`. A repo outside those three
   locations was not seen.
+
+
+---
+
+## Update, same evening: the CLI fix was fired for real, and the first attempt was wrong
+
+Recommendation 1 above said "symlink the CLI into a directory the hook's PATH already
+carries". That was tried at 19:56 and **made the fleet worse for six minutes**, which
+only surfaced because the symlink was tested the way the hook actually runs rather than
+from an interactive shell.
+
+`/usr/local/bin` is not writable without sudo, so the symlink went into
+`/opt/homebrew/bin`, which the hook also hardcodes. The CLI then resolved - and could not
+start. Its shebang is `#!/usr/bin/env node`, and `node` lives only under nvm, which is
+not on the hook's PATH:
+
+```
+$ env -i HOME=$HOME PATH="/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin" \
+    /bin/zsh -c 'contextengine hook secret-scan; echo exit=$?'
+env: node: No such file or directory
+exit=127
+```
+
+The hook reads a non-zero exit from `"$CE_CLI" hook secret-scan` as a policy failure and
+`exit 1`. So the symlink converted the **silent downgrade** on `invoc.io` and
+`ContextEngine` into a **hard block on every commit** in any context without nvm on PATH.
+
+Fixed by shipping the interpreter with the CLI: `scripts/contextengine-shim.sh`, installed
+to `/opt/homebrew/bin/contextengine`, carrying LOCK
+`[HOOK_CLI_NEEDS_ITS_INTERPRETER_NOT_JUST_ITS_PATH]`. Verified under the hook's exact
+minimal PATH: `--version`, `hook secret-scan` and `hook doc-coverage` all exit 0, and the
+interactive shell is unchanged.
+
+**This closes finding 2 properly rather than by luck.** Because the hook hardcodes
+`/opt/homebrew/bin`, a shim there is reachable whatever PATH the caller had, so the policy
+path can no longer degrade to the timer without anyone noticing.
+
+## The migration was proven in a throwaway repo before any real repo was touched
+
+A scratch git repo, the fleet's actual `pre-commit` (hash `5e54f088`, copied from
+`FC_project`), the three docs present and backdated three days:
+
+| case | staged | policy | result |
+|---|---|---|---|
+| 1 | one `.ts` change | none | **blocked**, exit 1, "COMMIT BLOCKED - update docs first" |
+| 2 | same change | minimal `policy.json` | **passes**, exit 0 |
+| 3 | a hardcoded-password line (one of the hook's own must-block fixtures) | minimal `policy.json` | **blocked**, exit 1, secret scanner |
+| 4 | one `.ts` change, PATH stripped to `/usr/bin:/bin` | minimal `policy.json` | **passes**, exit 0 |
+
+The minimal policy is three keys:
+
+```json
+{ "version": 1, "secret_patterns": [], "doc_coverage": [] }
+```
+
+Writing this table up is itself a fifth case: the first attempt to commit this
+document was refused, because the fixture was quoted here verbatim. Case 3 is the one
+that matters for safety: the secret scanner runs in PHASE 0, **before**
+the policy branch, so a minimal policy gives up none of it. Case 4 is the shim proving
+itself - even with the caller's PATH stripped to the bone, the hook still finds the CLI.
+
+So a first migration is: **one new file, blocks strictly less than that repo does today,
+gives up no secret scanning, and reverts with `rm`.** Also checked: no repo outside
+ContextEngine has a `commit-msg` hook, so a policy file cannot start enforcing
+commit-message rules on anyone.
+
+**Still not done, and waiting on Yan:** no repo has been migrated. `admin.CROWLR` is the
+proposed first one (clean tree, idle since 2026-09-01, 89 code files in 30 days), because
+`FC_project` and `invocme-odoo-connector` both have live work in them tonight and a gate
+change does not belong in an occupied checkout.
