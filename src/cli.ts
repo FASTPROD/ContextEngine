@@ -692,6 +692,7 @@ import {
 } from "./agents.js";
 import {
   listLearnings,
+  parseSince,
   learningsToChunks,
   learningsStats,
   formatLearnings,
@@ -885,12 +886,30 @@ async function cliListProjects(): Promise<void> {
   console.log(`\n${text}`);
 }
 
-async function cliListLearnings(category?: string): Promise<void> {
+async function cliListLearnings(args: string[]): Promise<void> {
+  // list-learnings [category] [--since today|yesterday|ISO]. [LOCK] [LEARNINGS-LIST-SHOWS-CREATED]
+  let category: string | undefined;
+  let sinceSpec: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--since") {
+      sinceSpec = args[i + 1];
+      if (!sinceSpec) { console.error("--since needs a value: today, yesterday, or an ISO date"); process.exit(1); }
+      i++;
+    } else if (!category) {
+      category = args[i];
+    }
+  }
+  let since: Date | undefined;
+  if (sinceSpec) {
+    const parsed = parseSince(sinceSpec);
+    if (!parsed) { console.error(`--since "${sinceSpec}" is not today, yesterday, or an ISO date. Refusing to answer with a zero.`); process.exit(1); }
+    since = parsed;
+  }
   // Project-scoped: only show learnings for workspace projects + universal
   const projectDirs = loadProjectDirs();
   const projectNames = projectDirs.map((d) => d.name);
   const learnings = listLearnings(category, projectNames);
-  const text = formatLearnings(learnings);
+  const text = formatLearnings(learnings, { since, sinceSpec });
   console.log(`\n${text}`);
 }
 
@@ -2627,7 +2646,8 @@ Usage:
   contextengine search <query> [-n N]  Search indexed knowledge (default: top 5)
   contextengine list-sources           Show all indexed sources with chunk counts
   contextengine list-projects          Discover and analyze all projects (Pro)
-  contextengine list-learnings [cat]   List all learnings (optional: filter by category)
+  contextengine list-learnings [cat] [--since today|yesterday|ISO]
+                                       List learnings with their created instant (UTC + Europe/Zurich)
   contextengine save-learning <text> -c <category>  Save a learning
   contextengine delete-learning <id>   Delete a learning by ID
   contextengine import-learnings <file> [-c cat] [-p project]  Bulk-import learnings
@@ -2743,8 +2763,7 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
     process.exit(1);
   });
 } else if (command === "list-learnings") {
-  const category = process.argv[3];
-  cliListLearnings(category).catch((err) => {
+  cliListLearnings(process.argv.slice(3)).catch((err) => {
     console.error("Error:", err);
     process.exit(1);
   });

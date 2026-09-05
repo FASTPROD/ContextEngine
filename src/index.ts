@@ -49,8 +49,7 @@ import {
   formatLearnings,
   importLearningsFromFile,
   autoImportFromSources,
-  LEARNING_CATEGORIES,
-} from "./learnings.js";
+  LEARNING_CATEGORIES, parseSince } from "./learnings.js";
 import {
   communityRulesToChunks,
   mergeWithDedup,
@@ -1154,11 +1153,21 @@ server.tool(
       .string()
       .optional()
       .describe("Filter by category (deployment, api, database, etc.). Omit to show all."),
+    since: z
+      .string()
+      .optional()
+      .describe("Only learnings created at or after this boundary: 'today', 'yesterday' (Europe/Zurich calendar days) or an ISO date/instant. Every entry shows its created instant, UTC plus Europe/Zurich."),
   },
-  async ({ category }) => {
+  async ({ category, since }) => {
     // Project-scoped: only show learnings for active workspace projects + universal (no project)
+    let sinceDate: Date | undefined;
+    if (since) {
+      const parsed = parseSince(since);
+      if (!parsed) return respond("list_learnings", `❌ since="${since}" is not today, yesterday, or an ISO date. No list rendered, so this is not a zero.`);
+      sinceDate = parsed;
+    }
     const learnings = listLearnings(category, activeProjectNames);
-    const text = formatLearnings(learnings);
+    const text = formatLearnings(learnings, { since: sinceDate, sinceSpec: since });
     return respond("list_learnings", text);
   }
 );

@@ -371,7 +371,7 @@ code references already point at it._
 - **Preflight** — `scripts/deploy-preflight.sh` (LOCK `[DEPLOY_ONLY_COMMITTED]`): `server/deploy.sh` refuses a dirty `server/` above the build line. Distributed to six fleet repos by `scripts/sync-deploy-preflight.sh` (`--check` default, `--apply` copies and proves). Lesson: CE learning, category deployment, 2026-09-05; record in `docs/handover-deploy-preflight-fleet.md`.
 
 ### CLI Capabilities (v1.16.0)
-- **15 subcommands** — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `save-session`, `load-session`, `list-sessions`, `end-session`, `import-learnings`, `audit`, `activate`, `deactivate`, `status`
+- **15 subcommands** — `search`, `list-sources`, `list-projects`, `score`, `list-learnings` (`--since today|yesterday|ISO`, every entry dated UTC + Europe/Zurich, LOCK `[LEARNINGS-LIST-SHOWS-CREATED]`), `save-learning`, `save-session`, `load-session`, `list-sessions`, `end-session`, `import-learnings`, `audit`, `activate`, `deactivate`, `status`
 - **Session management** — `save-session`, `load-session`, `list-sessions` bring session persistence to CLI (was MCP-only before v1.16.0)
 - **End-session protocol** — `end-session` checks uncommitted git changes + doc freshness across all projects, exits code 1 on failures
 - **Non-interactive mode** — `--yes` / `-y` flag or piped input (`!process.stdin.isTTY`) auto-accepts all prompts; enables agent automation without `yes |` hacks

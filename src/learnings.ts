@@ -815,13 +815,86 @@ export function learningsStats(): { total: number; categories: Record<string, nu
 /**
  * Format learnings for display.
  */
-export function formatLearnings(learnings: Learning[]): string {
+// [LOCKED] [LEARNINGS-LIST-SHOWS-CREATED] 2026-09-05
+// [NEVER] print a learning without its `created` instant, and [NEVER] answer "what was
+//         saved since X" by probing learnings.json with a hand-written key.
+// WHY: on 2026-09-05 an agent read a date field the records do not have (`createdAt`),
+//      got an empty string for every record, and answered "0 saved today" with full
+//      confidence; a second agent made the same mistake the same morning. A probe on a
+//      missing key returns a confident zero, never an error. The store had 22 records
+//      from that day, under `created`. Until then the listing showed the date only,
+//      so "today" was also ambiguous around midnight between UTC and Yan's clock.
+// FIX: one renderer shows `created` as the UTC instant plus the Europe/Zurich wall
+//      time, and `--since today|yesterday|ISO` is a first-class filter whose empty
+//      result names the boundary it applied. An unparseable spec is an error, not zero.
+export const LEARNINGS_LOCAL_TZ = "Europe/Zurich";
+
+/** `2026-09-05 10:30Z (12:30 CEST)`; `undated` when the record carries no usable instant. */
+export function formatLearnedAt(iso: string | undefined, tz: string = LEARNINGS_LOCAL_TZ): string {
+  if (!iso) return "undated";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "undated";
+  const utc = d.toISOString().slice(0, 16).replace("T", " ") + "Z";
+  const local = new Intl.DateTimeFormat("en-GB", {
+    timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false, timeZoneName: "short",
+  }).format(d);
+  return `${utc} (${local})`;
+}
+
+/** Midnight of the given calendar day in `tz`, as a UTC instant. Offset read from Intl, never guessed. */
+function localMidnightUtc(y: number, m: number, d: number, tz: string): Date {
+  const guess = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+  const off = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "longOffset" })
+    .formatToParts(guess).find((p) => p.type === "timeZoneName")?.value ?? "GMT";
+  const mm = /GMT([+-])(\d{2}):(\d{2})/.exec(off);
+  const minutes = mm ? (mm[1] === "-" ? -1 : 1) * (parseInt(mm[2], 10) * 60 + parseInt(mm[3], 10)) : 0;
+  return new Date(guess.getTime() - minutes * 60_000);
+}
+
+/** `today` | `yesterday` (calendar days in `tz`) | any ISO date or instant. `null` when unparseable. */
+export function parseSince(spec: string, now: Date = new Date(), tz: string = LEARNINGS_LOCAL_TZ): Date | null {
+  const s = spec.trim().toLowerCase();
+  if (s === "today" || s === "yesterday") {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(now);
+    const get = (t: string) => parseInt(parts.find((p) => p.type === t)?.value ?? "0", 10);
+    const midnight = localMidnightUtc(get("year"), get("month"), get("day"), tz);
+    return s === "today" ? midnight : new Date(midnight.getTime() - 86_400_000);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}/.test(spec.trim())) return null;
+  const d = new Date(spec.trim());
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Records created at or after `since`, oldest first. Undated records are excluded and counted by the caller. */
+export function filterSince(learnings: Learning[], since: Date): Learning[] {
+  return learnings
+    .filter((l) => l.created && !Number.isNaN(new Date(l.created).getTime()) && new Date(l.created).getTime() >= since.getTime())
+    .sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
+}
+
+export interface FormatLearningsOptions {
+  /** Already-parsed boundary; the caller resolves the spec so an invalid one errors before rendering. */
+  since?: Date;
+  /** The spec as typed, echoed in the header so the reader sees which boundary applied. */
+  sinceSpec?: string;
+}
+
+export function formatLearnings(learnings: Learning[], opts: FormatLearningsOptions = {}): string {
+  let sinceNote = "";
+  if (opts.since) {
+    learnings = filterSince(learnings, opts.since);
+    sinceNote = ` since ${opts.sinceSpec ?? opts.since.toISOString()} = ${formatLearnedAt(opts.since.toISOString())}`;
+  }
   if (learnings.length === 0) {
+    if (opts.since) {
+      return `0 learnings${sinceNote}. The boundary above is the one that was applied; if that looks wrong, the store is at ~/.contextengine/learnings.json and its date field is \`created\`.`;
+    }
     return "No learnings stored yet. Use `save_learning` to add operational rules.";
   }
 
   const lines: string[] = [];
-  lines.push(`# 💡 Learnings Store (${learnings.length} rules)\n`);
+  lines.push(`# 💡 Learnings Store (${learnings.length} rules${sinceNote})\n`);
 
   // Group by category
   const byCategory = new Map<string, Learning[]>();
@@ -839,7 +912,7 @@ export function formatLearnings(learnings: Learning[]): string {
       if (l.project) lines.push(`- **Project:** ${l.project}`);
       if (l.context) lines.push(`- **Context:** ${l.context}`);
       if (l.tags?.length) lines.push(`- **Tags:** ${l.tags.join(", ")}`);
-      if (l.created) lines.push(`- **Learned:** ${l.created.split("T")[0]}`);
+      lines.push(`- **Learned:** ${formatLearnedAt(l.created)}`);
       lines.push("");
     }
   }
