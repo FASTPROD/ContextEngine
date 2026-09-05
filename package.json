@@ -1,7 +1,7 @@
 {
   "name": "@compr/opscontext-mcp",
   "version": "2.5.5",
-  "description": "OpsContext for AI Agents — read-only fleet visibility (PM2/nginx/Docker/git/cron) + tamper-evident audit log + policy-as-code hooks. The ops + compliance layer Claude Code can't grow natively.",
+  "description": "OpsContext for AI Agents \u2014 read-only fleet visibility (PM2/nginx/Docker/git/cron) + tamper-evident audit log + policy-as-code hooks. The ops + compliance layer Claude Code can't grow natively.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -18,7 +18,8 @@
     "test:watch": "vitest",
     "lint": "eslint src/",
     "prepublishOnly": "node scripts/check-npm-token-expiry.mjs && npm run build && node scripts/obfuscate-rubric.mjs",
-    "check-token": "node scripts/check-npm-token-expiry.mjs"
+    "check-token": "node scripts/check-npm-token-expiry.mjs",
+    "verify-release": "bash scripts/verify-release.sh"
   },
   "keywords": [
     "mcp",

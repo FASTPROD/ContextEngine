@@ -88,6 +88,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 ### npm Publishing
 - Package: `@compr/opscontext-mcp` (the `@compr/contextengine-mcp` name is deprecated and frozen at 1.23.1)
 - `npm publish --access public` (prepublishOnly runs `npm run build`)
+- **After publish: `npm run verify-release`** (LOCK `[RELEASE-PROVEN-BY-HANDSHAKE]`, `scripts/verify-release.sh` + `scripts/mcp-handshake.mjs`): real MCP `initialize` + `tools/list` from the repo build and from the registry package in a foreign cwd, version compared. Only this proves a release reaches Claude Code; three releases passed every other check while Claude Code ran nothing (2026-09-05).
 - `files` field restricts to: `dist/`, `defaults/`, `skills/`, `examples/`
 - **Sourcemaps EXCLUDED** from tarball (`!dist/**/*.map` in `files[]` + `dist/**/*.map` in `.npmignore`) — keeps tarball ~28% smaller and removes the de-obfuscation vector
 - **No obfuscation step** — `scripts/obfuscate-firewall.mjs` removed in 2026-06 hygiene pass. Sourcemaps shipped alongside used to defeat it instantly; BSL-1.1 is the legal protection. Build is plain `tsc`.
