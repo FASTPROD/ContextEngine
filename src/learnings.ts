@@ -1,7 +1,7 @@
 // LOCKED — verified March 3 2026 — learning store: quality gates, auto-categorize, dedup, project-scoped filtering
 // DO NOT RE-AUDIT — min 15 chars, inferCategory(), autoImportFromSources() all verified v1.19.1
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, copyFileSync, rmSync, statSync, readdirSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 import { fileURLToPath } from "url";
@@ -131,33 +131,162 @@ function mergeDefaults(store: LearningsStore): boolean {
   return added > 0;
 }
 
-function loadStore(): LearningsStore {
+// [LOCKED] [STORE-NEVER-STARTS-FRESH-OVER-DATA] 2026-09-05
+// [NEVER] turn an unreadable learnings.json into an empty store, write the store with a
+//         bare writeFileSync, or let two processes write it without the lock below.
+// WHY: on 2026-09-05 (16:34Z) the whole store was rebuilt from scratch: every id
+//      replaced, every `created` reset, the save_learning-only records gone. Cause, read
+//      from the code and the audit log: every MCP server (launchd, VS Code, Claude Code)
+//      watches ~880 doc files and re-imports all of them on any change, one full-file
+//      rewrite PER RULE; with two or three servers doing that at once, one read a
+//      half-written file, `catch { start fresh }` turned it into an empty store, and the
+//      next save overwrote 2,808 records with the rebuilt set. The audit log shows 54
+//      such bursts since 2026-06-23 and 143,352 ids created for a store of ~2,800: the
+//      same race, repeatedly, and the likeliest source of the 66 audit-chain forks.
+// FIX: (1) atomic writes, temp file + rename, so a reader never sees a torn file;
+//      (2) an unreadable existing file is copied to learnings.json.corrupt-<ts> and the
+//          load THROWS, it never becomes an empty store; (3) a saved store that is less
+//          than half the on-disk one (and the disk one has >= 100 records) is refused
+//          unless CONTEXTENGINE_ALLOW_SHRINK=1; (4) a cross-process lock directory
+//          around every load-modify-save; (5) imports run as ONE batch: one load, one
+//          save, instead of one rewrite per rule; (6) a daily learnings.json.bak-YYYYMMDD
+//          before the first write of the day, last 7 kept.
+const STORE_LOCK_DIR = LEARNINGS_PATH + ".lock";
+const LOCK_STALE_MS = 30_000;
+let lockDepth = 0;
+let batchStore: LearningsStore | null = null;
+let batchDirty = false;
+
+function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** Cross-process, re-entrant (within this process) lock around the store file. */
+export function withStoreLock<T>(fn: () => T): T {
+  if (lockDepth > 0) { lockDepth++; try { return fn(); } finally { lockDepth--; } }
+  ensureDir();
+  const timeoutMs = parseInt(process.env.CONTEXTENGINE_LOCK_TIMEOUT_MS || "10000", 10);
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      mkdirSync(STORE_LOCK_DIR);
+      try { writeFileSync(join(STORE_LOCK_DIR, "pid"), String(process.pid)); } catch { /* diagnostics only */ }
+      break;
+    } catch (e: any) {
+      if (e?.code !== "EEXIST") throw e;
+      let age = 0;
+      try { age = Date.now() - statSync(STORE_LOCK_DIR).mtimeMs; } catch { age = 0; }
+      if (age > LOCK_STALE_MS) {
+        // Holder died (or hung) without releasing: take it over.
+        try { rmSync(STORE_LOCK_DIR, { recursive: true, force: true }); } catch { /* retry below */ }
+        continue;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(`learnings store is locked by another process (${STORE_LOCK_DIR}, ${Math.round(age / 1000)}s old); refusing to write over it`);
+      }
+      sleepMs(25);
+    }
+  }
+  lockDepth = 1;
+  try {
+    return fn();
+  } finally {
+    lockDepth = 0;
+    try { rmSync(STORE_LOCK_DIR, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+}
+
+/**
+ * Run `fn` with ONE load and at most ONE save of the store, under the lock. Inside, every
+ * loadStore() returns the same in-memory store and every saveStore() only marks it dirty.
+ */
+export function withStoreBatch<T>(fn: () => T): T {
+  if (batchStore) return fn(); // already batching (re-entrant)
+  return withStoreLock(() => {
+    batchStore = readStoreFromDisk();
+    batchDirty = false;
+    try {
+      const out = fn();
+      if (batchDirty) writeStoreToDisk(batchStore);
+      return out;
+    } finally {
+      batchStore = null;
+      batchDirty = false;
+    }
+  });
+}
+
+function readStoreFromDisk(): LearningsStore {
   let store: LearningsStore;
   if (existsSync(LEARNINGS_PATH)) {
+    const raw = readFileSync(LEARNINGS_PATH, "utf-8");
     try {
-      store = JSON.parse(readFileSync(LEARNINGS_PATH, "utf-8"));
-      // Filter out corrupted entries missing required 'rule' field
-      store.learnings = store.learnings.filter((l) => typeof l.rule === "string" && l.rule.length > 0);
-    } catch {
-      // Corrupted file — start fresh
-      store = { version: 1, count: 0, learnings: [] };
+      store = JSON.parse(raw);
+      if (!store || !Array.isArray(store.learnings)) throw new Error("no learnings array");
+    } catch (e: any) {
+      const keep = `${LEARNINGS_PATH}.corrupt-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+      try { copyFileSync(LEARNINGS_PATH, keep); } catch { /* the original stays in place regardless */ }
+      safeAppend("learning.store_unreadable", { path: LEARNINGS_PATH, bytes: raw.length, kept: keep, error: String(e?.message || e) });
+      throw new Error(`${LEARNINGS_PATH} exists but is unreadable (${e?.message || e}); refusing to start fresh over it. Copy kept at ${keep}. Another process may be mid-write: retry in a moment.`);
     }
+    // Filter out corrupted entries missing required 'rule' field
+    store.learnings = store.learnings.filter((l) => typeof l.rule === "string" && l.rule.length > 0);
   } else {
     store = { version: 1, count: 0, learnings: [] };
   }
 
   // Auto-merge bundled defaults on first load or when new defaults are added
   if (mergeDefaults(store)) {
-    saveStore(store);
+    if (batchStore) batchDirty = true; else writeStoreToDisk(store);
   }
-
   return store;
 }
 
-function saveStore(store: LearningsStore): void {
+function loadStore(): LearningsStore {
+  if (batchStore) return batchStore;
+  return readStoreFromDisk();
+}
+
+function dailyBackup(): void {
+  if (!existsSync(LEARNINGS_PATH)) return;
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const bak = `${LEARNINGS_PATH}.bak-${day}`;
+  if (existsSync(bak)) return;
+  try {
+    copyFileSync(LEARNINGS_PATH, bak);
+    const dir = dirname(LEARNINGS_PATH);
+    const daily = readdirSync(dir).filter((f) => /^learnings\.json\.bak-\d{8}$/.test(f)).sort();
+    for (const f of daily.slice(0, Math.max(0, daily.length - 7))) unlinkSync(join(dir, f));
+  } catch { /* a missing backup must never block a save */ }
+}
+
+function writeStoreToDisk(store: LearningsStore): void {
   ensureDir();
   store.count = store.learnings.length;
-  writeFileSync(LEARNINGS_PATH, JSON.stringify(store, null, 2));
+  // Shrink tripwire: the exact shape of the 2026-09-05 loss was a near-empty store
+  // written over a full one.
+  if (existsSync(LEARNINGS_PATH) && process.env.CONTEXTENGINE_ALLOW_SHRINK !== "1") {
+    let onDisk = -1;
+    try { onDisk = (JSON.parse(readFileSync(LEARNINGS_PATH, "utf-8")).learnings || []).length; } catch { onDisk = -1; }
+    if (onDisk >= 100 && store.learnings.length < onDisk / 2) {
+      safeAppend("learning.store_shrink_refused", { on_disk: onDisk, attempted: store.learnings.length });
+      throw new Error(`refusing to write ${store.learnings.length} learnings over a store of ${onDisk}: that is the shape of a wipe, not an edit. Set CONTEXTENGINE_ALLOW_SHRINK=1 if this is deliberate.`);
+    }
+  }
+  dailyBackup();
+  const tmp = `${LEARNINGS_PATH}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tmp, JSON.stringify(store, null, 2));
+  renameSync(tmp, LEARNINGS_PATH);
+}
+
+function saveStore(store: LearningsStore): void {
+  if (batchStore) { batchStore = store; batchDirty = true; return; }
+  writeStoreToDisk(store);
+}
+
+/** Test seam for the writer's tripwire; not part of the API. */
+export function __writeStoreForTests(store: LearningsStore): void {
+  withStoreLock(() => writeStoreToDisk(store));
 }
 
 /** Generate a short unique ID */
@@ -197,7 +326,11 @@ const MIN_RULE_LENGTH = 15;
  * Save a new learning. Returns the created learning with ID.
  * Rejects rules shorter than MIN_RULE_LENGTH and auto-corrects "other" category.
  */
-export function saveLearning(
+export function saveLearning(...args: Parameters<typeof saveLearningUnlocked>): Learning {
+  return withStoreLock(() => saveLearningUnlocked(...args));
+}
+
+function saveLearningUnlocked(
   category: string,
   rule: string,
   context: string,
@@ -348,6 +481,10 @@ export function listLearnings(category?: string, projects?: string[]): Learning[
  * Delete a learning by ID.
  */
 export function deleteLearning(id: string): boolean {
+  return withStoreLock(() => deleteLearningUnlocked(id));
+}
+
+function deleteLearningUnlocked(id: string): boolean {
   const store = loadStore();
   const index = store.learnings.findIndex((l) => l.id === id);
   if (index === -1) return false;
@@ -401,9 +538,10 @@ export function importLearningsFromFile(
   const content = readFileSync(filePath, "utf-8");
   const ext = filePath.split(".").pop()?.toLowerCase();
 
-  const result = ext === "json"
+  // One load, one save for the whole file. [LOCK] [STORE-NEVER-STARTS-FRESH-OVER-DATA]
+  const result = withStoreBatch(() => ext === "json"
     ? importFromJson(content, defaultProject)
-    : importFromMarkdown(content, defaultCategory, defaultProject);
+    : importFromMarkdown(content, defaultCategory, defaultProject));
 
   // Aggregate event correlating the individual learning.save records emitted
   // inside the loop. Useful for compliance attribution: "this batch came from
@@ -784,6 +922,9 @@ export function autoImportFromSources(
   let totalUpdated = 0;
   let processed = 0;
 
+  // One load and one save for the whole sweep (~880 files), instead of one full-file
+  // rewrite per rule per file. [LOCK] [STORE-NEVER-STARTS-FRESH-OVER-DATA]
+  withStoreBatch(() => {
   for (const source of sources) {
     // Only process markdown files
     if (!source.path.endsWith(".md")) continue;
@@ -797,6 +938,7 @@ export function autoImportFromSources(
     totalUpdated += result.updated;
     if (result.imported > 0 || result.updated > 0) processed++;
   }
+  });
 
   return { total: processed, imported: totalImported, updated: totalUpdated };
 }

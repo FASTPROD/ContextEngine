@@ -369,6 +369,7 @@ code references already point at it._
 - **VPS auth** — sshpass password-based SSH (key passphrase lost)
 - **rsync excludes** — `node_modules/`, `data/` preserved on server
 - **Post-deploy** — `npm install` on VPS (compiled locally), PM2 restart
+- **Learnings store integrity** (2026-09-05, LOCK `[STORE-NEVER-STARTS-FRESH-OVER-DATA]` in `src/learnings.ts`): atomic temp+rename writes, cross-process lock dir `learnings.json.lock`, an unreadable file is kept as `.corrupt-<ts>` and the load throws (never an empty store), a write of less than half the on-disk records is refused (`CONTEXTENGINE_ALLOW_SHRINK=1` to override), imports are one load + one save, daily `learnings.json.bak-YYYYMMDD` (7 kept). Why: the store was wiped and rebuilt with new ids by concurrent MCP servers, 54 times since June, twice on 2026-09-05. Tests: `src/learnings-store.test.ts` + a real 3-process race.
 - **Preflight** — `scripts/deploy-preflight.sh` (LOCK `[DEPLOY_ONLY_COMMITTED]`): `server/deploy.sh` refuses a dirty `server/` above the build line. Distributed to six fleet repos by `scripts/sync-deploy-preflight.sh` (`--check` default, `--apply` copies and proves). Lesson: CE learning, category deployment, 2026-09-05; record in `docs/handover-deploy-preflight-fleet.md`.
 
 ### CLI Capabilities (v1.16.0)

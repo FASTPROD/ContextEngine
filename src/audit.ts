@@ -155,6 +155,8 @@ function auditPath(): string {
 export type AuditEvent =
   | "learning.save"
   | "learning.delete"
+  | "learning.store_unreadable"
+  | "learning.store_shrink_refused"
   | "learning.import"
   | "learning.export"
   | "session.save"
