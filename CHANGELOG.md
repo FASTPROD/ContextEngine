@@ -4,6 +4,15 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [2.5.8] — 2026-09-05 — "rules" is not a learnings heading
+
+### Fixed
+
+- `LEARNINGS_HEADING` no longer matches the word "rules". "## Key rules" and "### Security Rules"
+  are ordinary doc sections; on the evening 2.5.7 shipped the word let 231 subsection headings back
+  into the store. "## Essential Rules, distilled from Learnings" still qualifies through "learnings".
+  Replayed from a foreign cwd with the default patterns over ~/Projects: 99 records from 819 sources.
+
 ## [2.5.7] — 2026-09-05 — The learnings store was a pile of headings
 
 Of 3,005 records, about 2,760 had been produced by the doc importer from ~160 ordinary docs
