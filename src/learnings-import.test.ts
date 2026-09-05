@@ -33,6 +33,11 @@ const ORDINARY_DOC = [
   "PLANK S77",
   "- **Restart the Flask backend after every model change**: stale to_dict() cache",
   "",
+  "## Key rules",
+  "",
+  "### Rules sections are ordinary doc sections and stay out",
+  "- **Security rules bold bullet**: stays out under a rules heading too",
+  "",
   "## Backlog",
   "",
   "### Lessons from the store wipe",
@@ -75,9 +80,11 @@ describe("strict import (the default, and the only mode of the auto-import)", ()
     expect(got).not.toContain("Deploy with the script, never by hand: it snapshots first");
     expect(got).not.toContain("Just a TODO heading that is long enough");
     expect(got).not.toContain("Lessons from the store wipe"); // the scope-opening heading is not a rule
+    expect(got).not.toContain("Rules sections are ordinary doc sections and stay out");
+    expect(got).not.toContain("Security rules bold bullet");
     expect(got.length).toBe(4);
     expect(r.imported).toBe(4);
-    expect(r.ignored).toBe(5);
+    expect(r.ignored).toBe(7);
   });
   it("records the source file on every imported learning", () => {
     reset();
@@ -96,7 +103,7 @@ describe("strict import (the default, and the only mode of the auto-import)", ()
     const r = L.importLearningsFromFile(p, "other", "Proj");
     expect(rules()).toContain("Flow A — Forecast sync from Odoo to invoc.me");
     expect(r.ignored).toBe(0);
-    expect(r.imported).toBe(10); // the 9 candidates plus "Lessons from the store wipe" itself, as before 2.5.7
+    expect(r.imported).toBe(12); // the 11 candidates plus "Lessons from the store wipe" itself, as before 2.5.7
   });
   it("an H1 that says learnings puts the whole file in scope", () => {
     reset();
@@ -117,7 +124,7 @@ describe("strict import (the default, and the only mode of the auto-import)", ()
     writeFileSync(p, ORDINARY_DOC);
     const r = L.autoImportFromSources([{ path: p, name: "Proj — copilot-instructions.md" }]);
     expect(r.imported).toBe(4);
-    expect(r.ignored).toBe(5);
+    expect(r.ignored).toBe(7);
     expect(rules().length).toBe(4);
   });
 });
@@ -131,7 +138,7 @@ describe("permissive import (opt-in, for a file the user chose)", () => {
     expect(rules()).toContain("Flow A — Forecast sync from Odoo to invoc.me");
     expect(rules()).toContain("Design Language");
     expect(r.ignored).toBe(0);
-    expect(r.imported).toBe(10);
+    expect(r.imported).toBe(12);
   });
 });
 

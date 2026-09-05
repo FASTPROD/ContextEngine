@@ -564,14 +564,16 @@ export interface ImportOptions {
 // FIX: a candidate becomes a learning only when the author marked it as one:
 //      (1) an inline-category bullet `- [category] rule → context`, anywhere;
 //      (2) any shape inside a file whose name says learnings (AGENT-LEARNINGS.md, LEARNINGS.md);
-//      (3) any shape under a heading that says learnings / lessons / gotchas / pitfalls / rules /
-//          anti-patterns / "never repeat" / "the hard way" (LEARNINGS_HEADING);
+//      (3) any shape under a heading that says learnings / lessons / gotchas / pitfalls /
+//          anti-patterns / "never repeat" / "the hard way" / mistakes (LEARNINGS_HEADING).
+//          Not "rules": "## Key rules" and "### Security Rules" are ordinary doc sections, and
+//          the word let 231 subsection headings back in on the evening this shipped;
 //      (4) JSON files, which are explicit by construction.
 //      `permissive: true` (MCP `import_learnings`, CLI `--permissive`) restores the old parser for
 //      a file the user chose on purpose. Every imported record now carries `source`.
 export const LEARNINGS_FILE_NAME = /learnings?\.md$/i;
 export const LEARNINGS_HEADING =
-  /\b(learnings?|lessons?|gotchas?|pitfalls?|anti-?patterns?|never repeat|do not repeat|don'?t repeat|the hard way|hard way|mistakes?|rules?)\b/i;
+  /\b(learnings?|lessons?|gotchas?|pitfalls?|anti-?patterns?|never repeat|do not repeat|don'?t repeat|the hard way|hard way|mistakes?)\b/i;
 
 export function importLearningsFromFile(
   filePath: string,

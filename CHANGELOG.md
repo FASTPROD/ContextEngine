@@ -17,7 +17,7 @@ secrets" under mobile because "expose" contains "expo".
 
 - **Auto-import takes only marked learnings** (`[AUTO-IMPORT-ONLY-MARKED-LEARNINGS]`): inline
   `- [category] rule → context` bullets anywhere; every shape inside a `*LEARNINGS.md` file; every
-  shape under a heading that says learnings / lessons / gotchas / pitfalls / rules / anti-patterns /
+  shape under a heading that says learnings / lessons / gotchas / pitfalls / anti-patterns /
   "never repeat" / "the hard way"; JSON. Bare H3 headings, bold bullets and table rows in ordinary
   docs are reported as `ignored` and left alone; the docs stay searchable as docs. Replayed over the
   818 discovered sources: 129 records instead of 1,879. `import_learnings` gains `permissive: true`

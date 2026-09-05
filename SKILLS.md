@@ -84,7 +84,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
   runs on every doc change takes ONLY marked learnings: `- [category] rule → context` bullets anywhere;
   every shape inside a `*LEARNINGS.md` file (`AGENT-LEARNINGS.md`, `docs/AGENT-LEARNINGS.md`,
   `LEARNINGS.md` are now default patterns); every shape under a heading that says learnings / lessons /
-  gotchas / pitfalls / rules / anti-patterns / "never repeat" / "the hard way"; JSON files. Bare H3
+  gotchas / pitfalls / anti-patterns / "never repeat" / "the hard way"; JSON files. Bare H3
   headings, bold bullets and table rows in ordinary docs are counted as `ignored` and left alone; the docs
   stay searchable as docs. Before this rule the store held 3,005 records of which ~2,760 were doc headings
   ("Design Language:", "Files created (Phase 1)"); the strict rule reproduces 129 of them.
