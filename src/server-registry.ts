@@ -29,6 +29,10 @@ export interface ServerRecord {
   build: string;
   cwd: string;
   node: string;
+  /** Since 2.6.0: what this server indexes (see shared-index.ts corpusId) and whether it is
+   *  the one writing the shared index for it, or a reader of it. Absent on older builds. */
+  corpus?: string;
+  role?: "indexer" | "reader";
 }
 
 export interface ServerReport {
@@ -76,7 +80,7 @@ export function isAlive(pid: number): boolean {
 /**
  * Register the running server. Returns a stop() that removes the record; exit handlers call it too.
  */
-export function registerServer(opts: { version: string; script: string }): { record: ServerRecord; stop: () => void } {
+export function registerServer(opts: { version: string; script: string; corpus?: string; role?: "indexer" | "reader" }): { record: ServerRecord; stop: () => void; setRole: (role: "indexer" | "reader") => void } {
   const dir = registryDir();
   mkdirSync(dir, { recursive: true });
   const now = new Date().toISOString();
@@ -91,6 +95,8 @@ export function registerServer(opts: { version: string; script: string }): { rec
     build: buildHashOf(opts.script) || "unknown",
     cwd: process.cwd(),
     node: process.version,
+    ...(opts.corpus ? { corpus: opts.corpus } : {}),
+    ...(opts.role ? { role: opts.role } : {}),
   };
   const file = join(dir, `${process.pid}.json`);
   const write = () => { try { writeFileSync(file, JSON.stringify(record, null, 2)); } catch { /* registry is diagnostics, never fatal */ } };
@@ -108,7 +114,8 @@ export function registerServer(opts: { version: string; script: string }): { rec
   for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
     process.on(sig, () => { stop(); process.exit(0); });
   }
-  return { record, stop };
+  const setRole = (role: "indexer" | "reader") => { record.role = role; write(); };
+  return { record, stop, setRole };
 }
 
 /** Read every record, drop the dead ones, compare builds with the files on disk now. */
@@ -131,8 +138,11 @@ export function listServers(): ServerReport {
   if (stale.length > 0) {
     report.warnings.push(`${stale.length} server(s) run a build older than the file on disk (pid ${stale.map((s) => s.pid).join(", ")}): restart them or they keep the old behaviour`);
   }
-  if (report.servers.length > SERVER_COUNT_WARN) {
-    report.warnings.push(`${report.servers.length} servers run at once; every doc change makes each of them re-index and re-embed the corpus (${SERVER_COUNT_WARN} is the comfortable ceiling)`);
+  // Only servers that index on their own cost a re-index per doc change; readers of a shared
+  // index do not. [LOCK] [ONE-INDEXER-MANY-READERS]
+  const indexing = report.servers.filter((s) => s.role !== "reader");
+  if (indexing.length > SERVER_COUNT_WARN) {
+    report.warnings.push(`${indexing.length} of ${report.servers.length} servers index on their own; every doc change makes each of them re-index the corpus (${SERVER_COUNT_WARN} is the comfortable ceiling; CONTEXTENGINE_SHARED_INDEX=1 makes all but one per corpus readers)`);
   }
   return report;
 }
@@ -144,7 +154,8 @@ export function formatServers(report: ServerReport, home: string = homedir()): s
   for (const s of report.servers) {
     const t = s.started.slice(11, 19) + "Z";
     const flag = s.staleBuild ? `STALE BUILD (disk ${s.currentBuild})` : s.currentBuild === null ? "script missing on disk" : "current";
-    lines.push(`  pid ${String(s.pid).padEnd(6)} ${t}  v${s.version}  build ${s.build}  ${flag}  parent ${s.parent}  cwd ${short(s.cwd)}`);
+    const role = s.role ? `  ${s.role.padEnd(7)} corpus ${s.corpus ?? "?"}` : "";
+    lines.push(`  pid ${String(s.pid).padEnd(6)} ${t}  v${s.version}  build ${s.build}  ${flag}${role}  parent ${s.parent}  cwd ${short(s.cwd)}`);
   }
   for (const w of report.warnings) lines.push(`  ⚠ ${w}`);
   return lines.join("\n");

@@ -66,7 +66,8 @@ not open is not a rule, so the mechanism matters more than the prose._
 | Policy gates | `.contextengine/policy.json`: secret patterns, doc coverage, deploy-verify hosts, bypass tokens, agent_cost thresholds and rates. | `contextengine policy validate`, pre-commit hook |
 | Pre-commit scanner | One hook, synced to 25 repos, value-independent password patterns, 0 false positives on 45 real commits. | `scripts/sync-hooks.sh --check` to see drift |
 | Multi-agent cost | Tokens moved, notional cost, capacity intensity, top runs, burn signals, from Claude Code's own transcripts. | `agent_cost` (2.5.4), `contextengine cost` |
-| Servers | Which MCP servers run, on which build, spawned by whom. Since 2.5.9 every server registers itself at start; `contextengine servers` flags STALE BUILD (script changed on disk since the server loaded it) and more than 3 concurrent servers. On 2026-09-05 two servers on a two-hour-old build re-imported 1,766 records unseen. After any `npm run build`, run it. | `contextengine servers`, end-session § 3b |
+| Servers | Which MCP servers run, on which build, spawned by whom, and since SESSION_26 which one indexes. Every server registers itself at start; `contextengine servers` flags STALE BUILD (script changed on disk since the server loaded it) and more than 3 servers indexing on their own. On 2026-09-05 two servers on a two-hour-old build re-imported 1,766 records unseen. After any `npm run build`, run it. | `contextengine servers`, end-session § 3b |
+| Vectors and the shared index | One vector per distinct text in `~/.contextengine/embeddings.bin`, shared by every server (always on). With `CONTEXTENGINE_SHARED_INDEX=1` one server per corpus parses, embeds, watches and writes `~/.contextengine/index/<corpus>.json`; the others read it and reload within 3 s. SKILLS.md § One indexer, many readers. | `contextengine servers` (role column), `scripts/trial-shared-index.mjs` |
 | Drift detection | Loop, stuck tool, fabrication, silent failure signals over the recent audit window. | `drift_status` |
 | Scoring and audit (Pro) | AI-readiness score, compliance audit, port conflicts, cross-project view. Gate is the signed licence. | `score_project --no-save`, `run_audit`, `check_ports`, `list_projects` |
 
@@ -77,7 +78,7 @@ not open is not a rule, so the mechanism matters more than the prose._
 - `lock_inventory.sh` in the Odoo connector is an inventory, not a gate. Run it by hand around the ASCII migration of that repo.
 - Rotation no longer refuses because of damage inside already-archived segments; it refuses only for damage in the live log.
 - `agent_cost` needs `policy_dir` when called from the long-lived MCP server: the daemon's cwd is the home dir, not a repo.
-- Claude Code's MCP entries run the **published** package (`npx @compr/opscontext-mcp`). New tools appear there only after `npm publish`. The terminal CLI and the launchd server run the local build.
+- On this machine every Claude Code MCP entry (`.mcp.json` here, `~/.claude.json` user scope, checked 2026-09-05 22:05) runs the **repo build** `dist/index.js`, like the terminal CLI, VS Code and launchd. `npm run build` plus a restart of the surface is the refresh; `npm publish` matters for other machines.
 
 ## 8. Where things are
 

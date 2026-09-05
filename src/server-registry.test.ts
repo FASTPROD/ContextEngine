@@ -1,7 +1,7 @@
 // [LOCK] [SERVERS-ARE-INVENTORIED]: the registry must name every live server, its build against
 // the file on disk, and drop dead records. Throwaway HOME via src/test-setup.ts.
 import { describe, it, expect, beforeAll } from "vitest";
-import { mkdirSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -57,8 +57,31 @@ describe("listServers", () => {
     expect(rep.servers.some((s) => s.pid === dead)).toBe(false);
     expect(readdirSync(dir())).not.toContain(`${dead}.json`);
     expect(rep.servers.length).toBeGreaterThanOrEqual(3);
-    if (rep.servers.length > R.SERVER_COUNT_WARN) expect(rep.warnings.some((w) => /servers run at once/.test(w))).toBe(true);
+    if (rep.servers.length > R.SERVER_COUNT_WARN) expect(rep.warnings.some((w) => /index on their own/.test(w))).toBe(true);
     const text = R.formatServers(rep, "/");
     expect(text).toMatch(/server\(s\) running/);
+  });
+});
+
+describe("roles (one indexer, many readers)", () => {
+  it("records corpus and role, updates the role in place, prints both, and warns only about servers that index", () => {
+    const script = join(home(), "fake-server3.js");
+    writeFileSync(script, "console.log('v3')");
+    const { record, stop, setRole } = R.registerServer({ version: "9.9.9", script, corpus: "abc123abc123", role: "reader" });
+    expect(record.corpus).toBe("abc123abc123");
+    expect(JSON.parse(readFileSync(join(dir(), `${process.pid}.json`), "utf8")).role).toBe("reader");
+    setRole("indexer");
+    expect(JSON.parse(readFileSync(join(dir(), `${process.pid}.json`), "utf8")).role).toBe("indexer");
+    const rep = R.listServers();
+    expect(R.formatServers(rep)).toMatch(/indexer corpus abc123abc123/);
+    // Four readers and one indexer: no "too many indexers" warning; five self-indexing servers: warning.
+    for (let i = 1; i <= 4; i++) writeFileSync(join(dir(), `${process.pid}-r${i}.json`), JSON.stringify({ ...record, pid: process.pid, role: "reader", started: record.started }));
+    expect(R.listServers().warnings.some((w) => /index on their own/.test(w))).toBe(false);
+    for (let i = 1; i <= 4; i++) writeFileSync(join(dir(), `${process.pid}-r${i}.json`), JSON.stringify({ ...record, pid: process.pid, role: undefined }));
+    // Earlier tests leave live-pid records behind (our parent, pid 1), so count only the shape.
+    const w = R.listServers().warnings.find((x) => /(\d+) of \1 servers index on their own/.test(x));
+    expect(w).toBeDefined();
+    expect(Number(w!.match(/^(\d+) of/)![1])).toBeGreaterThanOrEqual(5);
+    stop();
   });
 });

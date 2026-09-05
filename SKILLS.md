@@ -107,6 +107,42 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 - **MCP rejection**: `index.ts` `save_learning` handler has try-catch, surfaces the rejection message to agents
 - `flushRule()` has its own length check + try-catch to prevent import crashes
 
+### One indexer, many readers (2026-09-05, LOCKs `[EMBEDDINGS-ARE-CONTENT-ADDRESSED]`, `[ONE-INDEXER-MANY-READERS]`)
+
+Every Claude Code chat spawns its own MCP server, plus launchd, plus VS Code. Measured on
+2026-09-05 (SESSION_26): eleven servers, each parsing the same ~820 sources, watching the same
+files and re-embedding every chunk on every save, 9.3 CPU-hours in 1.4 h, load average 230.
+
+- **Vectors are content-addressed** (`src/embedding-store.ts`): one vector per distinct embedded
+  text, key `SHA-256(model + text)`, in `~/.contextengine/embeddings.bin` (append-only, 1,552
+  bytes per record, header `CEEMB001`). Every server reads it; whoever embeds appends. A doc
+  change embeds only its new chunks; a cold start embeds only texts never seen on this machine.
+  Always on. The old whole-corpus `embedding-cache.json` (2 hits in 51 starts) is gone; delete
+  the file by hand if you like, nothing reads it. The first start after this build embeds the
+  whole corpus once, then every start hits.
+- **One writer per corpus, behind `CONTEXTENGINE_SHARED_INDEX=1`** (`src/shared-index.ts`).
+  The corpus id is a hash of what discovery resolved (config path and content,
+  `CONTEXTENGINE_WORKSPACES`, `OPSCONTEXT_SKIP_CLAUDE_MEMORY`). Among the live registered
+  servers of a corpus the indexer is: a build equal to the file on disk first (a stale build
+  never leads while a current one lives), then the earliest start, then the lowest pid.
+  Re-evaluated every 15 s. The indexer parses, imports learnings, embeds, watches the files and
+  writes `~/.contextengine/index/<corpus>.json` (chunks, sources, one store key per chunk; temp
+  file + rename). Readers load it, poll its mtime every 3 s, never watch files, never import
+  learnings from a sweep, and load the model only on their first semantic query. A reader with
+  no index yet builds once locally without importing. A machine with one chat, or without
+  launchd, is simply the writer running the ordinary pipeline.
+- **Turn it on**: `env: { "CONTEXTENGINE_SHARED_INDEX": "1" }` on the MCP entry (`.mcp.json`,
+  `~/.claude.json`, `.vscode/mcp.json`, the launchd plist). Off, every server indexes on its
+  own as before, with the vector store still shared.
+- **See it**: `contextengine servers` prints `indexer` / `reader` and the corpus per server and
+  warns only when more than 3 servers index on their own. Audit events `server.role` and
+  `index.write`. Reader `reindex` reloads the shared index and names the indexer.
+- **Prove it**: `node scripts/trial-shared-index.mjs` (three servers, three cwds, throwaway
+  HOME, one doc change; exit 0 only if one server re-indexed, both readers answered with the
+  new content, reader CPU flat). 2026-09-05 run: readers reloaded 4.5 s after the write.
+- Not shared: the launchd server keeps its own corpus (`WorkingDirectory ~`, memory skipped)
+  until its plist changes, so it is its own indexer either way.
+
 ### Build & Test
 - `npx tsc` — TypeScript compilation (strict mode)
 - `npx vitest run` — 76 tests across 6 files (search, learnings, activation, cli, sessions, firewall)

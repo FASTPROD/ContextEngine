@@ -86,7 +86,7 @@ const DEFAULT_PATTERNS = [
  * Look for contextengine.json in standard locations.
  * Priority: env var > CWD > home dir
  */
-function findConfigFile(): string | null {
+export function findConfigFile(): string | null {
   const candidates: string[] = [];
 
   const envPath = process.env.CONTEXTENGINE_CONFIG;

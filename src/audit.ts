@@ -159,6 +159,9 @@ export type AuditEvent =
   | "learning.store_shrink_refused"
   | "learning.store_growth_refused"
   | "server.start"
+  // One indexer, many readers (2.6.0): which role a server took and each shared-index write
+  | "server.role"
+  | "index.write"
   | "learning.import"
   | "learning.export"
   | "session.save"

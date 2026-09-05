@@ -16,12 +16,13 @@
 //    behind the same dynamic-import + isEmbeddingsReady() check pattern.
 
 import type { Chunk } from "./ingest.js";
+import { embedKey, appendEmbeddings } from "./embedding-store.js";
 
 // We dynamically import @huggingface/transformers to keep startup fast
 // and handle the case where it fails gracefully.
 let embedPipeline: any = null;
 
-const MODEL_NAME = "Xenova/all-MiniLM-L6-v2";
+export const MODEL_NAME = "Xenova/all-MiniLM-L6-v2";
 
 /**
  * Initialize the embedding pipeline (downloads model on first run, ~22MB).
@@ -97,34 +98,70 @@ export interface EmbeddedChunk {
   vector: Float32Array;
 }
 
+/** The exact text that is embedded for a chunk; the store key is derived from it. */
+export function embedInputOf(chunk: Chunk): string {
+  // Embed section + content together for context
+  return `${chunk.section}\n${chunk.content}`.slice(0, 512);
+}
+
+export function embedKeyOf(chunk: Chunk): string {
+  return embedKey(MODEL_NAME, embedInputOf(chunk));
+}
+
+export interface EmbedChunksResult {
+  embedded: EmbeddedChunk[];
+  /** Chunks whose vector came from the shared store. */
+  reused: number;
+  /** Chunks embedded now and appended to the store. */
+  fresh: number;
+}
+
 /**
- * Embed all chunks. Returns the chunks with their vectors.
- * Shows progress on stderr.
+ * Embed all chunks, reusing the content-addressed store for every text it already holds and
+ * embedding only the rest. [LOCK] [EMBEDDINGS-ARE-CONTENT-ADDRESSED]
+ * Returns the chunks in input order. Shows progress on stderr.
  */
-export async function embedChunks(chunks: Chunk[]): Promise<EmbeddedChunk[]> {
-  const results: EmbeddedChunk[] = [];
-  const total = chunks.length;
+export async function embedChunks(
+  chunks: Chunk[],
+  store?: Map<string, Float32Array>,
+  embedFn: (text: string) => Promise<Float32Array> = embedText,
+  storePath?: string,
+): Promise<EmbedChunksResult> {
+  const known = store ?? new Map<string, Float32Array>();
+  const keys = chunks.map(embedKeyOf);
+  const results: EmbeddedChunk[] = new Array(chunks.length);
+  const todo: number[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const v = known.get(keys[i]);
+    if (v) results[i] = { chunk: chunks[i], vector: v };
+    else todo.push(i);
+  }
+  const total = todo.length;
   const batchSize = 10;
-
-  for (let i = 0; i < total; i += batchSize) {
-    const batch = chunks.slice(i, i + batchSize);
-    const batchResults = await Promise.all(
-      batch.map(async (chunk) => {
-        // Embed section + content together for context
-        const text = `${chunk.section}\n${chunk.content}`.slice(0, 512);
-        const vector = await embedText(text);
-        return { chunk, vector };
-      })
-    );
-    results.push(...batchResults);
-
-    const done = Math.min(i + batchSize, total);
+  const appended: Array<[string, Float32Array]> = [];
+  for (let b = 0; b < total; b += batchSize) {
+    const batch = todo.slice(b, b + batchSize);
+    const vectors = await Promise.all(batch.map((i) => embedFn(embedInputOf(chunks[i]))));
+    batch.forEach((i, j) => {
+      results[i] = { chunk: chunks[i], vector: vectors[j] };
+      if (!known.has(keys[i])) {
+        known.set(keys[i], vectors[j]);
+        appended.push([keys[i], vectors[j]]);
+      }
+    });
+    const done = Math.min(b + batchSize, total);
     if (done % 50 === 0 || done === total) {
-      console.error(`[ContextEngine] 📊 Embedded ${done}/${total} chunks`);
+      console.error(`[ContextEngine] 📊 Embedded ${done}/${total} new chunks`);
     }
   }
-
-  return results;
+  if (appended.length > 0) {
+    try {
+      appendEmbeddings(appended, storePath);
+    } catch (err) {
+      console.error(`[ContextEngine] ⚠ embedding store append failed: ${(err as Error).message}`);
+    }
+  }
+  return { embedded: results, reused: chunks.length - total, fresh: total };
 }
 
 export interface VectorSearchResult {

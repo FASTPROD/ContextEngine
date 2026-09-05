@@ -9,13 +9,23 @@ import { searchChunks, SearchResult } from "./search.js";
 import {
   initEmbeddings,
   embedChunks,
+  embedKeyOf,
   vectorSearch,
   isEmbeddingsReady,
   EmbeddedChunk,
   VectorSearchResult,
 } from "./embeddings.js";
 import { collectProjectOps, collectSystemOps } from "./collectors.js";
-import { loadCache, saveCache, clearCache } from "./cache.js";
+import { loadEmbeddingStore, compactEmbeddingStore } from "./embedding-store.js";
+import {
+  sharedIndexEnabled,
+  corpusId,
+  electIndexer,
+  writeSharedIndex,
+  readSharedIndex,
+  sharedIndexMtime,
+  type ServerRole,
+} from "./shared-index.js";
 import {
   listProjects,
   checkPorts,
@@ -98,6 +108,19 @@ let embeddedChunks: EmbeddedChunk[] = [];
 let activeProjectNames: string[] = [];
 const firewall = new ProtocolFirewall();
 
+// One indexer, many readers. [LOCK] [ONE-INDEXER-MANY-READERS]
+// With the shared index off (default until the trial), every server is its own indexer, exactly
+// as before, and only the content-addressed vector store below is new.
+let role: ServerRole = "indexer";
+let corpus: string | undefined;
+let indexerPid: number | null = null;
+let setRegistryRole: ((r: ServerRole) => void) | null = null;
+/** key -> vector, loaded from ~/.contextengine/embeddings.bin and grown by what we embed. */
+let vectorStore: Map<string, Float32Array> = new Map();
+let indexSeq = 0;
+let lastIndexMtime: number | null = null;
+let modelInit: Promise<boolean> | null = null;
+
 // Wire up learning search for auto-injection (avoids circular import)
 firewall.setLearningSearchFn((query, projects) => {
   return searchLearnings(query)
@@ -114,9 +137,11 @@ firewall.setLearningSearchFn((query, projects) => {
 });
 
 /**
- * (Re-)ingest all sources. Called at startup and on file changes.
+ * Parse every source, collect ops and code, import learnings (indexer only), inject learnings,
+ * community rules and adapters. Sets `sources`, `chunks`, `activeProjectNames`. No embedding
+ * here. One body for startup and for every reindex; the two used to be separate copies.
  */
-async function reindex(): Promise<void> {
+async function buildIndex(opts: { importLearnings: boolean; loadAdapters?: boolean }): Promise<void> {
   sources = loadSources();
   chunks = ingestSources(sources);
 
@@ -170,18 +195,20 @@ async function reindex(): Promise<void> {
     }
   }
 
-  // Auto-import learnings from discovered doc sources
-  // Dedup is built-in — safe to call on every reindex, no duplicates created
-  const autoImport = autoImportFromSources(
-    sources.map((s) => ({ path: s.path, name: s.name }))
-  );
-  if (autoImport.imported > 0) {
-    console.error(
-      `[ContextEngine] 📥 Auto-imported ${autoImport.imported} new learnings from ${autoImport.total} doc sources (${autoImport.updated} updated)`
+  // Auto-import learnings from discovered doc sources. Dedup is built-in. Only the indexer of a
+  // corpus writes the store from a sweep; a reader leaves that to it (one writer, not N).
+  if (opts.importLearnings) {
+    const autoImport = autoImportFromSources(
+      sources.map((s) => ({ path: s.path, name: s.name }))
     );
-  }
-  if (autoImport.refused) {
-    console.error(`[ContextEngine] ⛔ Auto-import write refused: ${autoImport.refused}`);
+    if (autoImport.imported > 0) {
+      console.error(
+        `[ContextEngine] 📥 Auto-imported ${autoImport.imported} new learnings from ${autoImport.total} doc sources (${autoImport.updated} updated)`
+      );
+    }
+    if (autoImport.refused) {
+      console.error(`[ContextEngine] ⛔ Auto-import write refused: ${autoImport.refused}`);
+    }
   }
 
   // Inject learnings as searchable chunks (project-scoped to prevent IP leakage)
@@ -211,6 +238,10 @@ async function reindex(): Promise<void> {
 
   // Collect from plugin adapters
   if (config.adapters && config.adapters.length > 0) {
+    if (opts.loadAdapters) {
+      const adapterCount = await loadAdapters(config.adapters as AdapterEntry[]);
+      if (adapterCount === 0) return;
+    }
     const adapterChunks = await collectFromAdapters(config.adapters as AdapterEntry[]);
     if (adapterChunks.length > 0) {
       chunks.push(...adapterChunks);
@@ -219,12 +250,91 @@ async function reindex(): Promise<void> {
       );
     }
   }
+}
 
-  if (isEmbeddingsReady()) {
-    console.error(`[ContextEngine] 🧠 Re-embedding ${chunks.length} chunks...`);
-    embeddedChunks = await embedChunks(chunks);
-    saveCache(chunks, embeddedChunks);
+/** Load the model once; every caller shares the same promise. */
+function ensureModel(): Promise<boolean> {
+  if (!modelInit) modelInit = initEmbeddings();
+  return modelInit;
+}
+
+/**
+ * Vectors for the current chunks: from the store for every text it holds, embedded now for
+ * the rest. [LOCK] [EMBEDDINGS-ARE-CONTENT-ADDRESSED]
+ */
+async function embedAll(): Promise<void> {
+  if (!isEmbeddingsReady()) return;
+  const snapshot = chunks;
+  const r = await embedChunks(snapshot, vectorStore);
+  if (snapshot !== chunks) return; // a newer build replaced these chunks meanwhile; its own embed follows
+  embeddedChunks = r.embedded;
+  console.error(`[ContextEngine] ✅ Semantic search ready: ${r.reused} vectors from the store, ${r.fresh} embedded now`);
+  if (role === "indexer") {
+    try {
+      const c = compactEmbeddingStore(new Set(snapshot.map(embedKeyOf)));
+      if (c.compacted) console.error(`[ContextEngine] 🧹 Embedding store compacted: ${c.before} -> ${c.after} records`);
+    } catch (err) {
+      console.error(`[ContextEngine] ⚠ embedding store compaction failed: ${(err as Error).message}`);
+    }
   }
+}
+
+/** Indexer only: write the shared index for readers of this corpus. No-op otherwise. */
+function publishIndex(): void {
+  if (!corpus || role !== "indexer") return;
+  try {
+    indexSeq++;
+    const r = writeSharedIndex({
+      corpus,
+      seq: indexSeq,
+      writer: process.pid,
+      sources,
+      activeProjectNames,
+      chunks,
+      keys: chunks.map(embedKeyOf),
+    });
+    lastIndexMtime = sharedIndexMtime(corpus);
+    safeAppend("index.write", { corpus, seq: indexSeq, chunks: chunks.length, vectors: embeddedChunks.length, bytes: r.bytes, ms: r.ms });
+    console.error(`[ContextEngine] 📤 Shared index written: seq ${indexSeq}, ${chunks.length} chunks, ${Math.round(r.bytes / 1024)} KB, ${r.ms} ms`);
+  } catch (err) {
+    console.error(`[ContextEngine] ⚠ shared index write failed: ${(err as Error).message}`);
+  }
+}
+
+/** Reader: take the indexer's chunks and resolve their vectors from the store. */
+function adoptSharedIndex(): boolean {
+  if (!corpus) return false;
+  const f = readSharedIndex(corpus);
+  if (!f) return false;
+  sources = f.sources;
+  chunks = f.chunks;
+  activeProjectNames = f.activeProjectNames;
+  try { firewall.setProjectDirs(loadProjectDirs()); } catch { /* scoping keeps its last value */ }
+  vectorStore = loadEmbeddingStore().vectors;
+  const vecs: EmbeddedChunk[] = [];
+  let missing = 0;
+  f.chunks.forEach((c, i) => {
+    const v = vectorStore.get(f.keys[i]);
+    if (v) vecs.push({ chunk: c, vector: v });
+    else missing++;
+  });
+  embeddedChunks = vecs;
+  indexSeq = f.seq;
+  lastIndexMtime = sharedIndexMtime(corpus);
+  console.error(
+    `[ContextEngine] 📥 Shared index loaded: seq ${f.seq} from pid ${f.writer}, ${chunks.length} chunks, ${vecs.length} vectors${missing ? `, ${missing} not embedded yet` : ""}`
+  );
+  return true;
+}
+
+/**
+ * (Re-)ingest all sources. Called at startup and on file changes by the indexer; a reader
+ * never calls it on its own except as the fallback when no shared index exists yet.
+ */
+async function reindex(): Promise<void> {
+  await buildIndex({ importLearnings: role === "indexer" });
+  await embedAll();
+  publishIndex();
 }
 
 // ---------------------------------------------------------------------------
@@ -320,9 +430,12 @@ function hybridSearch(
 // File Watching
 // ---------------------------------------------------------------------------
 const watchers: ReturnType<typeof watch>[] = [];
+let indexPoll: ReturnType<typeof setInterval> | null = null;
+let rolePoll: ReturnType<typeof setInterval> | null = null;
+const INDEX_POLL_MS = 3_000;
+const ROLE_POLL_MS = 15_000;
 
-function startWatching(): void {
-  // Clean up old watchers
+function stopWatching(): void {
   for (const w of watchers) {
     try {
       w.close();
@@ -331,6 +444,11 @@ function startWatching(): void {
     }
   }
   watchers.length = 0;
+}
+
+/** Indexer only: one fs.watch per source; a change rebuilds, embeds the new chunks, publishes. */
+function startWatching(): void {
+  stopWatching();
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -342,6 +460,7 @@ function startWatching(): void {
         // Debounce: wait 500ms after last change before re-indexing
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(async () => {
+          if (role !== "indexer") return; // demoted while the timer ran
           console.error(
             `[ContextEngine] 📝 File changed: ${basename(source.path)} — re-indexing...`
           );
@@ -360,6 +479,56 @@ function startWatching(): void {
   console.error(
     `[ContextEngine] 👁 Watching ${watchers.length} source files for changes`
   );
+}
+
+/** Reader only: reload the shared index when its stamp moves. A stat every 3 s, nothing else. */
+function startIndexPolling(): void {
+  if (indexPoll || !corpus) return;
+  indexPoll = setInterval(() => {
+    if (role !== "reader" || !corpus) return;
+    const m = sharedIndexMtime(corpus);
+    if (m !== null && m !== lastIndexMtime) adoptSharedIndex();
+  }, INDEX_POLL_MS);
+  indexPoll.unref();
+}
+
+function stopIndexPolling(): void {
+  if (indexPoll) clearInterval(indexPoll);
+  indexPoll = null;
+}
+
+/** Re-run the election; on a change of role, switch what this server does. */
+function evaluateRole(reason: string): void {
+  if (!corpus) return;
+  let e: ReturnType<typeof electIndexer>;
+  try {
+    e = electIndexer(corpus, listServers().servers, process.pid);
+  } catch (err) {
+    console.error(`[ContextEngine] ⚠ election failed, staying ${role}: ${(err as Error).message}`);
+    return;
+  }
+  indexerPid = e.indexer;
+  if (e.role === role) return;
+  const was = role;
+  role = e.role;
+  setRegistryRole?.(role);
+  safeAppend("server.role", { pid: process.pid, corpus, role, indexer: indexerPid, reason });
+  console.error(`[ContextEngine] 🧭 Role ${was} -> ${role} (${reason}; indexer pid ${indexerPid ?? process.pid})`);
+  if (role === "indexer") {
+    stopIndexPolling();
+    ensureModel().then(() => reindex()).then(() => startWatching()).catch((err) => {
+      console.error(`[ContextEngine] ⚠ taking over as indexer failed: ${(err as Error).message}`);
+    });
+  } else {
+    stopWatching();
+    startIndexPolling();
+  }
+}
+
+function startRolePolling(): void {
+  if (rolePoll || !corpus) return;
+  rolePoll = setInterval(() => evaluateRole("periodic"), ROLE_POLL_MS);
+  rolePoll.unref();
 }
 
 // ---------------------------------------------------------------------------
@@ -411,6 +580,10 @@ server.tool(
       score: number;
       label: string;
     }> = [];
+
+    // A reader keeps its 300 MB model unloaded until someone asks for semantics; the first such
+    // query is answered by keyword while the model loads. [LOCK] [EMBEDDINGS-ARE-CONTENT-ADDRESSED]
+    if (mode !== "keyword" && !isEmbeddingsReady()) void ensureModel();
 
     if (mode === "keyword" || mode === "hybrid") {
       const kwResults = searchChunks(chunks, query, top_k * 2);
@@ -582,6 +755,13 @@ server.tool(
   "Force a full re-index of all knowledge sources. Use after adding new files or changing contextengine.json.",
   {},
   async () => {
+    if (role === "reader" && corpus) {
+      adoptSharedIndex();
+      return respond(
+        "reindex",
+        `This server reads the shared index of corpus ${corpus}, written by pid ${indexerPid ?? "?"}: reloaded seq ${indexSeq}, ${chunks.length} chunks, ${embeddedChunks.length} vectors. Saving a doc makes the indexer rebuild; every reader picks it up within ${INDEX_POLL_MS / 1000} s.`
+      );
+    }
     await reindex();
     return respond("reindex", `Re-indexed: ${chunks.length} chunks from ${sources.length} sources. Embeddings: ${embeddedChunks.length} vectors.`);
   }
@@ -1367,102 +1547,40 @@ function registerResources(): void {
 // ---------------------------------------------------------------------------
 async function main() {
   // 0. Inventory this server FIRST, before indexing takes minutes: a server exists the moment it
-  //    starts. [LOCK] [SERVERS-ARE-INVENTORIED]
+  //    starts. [LOCK] [SERVERS-ARE-INVENTORIED]. With the shared index on, the registry is also
+  //    the electorate: the record carries the corpus and the role. [LOCK] [ONE-INDEXER-MANY-READERS]
+  if (sharedIndexEnabled()) {
+    try {
+      corpus = corpusId();
+    } catch (err) {
+      console.error("[ContextEngine] ⚠ corpus id failed, shared index off for this server:", err);
+    }
+  }
   try {
-    const { record } = registerServer({ version: PKG_VERSION, script: fileURLToPath(import.meta.url) });
+    const reg = registerServer({ version: PKG_VERSION, script: fileURLToPath(import.meta.url), corpus, role: corpus ? "reader" : undefined });
+    setRegistryRole = reg.setRole;
     const fleet = listServers();
+    if (corpus) {
+      const e = electIndexer(corpus, fleet.servers, process.pid);
+      role = e.role;
+      indexerPid = e.indexer;
+      reg.setRole(role);
+      safeAppend("server.role", { pid: process.pid, corpus, role, indexer: indexerPid, reason: "start" });
+    }
     console.error(`[ContextEngine] 🧭 ${formatServers(fleet)}`);
-    safeAppend("server.start", { pid: record.pid, parent: record.parent, version: record.version, build: record.build, cwd: record.cwd, servers_running: fleet.servers.length, stale_builds: fleet.servers.filter((x) => x.staleBuild).length });
+    if (corpus) console.error(`[ContextEngine] 🧭 This server: ${role} of corpus ${corpus}${role === "reader" ? ` (indexer pid ${indexerPid})` : ""}`);
+    safeAppend("server.start", { pid: reg.record.pid, parent: reg.record.parent, version: reg.record.version, build: reg.record.build, cwd: reg.record.cwd, servers_running: fleet.servers.length, stale_builds: fleet.servers.filter((x) => x.staleBuild).length });
   } catch (err) {
     console.error("[ContextEngine] ⚠ Server registry failed:", err);
   }
 
-  // 1. Ingest all sources (fast — keyword search available immediately)
-  sources = loadSources();
-  chunks = ingestSources(sources);
-
-  // 1b. Collect operational data (git, deps, env, docker, pm2, etc.)
-  const config = loadConfig();
-  const projectDirs = loadProjectDirs();
-  activeProjectNames = projectDirs.map((d) => d.name);
-  firewall.setProjectDirs(projectDirs);
-  if (config.collectOps !== false) {
-    let opsChunks = 0;
-    for (const dir of projectDirs) {
-      const ops = collectProjectOps(dir.path, dir.name);
-      chunks.push(...ops);
-      opsChunks += ops.length;
-    }
-    if (opsChunks > 0) {
-      console.error(
-        `[ContextEngine] ⚙ Collected ${opsChunks} operational chunks from ${projectDirs.length} projects`
-      );
-    }
-  }
-  if (config.collectSystemOps !== false) {
-    const sysOps = collectSystemOps();
-    if (sysOps.length > 0) {
-      chunks.push(...sysOps);
-      console.error(
-        `[ContextEngine] 🖥 Collected ${sysOps.length} system operational chunks`
-      );
-    }
-  }
-
-  // 1c. Scan code files (TS/JS/Python) if configured
-  if (config.codeDirs && config.codeDirs.length > 0) {
-    let codeChunks = 0;
-    for (const dir of projectDirs) {
-      for (const codeDir of config.codeDirs) {
-        const codePath = join(dir.path, codeDir);
-        if (existsSync(codePath)) {
-          const codeResults = scanCodeDir(codePath, dir.name);
-          chunks.push(...codeResults);
-          codeChunks += codeResults.length;
-        }
-      }
-    }
-    if (codeChunks > 0) {
-      console.error(
-        `[ContextEngine] 💻 Parsed ${codeChunks} code chunks from source files`
-      );
-    }
-  }
-
-  // 1d. Auto-import learnings from discovered doc sources
-  const autoImport = autoImportFromSources(
-    sources.map((s) => ({ path: s.path, name: s.name }))
-  );
-  if (autoImport.imported > 0) {
-    console.error(
-      `[ContextEngine] 📥 Auto-imported ${autoImport.imported} new learnings from ${autoImport.total} doc sources (${autoImport.updated} updated)`
-    );
-  }
-  if (autoImport.refused) {
-    console.error(`[ContextEngine] ⛔ Auto-import write refused: ${autoImport.refused}`);
-  }
-
-  // 1e. Inject learnings into search index (project-scoped)
-  const learningChunks = learningsToChunks(activeProjectNames);
-  if (learningChunks.length > 0) {
-    chunks.push(...learningChunks);
-    console.error(
-      `[ContextEngine] 💡 Injected ${learningChunks.length} learning chunks into search index (scoped)`
-    );
-  }
-
-  // 1f. Load and collect from plugin adapters
-  if (config.adapters && config.adapters.length > 0) {
-    const adapterCount = await loadAdapters(config.adapters as AdapterEntry[]);
-    if (adapterCount > 0) {
-      const adapterChunks = await collectFromAdapters(config.adapters as AdapterEntry[]);
-      if (adapterChunks.length > 0) {
-        chunks.push(...adapterChunks);
-        console.error(
-          `[ContextEngine] 🔌 Adapters contributed ${adapterChunks.length} chunks from ${adapterCount} adapters`
-        );
-      }
-    }
+  // 1. The index: a reader takes the indexer's; everyone else, or a reader with nothing to
+  //    take yet, builds it (fast, keyword search available immediately).
+  let adopted = false;
+  if (role === "reader") adopted = adoptSharedIndex();
+  if (!adopted) {
+    if (role === "reader") console.error("[ContextEngine] 📥 No shared index yet; building locally once, without importing learnings");
+    await buildIndex({ importLearnings: role === "indexer", loadAdapters: true });
   }
 
   // 2. Register MCP resources
@@ -1543,30 +1661,25 @@ async function main() {
     console.error("[ContextEngine] ⚠ Failed to write server-meta.json:", err);
   }
 
-  // 4. Load embeddings — try cache first, then model (non-blocking)
-  const cached = loadCache(chunks);
-  if (cached) {
-    embeddedChunks = cached;
-    console.error(
-      `[ContextEngine] ✅ Semantic search ready from cache (${embeddedChunks.length} vectors)`
-    );
-  } else {
-    initEmbeddings().then(async (ready) => {
-      if (ready) {
-        console.error(
-          `[ContextEngine] 🧠 Embedding ${chunks.length} chunks...`
-        );
-        embeddedChunks = await embedChunks(chunks);
-        saveCache(chunks, embeddedChunks);
-        console.error(
-          `[ContextEngine] ✅ Semantic search ready (${embeddedChunks.length} vectors)`
-        );
-      }
+  // 4. Vectors. The store holds one vector per text ever embedded on this machine; the model
+  //    always loads for whoever embeds or answers queries. [LOCK] [EMBEDDINGS-ARE-CONTENT-ADDRESSED]
+  //    A reader that adopted the index already has its vectors and loads the model on its first
+  //    semantic query, not before: 300 MB per process is worth waiting for.
+  if (!adopted) {
+    vectorStore = loadEmbeddingStore().vectors;
+    if (vectorStore.size > 0) console.error(`[ContextEngine] 💾 Embedding store: ${vectorStore.size} vectors`);
+    publishIndex(); // keyword-searchable index for readers now; vectors follow
+    ensureModel().then(async (ready) => {
+      if (!ready) return;
+      await embedAll();
+      publishIndex();
     });
   }
 
-  // 5. Start file watchers
-  startWatching();
+  // 5. Watch (indexer) or poll (reader), and keep the election running
+  if (role === "indexer") startWatching();
+  else startIndexPolling();
+  startRolePolling();
 
   // 6. Boot the local HTTP event-ingest endpoint for the browser extension.
   // Local 127.0.0.1:7842 only; auth via shared secret at
