@@ -129,8 +129,10 @@ files and re-embedding every chunk on every save, 9.3 CPU-hours in 1.4 h, load a
   writes `~/.contextengine/index/<corpus>.json` (chunks, sources, one store key per chunk; temp
   file + rename). Readers load it, poll its mtime every 3 s, never watch files, never import
   learnings from a sweep, and load the model only on their first semantic query. A reader with
-  no index yet builds once locally without importing. A machine with one chat, or without
-  launchd, is simply the writer running the ordinary pipeline.
+  no index yet (every window restarted at once) builds once locally without importing and
+  **without embedding**: keyword search until its indexer publishes, then it adopts. Only
+  indexers embed. A machine with one chat, or without launchd, is simply the writer running
+  the ordinary pipeline.
 - **Turn it on**: `env: { "CONTEXTENGINE_SHARED_INDEX": "1" }` on the MCP entry (`.mcp.json`,
   `~/.claude.json`, `.vscode/mcp.json`, the launchd plist). Off, every server indexes on its
   own as before, with the vector store still shared.
@@ -139,7 +141,8 @@ files and re-embedding every chunk on every save, 9.3 CPU-hours in 1.4 h, load a
   `index.write`. Reader `reindex` reloads the shared index and names the indexer.
 - **Prove it**: `node scripts/trial-shared-index.mjs` (three servers, three cwds, throwaway
   HOME, one doc change; exit 0 only if one server re-indexed, both readers answered with the
-  new content, reader CPU flat). 2026-09-05 run: readers reloaded 4.5 s after the write.
+  new content, reader CPU flat, readers never embedded even when started before the index
+  existed). 2026-09-05 runs: readers reloaded 4.5 s, then 2.0 s, after the write.
 - Not shared: the launchd server keeps its own corpus (`WorkingDirectory ~`, memory skipped)
   until its plist changes, so it is its own indexer either way.
 

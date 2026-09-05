@@ -102,24 +102,29 @@ const auditLines = () => { const p = join(ceHome, "audit.log"); return existsSyn
 const servers = [];
 let failed = false;
 try {
-  // Start three servers, a few seconds apart so the election is deterministic: A is the indexer.
+  // Start three servers as one restart would: A first, B and C the moment A is registered, all
+  // before A has embedded anything. The readers must never embed, index or not.
   for (const [i, p] of projects.entries()) {
     const s = new Server(String.fromCharCode(65 + i), join(ws, p));
     servers.push(s);
     log(`started ${s.name} (pid ${s.pid}) in ${p}`);
-    await waitFor(`${s.name} running`, () => /MCP server running/.test(s.err), 120_000);
-    await s.init();
-    if (i === 0) await waitFor("A semantic ready", () => /Semantic search ready/.test(s.err), 240_000);
+    if (i === 0) await waitFor("A registered", () => existsSync(join(ceHome, "servers", `${s.pid}.json`)), 120_000);
   }
-  const [A, B, C] = servers;
+  for (const s of servers) { await waitFor(`${s.name} running`, () => /MCP server running/.test(s.err), 120_000); await s.init(); }
   const roles = Object.fromEntries(registry().map((r) => [r.pid, r.role]));
   log(`registry roles: ${servers.map((s) => `${s.name}=${roles[s.pid]}`).join(" ")}`);
-  if (roles[A.pid] !== "indexer" || roles[B.pid] !== "reader" || roles[C.pid] !== "reader") throw new Error("expected A indexer, B and C readers");
-  for (const s of [B, C]) if (!/Shared index loaded/.test(s.err)) throw new Error(`${s.name} did not load the shared index`);
+  const A = servers.find((s) => roles[s.pid] === "indexer");
+  const readers = servers.filter((s) => roles[s.pid] === "reader");
+  if (!A || readers.length !== 2) throw new Error("expected one indexer and two readers");
+  const [B, C] = readers;
+  await waitFor(`${A.name} semantic ready`, () => /Semantic search ready/.test(A.err), 240_000);
+  await waitFor("readers adopted the index", () => readers.every((s) => /Shared index loaded/.test(s.err)), 120_000);
+  const earlyReaders = readers.filter((s) => /Reader without an index/.test(s.err)).map((s) => s.name);
+  log(`indexer ${A.name}; readers ${B.name} ${C.name}; started before the index existed: ${earlyReaders.join(" ") || "none"}`);
 
   // Baseline
   const token = `zebra-quokka-${Date.now().toString(36)}`;
-  const before = { A: A.cpuSeconds(), B: B.cpuSeconds(), C: C.cpuSeconds() };
+  const before = Object.fromEntries(servers.map((s) => [s.name, s.cpuSeconds()]));
   const auditBefore = auditLines();
   const embedsBefore = servers.map((s) => s.count(/Embedded \d+\/\d+ new chunks/g));
   const seqBefore = Math.max(...[B, C].map((s) => Math.max(0, ...[...s.err.matchAll(/Shared index loaded: seq (\d+)/g)].map((m) => Number(m[1])))));
@@ -141,21 +146,22 @@ try {
   await new Promise((r) => setTimeout(r, 4000)); // let any straggler re-index show itself
   const embedsAfter = servers.map((s) => s.count(/Embedded \d+\/\d+ new chunks/g));
   const reindexed = servers.map((s) => s.count(/File changed:/g));
-  const after = { A: A.cpuSeconds(), B: B.cpuSeconds(), C: C.cpuSeconds() };
+  const after = Object.fromEntries(servers.map((s) => [s.name, s.cpuSeconds()]));
   const indexWrites = auditCount("index.write", auditBefore);
   const importBursts = auditCount("learning.import", auditBefore);
 
   console.log("");
   console.log("| server | role | File changed seen | embed runs after change | CPU s before -> after |");
   console.log("|---|---|---|---|---|");
-  for (const [i, s] of servers.entries()) console.log(`| ${s.name} pid ${s.pid} | ${roles[s.pid]} | ${reindexed[i]} | ${embedsAfter[i] - embedsBefore[i]} | ${before[s.name]} -> ${after[s.name]} |`);
+  for (const [i, s] of servers.entries()) console.log(`| ${s.name} pid ${s.pid} | ${roles[s.pid]} | ${reindexed[i]} | ${embedsAfter[i] - embedsBefore[i]} (total ${embedsAfter[i]}) | ${before[s.name]} -> ${after[s.name]} |`);
   console.log("");
   console.log(`index.write events after the change: ${indexWrites}; learning.import events after the change: ${importBursts}`);
   console.log(`readers reloaded ${tReload}s after the write; search hit B=${hitB} C=${hitC} at ${tSearch}s; hybrid on a reader answered=${hybridOk}`);
 
-  const oneReindex = reindexed[0] >= 1 && reindexed[1] === 0 && reindexed[2] === 0 && (embedsAfter[1] - embedsBefore[1]) === 0 && (embedsAfter[2] - embedsBefore[2]) === 0;
-  const readersFlat = (after.B - before.B) <= 2 && (after.C - before.C) <= 2;
-  if (!oneReindex) { failed = true; console.log("FAIL: more than one server re-indexed, or a reader embedded"); }
+  const idx = (s) => servers.indexOf(s);
+  const oneReindex = reindexed[idx(A)] >= 1 && reindexed[idx(B)] === 0 && reindexed[idx(C)] === 0 && embedsAfter[idx(B)] === 0 && embedsAfter[idx(C)] === 0;
+  const readersFlat = (after[B.name] - before[B.name]) <= 2 && (after[C.name] - before[C.name]) <= 2;
+  if (!oneReindex) { failed = true; console.log("FAIL: more than one server re-indexed, or a reader embedded at any point"); }
   if (!(hitB && hitC)) { failed = true; console.log("FAIL: a reader did not find the new content"); }
   if (!readersFlat) { failed = true; console.log("FAIL: a reader's CPU time moved by more than 2 s across the change"); }
   if (indexWrites < 1) { failed = true; console.log("FAIL: no index.write in the audit log"); }

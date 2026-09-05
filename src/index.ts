@@ -1665,7 +1665,7 @@ async function main() {
   //    always loads for whoever embeds or answers queries. [LOCK] [EMBEDDINGS-ARE-CONTENT-ADDRESSED]
   //    A reader that adopted the index already has its vectors and loads the model on its first
   //    semantic query, not before: 300 MB per process is worth waiting for.
-  if (!adopted) {
+  if (!adopted && role === "indexer") {
     vectorStore = loadEmbeddingStore().vectors;
     if (vectorStore.size > 0) console.error(`[ContextEngine] 💾 Embedding store: ${vectorStore.size} vectors`);
     publishIndex(); // keyword-searchable index for readers now; vectors follow
@@ -1674,6 +1674,11 @@ async function main() {
       await embedAll();
       publishIndex();
     });
+  } else if (!adopted) {
+    // A reader that started before its indexer published (every window restarted at once):
+    // keyword search from its own build, no embedding of its own, the index adopted the moment
+    // it appears. Only indexers embed; that is the whole point. [LOCK] [ONE-INDEXER-MANY-READERS]
+    console.error(`[ContextEngine] ⏳ Reader without an index: keyword search only until pid ${indexerPid ?? "?"} publishes`);
   }
 
   // 5. Watch (indexer) or poll (reader), and keep the election running
