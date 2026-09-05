@@ -368,6 +368,7 @@ code references already point at it._
 - **VPS auth** — sshpass password-based SSH (key passphrase lost)
 - **rsync excludes** — `node_modules/`, `data/` preserved on server
 - **Post-deploy** — `npm install` on VPS (compiled locally), PM2 restart
+- **Preflight** — `scripts/deploy-preflight.sh` (LOCK `[DEPLOY_ONLY_COMMITTED]`): `server/deploy.sh` refuses a dirty `server/` above the build line. Distributed to six fleet repos by `scripts/sync-deploy-preflight.sh` (`--check` default, `--apply` copies and proves). Lesson: CE learning, category deployment, 2026-09-05; record in `docs/handover-deploy-preflight-fleet.md`.
 
 ### CLI Capabilities (v1.16.0)
 - **15 subcommands** — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `save-session`, `load-session`, `list-sessions`, `end-session`, `import-learnings`, `audit`, `activate`, `deactivate`, `status`

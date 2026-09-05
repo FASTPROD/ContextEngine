@@ -97,3 +97,43 @@ blocks, override skips. Written for bash 3.2 (macOS) and `set -u`.
   | `COMPR-app/scripts/deploy_frontend.sh` | none, it REFUSES if the build is absent (line 29) | beside that same check, line 29 |
 
   Line numbers are from 2026-09-05; confirm them before editing rather than trusting them.
+
+## Done, 2026-09-05 (ContextEngine session)
+
+**Distribution:** `scripts/sync-deploy-preflight.sh`, LOCK [PREFLIGHT-ONE-SOURCE-COPIED-OUT].
+Same shape as `sync-hooks.sh`: explicit table of six repos, `--check` by default (md5 drift,
+sourced or not, committed or not), `--apply` copies then proves each copy by planting an
+untracked file in that repo and requiring the copied check to refuse it; a copy that cannot
+prove itself is rolled back. ContextEngine sources the original. Final `--check`: 6 current,
+0 drifted, 0 failed, all committed.
+
+**Wiring, seven scripts, three shapes, each committed in its repo:**
+
+| script | shape | where | commit |
+|---|---|---|---|
+| `compR.fr/deploy.sh` | files, on the whitelist | Phase 0, before ssh | `27a03cc` |
+| `PLANK.io/scripts/deploy_backend.sh` | files, on the drifted set as `backend/` paths | after the mode switch, before snapshot | `cc1f041` |
+| `ContextEngine/server/deploy.sh` | tree, narrowed to `server/` (what the bundle is built from) | above `npm run build` | `9268375` |
+| `app.CROWLR/scripts/deploy_frontend.sh` | tree | replaces the inline dirty-tree check, above the build | `b9fedfd` |
+| `COMPR-app/scripts/deploy_frontend.sh` | tree, every mode but `--check` | beside the build-presence refusal | `23f3db9` |
+| `invoc.io/deploy.sh` | tree, dry-run and `--skip-build` included | above `npm run build` | `171ffd4` |
+| `admin.CROWLR/scripts/deploy_backend.sh` | pushed, `origin upgrade/laravel-11` | replaces the inline HEAD compare | `2c610d43` |
+
+**Two corrections to the survey, measured:** app.CROWLR already had an inline dirty-tree
+refusal above its build, and admin.CROWLR already had an inline HEAD-vs-origin compare. Both
+replaced by the shared call: same refusal, plus the missing half (admin.CROWLR had no dirty-tree
+check) and the deliberate `ALLOW_UNCOMMITTED=1` override. The box's `fastprod` remote is the
+same GitHub repo as the Mac's `origin` (read on crowlr2), so `origin` is the right comparison.
+No bundle output is tracked in any of the four bundle repos (checked with `git ls-files`).
+
+**Verification, each script, both directions, no server contact:** `ssh`/`scp`/`rsync`/`npm`
+shimmed through PATH so a broken guard could only fail loudly, never reach a box.
+Dirty: a real tracked file modified, the script run in the mode that reaches the guard,
+refusal printed with the file named, before any build or transfer, file restored.
+Clean: after the commit, the same run passes the guard and stops at the first shimmed tool
+(build, snapshot or transfer). One trap found on the way: for PLANK a failing `ssh` shim
+killed the script at the remote md5 step under `pipefail`, before the guard; the shim had to
+succeed empty for that one. An exit code alone would have called that a refusal.
+
+**Canonical lesson:** ContextEngine learning, category `deployment`, 2026-09-05. Global
+CLAUDE.md and this repo's SKILLS.md carry a one-line pointer each, no restated prose.
