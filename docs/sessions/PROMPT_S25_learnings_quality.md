@@ -29,3 +29,16 @@ UX note from Yan (2026-09-05): a count of learnings is a vanity metric. What has
 CE prevents (blocks per week, last case) and what it recalls at the right moment (the 5 rules of
 this repo, with a thumbs up/down), plus "what runs in prod, what changed today". Keep that in
 mind for any surface touched.
+
+4. Status bar of the VS Code extension (Yan's screenshot 2026-09-05, `CE ⚠️ SAVE SESSION` in
+   yellow). `vscode-extension/src/statusBar.ts` shows that warning on a time-based
+   `sessionOverdue` flag, while `end_session` is already enforced by the post-push hook: a nag
+   with no evidence. Redesign, after items 1 to 3 or in a separate session:
+   - warning colour ONLY on a measured problem: store unreadable or shrink refused, MCP not
+     connected, deploy drift, commits made since the last saved session. Never on a timer.
+   - default text: `CE ✓` plus what CE did: blocks prevented (pre-commit, deploy preflight,
+     credentials hook, store tripwire) and recalls surfaced. Drop "time saved minutes", a
+     notional number nobody can check.
+   - tooltip: the last 3 blocks with file and reason, the 5 rules of this repo, "since today:
+     N saved", version and last verified release.
+   Every number shown must come from the audit log or git, never from an estimate.
