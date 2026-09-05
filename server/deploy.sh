@@ -37,6 +37,8 @@ PM2_PROCESS_NAME="contextengine-api"
 HEALTH_URL="https://api.compr.ch/contextengine/health"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# [LOCK] [DEPLOY_ONLY_COMMITTED] shared preflight; this repo sources the original.
+. "$PROJECT_ROOT/scripts/deploy-preflight.sh"
 
 DRY_RUN=0
 for arg in "$@"; do
@@ -70,6 +72,12 @@ log "Phase 0 — pre-flight"
 
 [[ -f "$SSH_KEY" ]] || die "SSH key not found at $SSH_KEY"
 [[ -f "$SCRIPT_DIR/package.json" ]] || die "Not in server/ directory — run from project root"
+
+# The bundle is built from server/ only; a bundle built from a dirty server/ matches no
+# commit. Checked BEFORE the build so a dirty tree is refused, not built then refused.
+# [LOCK] [DEPLOY_ONLY_COMMITTED]
+deploy_preflight_tree "$PROJECT_ROOT" server || exit 1
+log "  ✅ server/ committed, bundle will match $(git -C "$PROJECT_ROOT" rev-parse --short HEAD)"
 
 # Local build must succeed BEFORE we touch the server. This is the lesson
 # from the 2026-06-11 prod incident: server-side tsc was failing silently
