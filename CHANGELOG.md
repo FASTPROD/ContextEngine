@@ -4,6 +4,38 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [2.6.0] 2026-09-05: One indexer, many readers
+
+Every Claude Code chat spawns its own MCP server, plus launchd, plus VS Code. Measured on
+2026-09-05 (SESSION_26): eleven servers, 9.3 CPU-hours in 1.4 h, load average 230, each one
+parsing the same ~820 sources and re-embedding every chunk after every save. The embedding cache
+had hit 2 times in 51 starts, because its key was one hash over the whole corpus, git status
+included; and a hit meant the model never loaded, so no semantic search and no re-embed, ever.
+
+### Added
+
+- **Content-addressed vector store** (`[EMBEDDINGS-ARE-CONTENT-ADDRESSED]`,
+  `src/embedding-store.ts`): one vector per distinct embedded text in
+  `~/.contextengine/embeddings.bin`, shared by every server on the machine. A doc change embeds
+  only its new chunks; a cold start embeds only texts never seen before. Always on. The old
+  `embedding-cache.json` is no longer read.
+- **Shared index with one writer per corpus** (`[ONE-INDEXER-MANY-READERS]`,
+  `src/shared-index.ts`), behind `CONTEXTENGINE_SHARED_INDEX=1`: the indexer is elected from the
+  server registry (a build equal to the file on disk first, then the earliest start), parses,
+  imports learnings, embeds, watches the files and writes `~/.contextengine/index/<corpus>.json`;
+  every other server of that corpus loads it, reloads within 3 s of a change, never watches files,
+  never sweep-imports learnings, and loads the model only on its first semantic query. A reader
+  with no index yet builds once locally. Off, every server indexes on its own as before.
+- `contextengine servers` shows `indexer` / `reader` and the corpus per server; audit events
+  `server.role` and `index.write`; `scripts/trial-shared-index.mjs` proves the behaviour on
+  three servers from three cwds (one re-index, readers current within 5 s, reader CPU flat).
+
+### Changed
+
+- The `reindex` tool on a reader reloads the shared index and names the indexer instead of
+  rebuilding on its own.
+- The "too many servers" warning counts only servers that index on their own.
+
 ## [2.5.9] — 2026-09-05 — The servers inventory themselves; growth is a tripwire too
 
 The evening 2.5.7 shipped, two MCP servers that had started before the build kept the old
