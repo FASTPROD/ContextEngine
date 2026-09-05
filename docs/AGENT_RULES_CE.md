@@ -52,7 +52,7 @@ not open is not a rule, so the mechanism matters more than the prose._
 - Details go in the session doc, not the chat.
 - Report faithfully: a failed test is reported with its output, a skipped step is named as skipped.
 
-## 6. What ContextEngine gives the agent (state at 2.5.3 published, 2.5.4 pending)
+## 6. What ContextEngine gives the agent (state at 2.5.5 published, 2026-09-05)
 
 | Surface | What it does | Command / tool |
 |---|---|---|
