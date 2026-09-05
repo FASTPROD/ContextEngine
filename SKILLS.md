@@ -90,6 +90,18 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
   ("Design Language:", "Files created (Phase 1)"); the strict rule reproduces 129 of them.
   `import_learnings` (MCP, `permissive: true`) and `contextengine import-learnings --permissive` restore
   the old parser for a file the user chose. Imported records carry `source` (the file path).
+- **Growth tripwire** (LOCK `[STORE-GROWTH-IS-A-TRIPWIRE-TOO]`, `MAX_GROWTH_PER_WRITE = 200`): one write that
+  adds more than 200 records is refused with an audit event `learning.store_growth_refused`; the auto-import
+  catches it and reports `refused` instead of taking the server down. `CONTEXTENGINE_ALLOW_BULK=1` for one
+  deliberate bulk import. Why: two stale servers wrote 1,766 records in one minute on 2026-09-05 and only
+  shrinking was guarded.
+- **Server registry** (LOCK `[SERVERS-ARE-INVENTORIED]`, `src/server-registry.ts`): every MCP server writes
+  `~/.contextengine/servers/<pid>.json` at the top of `main()` (pid, parent, start, version, sha256 of the script
+  it loaded, cwd), heartbeats every 60 s, removes it on exit, and emits `server.start` to the audit log.
+  `contextengine servers` (exit 1 on warnings) and the end-session checklist § 3b list the live ones, flag any
+  whose build hash differs from the file on disk now (STALE BUILD), drop dead records, and warn above 3
+  concurrent servers (each re-embeds the corpus on every doc change). Servers started before 2.5.9 have no
+  record: restart them once.
 - **Cleanup**: `node scripts/learnings-prune.mjs <plan.json>` is a dry run; `--apply` deletes the listed ids
   under the lock after a backup copy. The Session 25 plan is `~/.contextengine/learnings-cleanup-plan-20260905.json`.
 - **MCP rejection**: `index.ts` `save_learning` handler has try-catch, surfaces the rejection message to agents

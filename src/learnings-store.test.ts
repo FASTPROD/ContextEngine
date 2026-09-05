@@ -174,3 +174,42 @@ describe("robustness against old records", () => {
     expect(readStore().learnings.length).toBe(base + 1);
   });
 });
+
+describe("[STORE-GROWTH-IS-A-TRIPWIRE-TOO]", () => {
+  it("refuses one write that adds more than MAX_GROWTH_PER_WRITE records, and leaves the file as it was", () => {
+    const base = seed(10);
+    const before = readFileSync(storePath, "utf-8");
+    const many = Array.from({ length: L.MAX_GROWTH_PER_WRITE + 1 }, (_, i) => ({ id: `g${i}`, category: "other", rule: `runaway import rule number ${i} long enough`, context: "", tags: [], created: "2026-01-01T00:00:00.000Z", updated: "2026-01-01T00:00:00.000Z" }));
+    const store = JSON.parse(before);
+    store.learnings.push(...many);
+    expect(() => L.__writeStoreForTests(store)).toThrow(/runaway import/);
+    expect(readFileSync(storePath, "utf-8")).toBe(before);
+    expect(readStore().learnings.length).toBe(base);
+  });
+  it("accepts a write of exactly MAX_GROWTH_PER_WRITE new records", () => {
+    const base = seed(10);
+    const store = readStore();
+    for (let i = 0; i < L.MAX_GROWTH_PER_WRITE; i++) store.learnings.push({ id: `ok${i}`, category: "other", rule: `bulk but allowed rule number ${i} long enough`, context: "", tags: [], created: "2026-01-01T00:00:00.000Z", updated: "2026-01-01T00:00:00.000Z" });
+    L.__writeStoreForTests(store);
+    expect(readStore().learnings.length).toBe(base + L.MAX_GROWTH_PER_WRITE);
+  });
+  it("CONTEXTENGINE_ALLOW_BULK=1 lets one deliberate bulk write through", () => {
+    seed(10);
+    const store = readStore();
+    for (let i = 0; i < L.MAX_GROWTH_PER_WRITE + 50; i++) store.learnings.push({ id: `b${i}`, category: "other", rule: `deliberate bulk rule number ${i} long enough`, context: "", tags: [], created: "2026-01-01T00:00:00.000Z", updated: "2026-01-01T00:00:00.000Z" });
+    process.env.CONTEXTENGINE_ALLOW_BULK = "1";
+    try { L.__writeStoreForTests(store); } finally { delete process.env.CONTEXTENGINE_ALLOW_BULK; }
+    expect(readStore().learnings.length).toBe(store.learnings.length);
+  });
+  it("a runaway auto-import is refused, reported, and does not throw out of the sweep", () => {
+    const base = seed(5);
+    const p = join(home, "AGENT-LEARNINGS.md"); // learnings file: every H3 is a rule, on purpose
+    const lines = ["# Learnings", ""];
+    for (let i = 0; i < L.MAX_GROWTH_PER_WRITE + 5; i++) lines.push(`### runaway rule ${i} that is long enough to count`, "");
+    writeFileSync(p, lines.join("\n"));
+    const r = L.autoImportFromSources([{ path: p, name: "Proj — AGENT-LEARNINGS.md" }]);
+    expect(r.refused).toMatch(/runaway import/);
+    expect(r.imported).toBe(0);
+    expect(readStore().learnings.length).toBe(base);
+  });
+});

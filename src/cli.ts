@@ -760,6 +760,7 @@ import {
   type RuleParityViolation,
 } from "./hooks.js";
 import { safeAppend } from "./audit.js";
+import { listServers, formatServers } from "./server-registry.js";
 import {
   installSkill,
   locateBundledSkill,
@@ -2362,6 +2363,10 @@ async function cliEndSession(): Promise<void> {
   if (autoImport.imported > 0) {
     checks.push(`📥 Auto-imported ${autoImport.imported} new learnings from ${autoImport.total} doc sources\n`);
   }
+  if (autoImport.refused) {
+    checks.push(`- ⛔ Auto-import write refused: ${autoImport.refused}`);
+    failCount++;
+  }
 
   // --- Check 3: Learnings Store ---
   checks.push("## 3. Learnings Store\n");
@@ -2383,6 +2388,13 @@ async function cliEndSession(): Promise<void> {
   checks.push("");
 
   // --- Check 4: Sessions ---
+  // --- Check 3b: running servers ([LOCK] [SERVERS-ARE-INVENTORIED]) ---
+  checks.push("## 3b. Running servers\n");
+  const fleet = listServers();
+  checks.push("```\n" + formatServers(fleet) + "\n```");
+  if (fleet.warnings.length > 0) failCount += fleet.warnings.length;
+  checks.push("");
+
   checks.push("## 4. Sessions\n");
   const sessions = listSessions();
   if (sessions.length > 0) {
@@ -2449,7 +2461,13 @@ async function cliImportLearnings(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const result = importLearningsFromFile(filePath, category, project, { permissive });
+  let result;
+  try {
+    result = importLearningsFromFile(filePath, category, project, { permissive });
+  } catch (e: any) {
+    console.error(`⛔ Import refused: ${e?.message || e}`);
+    process.exit(1);
+  }
   console.log(`\n📥 Import Results:`);
   console.log(`   Imported: ${result.imported}`);
   console.log(`   Updated:  ${result.updated}`);
@@ -2670,6 +2688,7 @@ Usage:
                                        Export hash-chained audit log (evidence aligned with
                                        SOC 2 CC7.2 + ISO 27001 A.12.4.1 — not a certification)
   contextengine audit-verify           Verify audit log chain integrity (tamper detection)
+  contextengine servers                List running MCP servers, their build vs the file on disk
   contextengine audit-redact-ack       Acknowledge deliberately redacted records on the chain (--index i,j --reason "...")
   contextengine audit-rotate [--keep-days N] [--max-records N] [--dry-run]
                                        Move old history into an archive segment. Archives
@@ -2858,6 +2877,10 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
   cliAuditRedactAck(process.argv.slice(3));
 } else if (command === "audit-rotate") {
   cliAuditRotate(process.argv.slice(3));
+} else if (command === "servers") {
+  const fleet = listServers();
+  console.log(formatServers(fleet));
+  process.exit(fleet.warnings.length > 0 ? 1 : 0);
 } else if (command === "audit-verify") {
   cliAuditVerify().catch((err) => {
     console.error("Error:", err);

@@ -28,6 +28,7 @@ export const KNOWN_COMMANDS: readonly string[] = [
   "audit-rotate",
   "audit-redact-ack",
   "audit-verify",
+  "servers",
   "autostart-status",
   "cost",
   "deactivate",

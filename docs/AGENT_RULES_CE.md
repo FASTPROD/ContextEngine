@@ -66,6 +66,7 @@ not open is not a rule, so the mechanism matters more than the prose._
 | Policy gates | `.contextengine/policy.json`: secret patterns, doc coverage, deploy-verify hosts, bypass tokens, agent_cost thresholds and rates. | `contextengine policy validate`, pre-commit hook |
 | Pre-commit scanner | One hook, synced to 25 repos, value-independent password patterns, 0 false positives on 45 real commits. | `scripts/sync-hooks.sh --check` to see drift |
 | Multi-agent cost | Tokens moved, notional cost, capacity intensity, top runs, burn signals, from Claude Code's own transcripts. | `agent_cost` (2.5.4), `contextengine cost` |
+| Servers | Which MCP servers run, on which build, spawned by whom. Since 2.5.9 every server registers itself at start; `contextengine servers` flags STALE BUILD (script changed on disk since the server loaded it) and more than 3 concurrent servers. On 2026-09-05 two servers on a two-hour-old build re-imported 1,766 records unseen. After any `npm run build`, run it. | `contextengine servers`, end-session § 3b |
 | Drift detection | Loop, stuck tool, fabrication, silent failure signals over the recent audit window. | `drift_status` |
 | Scoring and audit (Pro) | AI-readiness score, compliance audit, port conflicts, cross-project view. Gate is the signed licence. | `score_project --no-save`, `run_audit`, `check_ports`, `list_projects` |
 

@@ -35,7 +35,8 @@ import {
   formatSession,
   formatSessionList,
 } from "./sessions.js";
-import { verifyChain, readAuditLog, filterByRange, autoRotateAuditLog } from "./audit.js";
+import { verifyChain, readAuditLog, filterByRange, autoRotateAuditLog, safeAppend } from "./audit.js";
+import { registerServer, listServers, formatServers } from "./server-registry.js";
 import { startEventIngestServer } from "./http-server.js";
 import { detect } from "./detector.js";
 import { buildCostReport } from "./cost-report.js";
@@ -178,6 +179,9 @@ async function reindex(): Promise<void> {
     console.error(
       `[ContextEngine] 📥 Auto-imported ${autoImport.imported} new learnings from ${autoImport.total} doc sources (${autoImport.updated} updated)`
     );
+  }
+  if (autoImport.refused) {
+    console.error(`[ContextEngine] ⛔ Auto-import write refused: ${autoImport.refused}`);
   }
 
   // Inject learnings as searchable chunks (project-scoped to prevent IP leakage)
@@ -1219,12 +1223,17 @@ server.tool(
       .describe("Import every heading, bold bullet and table row as a rule (the pre-2.5.7 behaviour). Default false: only marked learnings."),
   },
   async ({ file_path, default_category, project, permissive }) => {
-    const result = importLearningsFromFile(
-      file_path,
-      default_category || "other",
-      project,
-      { permissive: permissive === true },
-    );
+    let result;
+    try {
+      result = importLearningsFromFile(
+        file_path,
+        default_category || "other",
+        project,
+        { permissive: permissive === true },
+      );
+    } catch (e: any) {
+      return respond("import_learnings", `⛔ Import refused: ${e?.message || e}`);
+    }
 
     // Re-inject learnings into search index (project-scoped)
     const newChunks = learningsToChunks(activeProjectNames);
@@ -1357,6 +1366,17 @@ function registerResources(): void {
 // Start
 // ---------------------------------------------------------------------------
 async function main() {
+  // 0. Inventory this server FIRST, before indexing takes minutes: a server exists the moment it
+  //    starts. [LOCK] [SERVERS-ARE-INVENTORIED]
+  try {
+    const { record } = registerServer({ version: PKG_VERSION, script: fileURLToPath(import.meta.url) });
+    const fleet = listServers();
+    console.error(`[ContextEngine] 🧭 ${formatServers(fleet)}`);
+    safeAppend("server.start", { pid: record.pid, parent: record.parent, version: record.version, build: record.build, cwd: record.cwd, servers_running: fleet.servers.length, stale_builds: fleet.servers.filter((x) => x.staleBuild).length });
+  } catch (err) {
+    console.error("[ContextEngine] ⚠ Server registry failed:", err);
+  }
+
   // 1. Ingest all sources (fast — keyword search available immediately)
   sources = loadSources();
   chunks = ingestSources(sources);
@@ -1417,6 +1437,9 @@ async function main() {
     console.error(
       `[ContextEngine] 📥 Auto-imported ${autoImport.imported} new learnings from ${autoImport.total} doc sources (${autoImport.updated} updated)`
     );
+  }
+  if (autoImport.refused) {
+    console.error(`[ContextEngine] ⛔ Auto-import write refused: ${autoImport.refused}`);
   }
 
   // 1e. Inject learnings into search index (project-scoped)

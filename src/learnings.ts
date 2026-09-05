@@ -266,6 +266,20 @@ function dailyBackup(): void {
   } catch { /* a missing backup must never block a save */ }
 }
 
+// [LOCKED] [STORE-GROWTH-IS-A-TRIPWIRE-TOO] 2026-09-05
+// [NEVER] let one write add more than MAX_GROWTH_PER_WRITE records to the store without the
+//         explicit override, and never raise the limit to make an import "just work".
+// WHY: the shrink guard below caught the wipe of 2026-09-05; the same evening two stale servers
+//      wrote 1,766 records in one minute and nothing objected, because only shrinking was
+//      guarded. Every legitimate write is small: an agent saves one rule, the strict auto-import
+//      of a whole workspace produced 99 (replayed 2026-09-05), the largest real learnings file
+//      a few dozen. Thousands in one write is a bug or old code, never a lesson.
+// FIX: a write that grows the store by more than MAX_GROWTH_PER_WRITE over the file on disk
+//      is refused with an audit event, unless CONTEXTENGINE_ALLOW_BULK=1 (set knowingly, for
+//      one deliberate bulk import). The auto-import catches the refusal and reports it; the
+//      server keeps running.
+export const MAX_GROWTH_PER_WRITE = 200;
+
 function writeStoreToDisk(store: LearningsStore): void {
   ensureDir();
   store.count = store.learnings.length;
@@ -277,6 +291,16 @@ function writeStoreToDisk(store: LearningsStore): void {
     if (onDisk >= 100 && store.learnings.length < onDisk / 2) {
       safeAppend("learning.store_shrink_refused", { on_disk: onDisk, attempted: store.learnings.length });
       throw new Error(`refusing to write ${store.learnings.length} learnings over a store of ${onDisk}: that is the shape of a wipe, not an edit. Set CONTEXTENGINE_ALLOW_SHRINK=1 if this is deliberate.`);
+    }
+  }
+  // Growth tripwire. [LOCK] [STORE-GROWTH-IS-A-TRIPWIRE-TOO]
+  if (existsSync(LEARNINGS_PATH) && process.env.CONTEXTENGINE_ALLOW_BULK !== "1") {
+    let onDisk = -1;
+    try { onDisk = (JSON.parse(readFileSync(LEARNINGS_PATH, "utf-8")).learnings || []).length; } catch { onDisk = -1; }
+    const growth = store.learnings.length - onDisk;
+    if (onDisk >= 0 && growth > MAX_GROWTH_PER_WRITE) {
+      safeAppend("learning.store_growth_refused", { on_disk: onDisk, attempted: store.learnings.length, growth });
+      throw new Error(`refusing to add ${growth} learnings in one write (store ${onDisk}, limit ${MAX_GROWTH_PER_WRITE}): that is the shape of a runaway import, not a lesson. Set CONTEXTENGINE_ALLOW_BULK=1 for one deliberate bulk import.`);
     }
   }
   dailyBackup();
@@ -1067,14 +1091,16 @@ export function learningsToChunks(projects?: string[]): Chunk[] {
  */
 export function autoImportFromSources(
   sources: Array<{ path: string; name: string }>,
-): { total: number; imported: number; updated: number; ignored: number } {
+): { total: number; imported: number; updated: number; ignored: number; refused?: string } {
   let totalImported = 0;
   let totalUpdated = 0;
   let totalIgnored = 0;
   let processed = 0;
+  let refused: string | undefined;
 
   // One load and one save for the whole sweep (~880 files), instead of one full-file
   // rewrite per rule per file. [LOCK] [STORE-NEVER-STARTS-FRESH-OVER-DATA]
+  try {
   withStoreBatch(() => {
   for (const source of sources) {
     // Only process markdown files
@@ -1092,8 +1118,16 @@ export function autoImportFromSources(
     if (result.imported > 0 || result.updated > 0) processed++;
   }
   });
+  } catch (e: any) {
+    // A refused write (growth or shrink tripwire, lock timeout) must not take the server down;
+    // it is reported to the caller and the store is left as it was. [LOCK] [STORE-GROWTH-IS-A-TRIPWIRE-TOO]
+    refused = String(e?.message || e);
+    totalImported = 0;
+    totalUpdated = 0;
+    processed = 0;
+  }
 
-  return { total: processed, imported: totalImported, updated: totalUpdated, ignored: totalIgnored };
+  return { total: processed, imported: totalImported, updated: totalUpdated, ignored: totalIgnored, refused };
 }
 
 /**

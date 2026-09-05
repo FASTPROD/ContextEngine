@@ -157,6 +157,8 @@ export type AuditEvent =
   | "learning.delete"
   | "learning.store_unreadable"
   | "learning.store_shrink_refused"
+  | "learning.store_growth_refused"
+  | "server.start"
   | "learning.import"
   | "learning.export"
   | "session.save"

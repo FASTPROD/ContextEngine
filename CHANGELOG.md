@@ -4,6 +4,26 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [2.5.9] — 2026-09-05 — The servers inventory themselves; growth is a tripwire too
+
+The evening 2.5.7 shipped, two MCP servers that had started before the build kept the old
+importer for two hours and re-imported 1,766 records the owner had just had deleted. `ps` found
+them on the second look only. Nine more servers, one per open chat, were each re-embedding the
+corpus after every doc change (load average 230). Nothing in the product could say any of this.
+
+### Added
+
+- **Server registry** (`[SERVERS-ARE-INVENTORIED]`, `src/server-registry.ts`): every server writes
+  `~/.contextengine/servers/<pid>.json` at the top of `main()` with pid, parent process, start time,
+  version, a sha256 of the script it loaded and its cwd; heartbeats every 60 s; removes the record on
+  exit; emits `server.start` to the audit log. `contextengine servers` and the end-session checklist
+  (§ 3b) list live servers, drop dead records, flag **STALE BUILD** when the script on disk no longer
+  matches the hash a server loaded, and warn above 3 concurrent servers. Exit 1 on any warning.
+- **Growth tripwire** (`[STORE-GROWTH-IS-A-TRIPWIRE-TOO]`): a write that adds more than 200 records
+  to the learnings store is refused (`learning.store_growth_refused`), the mirror of the shrink guard.
+  The auto-import reports `refused` and the server keeps running; `import_learnings` and the CLI
+  print the refusal. `CONTEXTENGINE_ALLOW_BULK=1` for one deliberate bulk import.
+
 ## [2.5.8] — 2026-09-05 — "rules" is not a learnings heading
 
 ### Fixed
