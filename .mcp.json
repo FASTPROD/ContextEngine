@@ -1,8 +1,10 @@
 {
   "mcpServers": {
     "contextengine": {
-      "command": "npx",
-      "args": ["-y", "@compr/opscontext-mcp"]
+      "command": "node",
+      "args": [
+        "dist/index.js"
+      ]
     }
   }
 }

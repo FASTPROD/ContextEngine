@@ -64,11 +64,22 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 | Terminal `contextengine` | `npm link` → this repo (`lib/node_modules/@compr/contextengine-mcp` is a **symlink** to `/Users/yan/Projects/ContextEngine`, still under the old package name) | `npm run build` — nothing else, no reinstall |
 | VS Code MCP server | `.vscode/mcp.json` → `/Users/yan/Projects/ContextEngine/dist/index.js` (absolute path) | `npm run build`, then **reload the VS Code window** — the MCP process is long-lived and holds the old code until it restarts |
 | **launchd autostart MCP server** | `~/Library/LaunchAgents/com.opscontext.mcp.plist` → the same `dist/index.js` | `npm run build`, then **`launchctl kickstart -k gui/$(id -u)/com.opscontext.mcp`**. A VS Code reload does **NOT** touch this — it is a separate process owned by launchd |
-| Claude Code MCP (project) | `.mcp.json` → `npx @compr/opscontext-mcp` (the **published** package, not this repo) | `npm publish`, then restart Claude Code |
-| Claude Code MCP (global) | `~/.claude/settings.json` → `mcpServers.contextengine` → `npx @compr/opscontext-mcp` | same as above; applies to **every project on this machine** |
+| Claude Code MCP (project) | `.mcp.json` → `node dist/index.js`, cwd = this repo, i.e. the local build (since 2026-09-05; see the wiring note below) | `npm run build`, then restart Claude Code |
+| Claude Code MCP (global) | `~/.claude.json` user scope (`claude mcp add --scope user contextengine -- npx -y @compr/opscontext-mcp`), the **published** package; applies to **every other project on this machine** | `npm publish`, then restart Claude Code |
 | VS Code extension `css-llc.contextengine` | shells out to the CLI | inherits the link automatically |
 
-So: **`npm run build` updates the tooling; `npm publish` does not** — except for the two `npx`-based Claude Code entries above, which run the *published* package and therefore DO need a publish.
+So: **`npm run build` updates the tooling; `npm publish` does not** — except for the global Claude Code entry above, which runs the *published* package and therefore DOES need a publish.
+
+⚠ **Claude Code wiring, corrected 2026-09-05.** Two things were wrong for weeks and nothing said so:
+(1) `mcpServers` in `~/.claude/settings.json` is not read by Claude Code at all; MCP servers live in
+`~/.claude.json` (user scope) or a project's `.mcp.json`. The global entry was inert. (2) Inside THIS
+repo, `npx -y @compr/opscontext-mcp` can never work: the repo's own `package.json` carries that
+name, so npx treats the package as locally installed and runs its bin from the repo's
+`node_modules/.bin`, which does not exist (`sh: opscontext: command not found`; `-p` does not help).
+Claude Code's MCP log for this project showed that exact failure on 2026-08-23 and 2026-09-05, so
+the "Claude Code runs the published 2.5.3 here" premise of SESSION_23 was never true: it ran
+nothing. Fix: the project entry runs the local build, like VS Code and launchd; the published
+package is exercised from any other project through the user-scope entry.
 
 ⚠ **"Reload the VS Code window" is not sufficient on its own.** 2026-08-17: the launchd agent was found still running code loaded on **3 July** — six weeks and four releases stale — because every previous "how do I get the update?" answer listed only three surfaces. Long-lived stale processes are silent: they keep answering, just with old logic, and a long-lived pre-2.4.3 process is the likeliest source of the two unexplained audit-chain forks (SESSION_21 §K/§L).
 
