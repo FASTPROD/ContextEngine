@@ -85,6 +85,15 @@ blocks, override skips. Written for bash 3.2 (macOS) and `set -u`.
   false comfort.
 - Do not add the **tree** check to a repo where the build output is committed, if any turn
   out to be; check before assuming.
-- Two of the four bundle scripts build inside the deploy script itself. The check must run
-  **before** the build, or a dirty tree produces a bundle first and refuses afterwards,
-  wasting the build.
+- **Where exactly the tree check goes, measured 2026-09-05.** THREE of the four bundle
+  scripts run the build themselves, so the check must sit **above** that line or a dirty
+  tree gets a full build first and is refused afterwards:
+
+  | script | build line | put the check |
+  |---|---|---|
+  | `ContextEngine/server/deploy.sh` | 78, `npm run build` | above line 78 |
+  | `app.CROWLR/scripts/deploy_frontend.sh` | 202, `npm run build` | above line 202 |
+  | `invoc.io/deploy.sh` | 64, `npm run build` | above line 64 |
+  | `COMPR-app/scripts/deploy_frontend.sh` | none, it REFUSES if the build is absent (line 29) | beside that same check, line 29 |
+
+  Line numbers are from 2026-09-05; confirm them before editing rather than trusting them.
