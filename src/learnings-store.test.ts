@@ -28,6 +28,7 @@ function tmpFiles(): string[] { return readdirSync(dir).filter((f) => f.startsWi
 
 beforeAll(async () => {
   process.env.HOME = home;
+  process.env.CONTEXTENGINE_HOME = dir; // learnings.ts honours it at import, like audit.ts
   process.env.CONTEXTENGINE_LOCK_TIMEOUT_MS = "300";
   delete process.env.CONTEXTENGINE_ALLOW_SHRINK;
   L = await import("./learnings.js");
@@ -148,5 +149,26 @@ describe("daily backup", () => {
     L.saveLearning("testing", "daily backup trigger rule long enough", "ctx");
     expect(existsSync(bak)).toBe(true);
     expect(JSON.parse(readFileSync(bak, "utf-8")).learnings.length).toBe(4);
+  });
+});
+
+describe("robustness against old records", () => {
+  it("a record without a category is listed under other and never crashes a category filter", () => {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(storePath, JSON.stringify({ version: 1, count: 1, learnings: [
+      { id: "L0192", rule: "legacy record without a category field", context: "", tags: [], created: "2026-05-01T00:00:00.000Z", updated: "2026-05-01T00:00:00.000Z" },
+    ] }));
+    expect(() => L.listLearnings("architecture")).not.toThrow();
+    expect(L.listLearnings("other").some((l) => l.id === "L0192")).toBe(true);
+  });
+  it("re-saving an identical rule changes nothing: same updated stamp, no write", () => {
+    const base = seed(3);
+    const first = L.saveLearning("testing", "identical re-save leaves no trace at all", "same ctx");
+    const stampBefore = readFileSync(storePath, "utf-8");
+    const again = L.saveLearning("testing", "identical re-save leaves no trace at all", "same ctx");
+    expect(again.id).toBe(first.id);
+    expect(again.updated).toBe(first.updated);
+    expect(readFileSync(storePath, "utf-8")).toBe(stampBefore);
+    expect(readStore().learnings.length).toBe(base + 1);
   });
 });

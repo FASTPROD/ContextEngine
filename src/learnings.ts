@@ -28,7 +28,7 @@ const __dirname = dirname(__filename);
  * - "Unicode NFC vs NFD causes false mismatches on Google Drive vs APFS"
  */
 
-const LEARNINGS_PATH = join(homedir(), ".contextengine", "learnings.json");
+const LEARNINGS_PATH = join(process.env.CONTEXTENGINE_HOME || join(homedir(), ".contextengine"), "learnings.json");
 
 export interface Learning {
   id: string;
@@ -229,8 +229,12 @@ function readStoreFromDisk(): LearningsStore {
       safeAppend("learning.store_unreadable", { path: LEARNINGS_PATH, bytes: raw.length, kept: keep, error: String(e?.message || e) });
       throw new Error(`${LEARNINGS_PATH} exists but is unreadable (${e?.message || e}); refusing to start fresh over it. Copy kept at ${keep}. Another process may be mid-write: retry in a moment.`);
     }
-    // Filter out corrupted entries missing required 'rule' field
+    // Filter out corrupted entries missing required 'rule' field; a missing or unknown
+    // category becomes "other" (two June-era records crashed list_learnings on 2026-09-05).
     store.learnings = store.learnings.filter((l) => typeof l.rule === "string" && l.rule.length > 0);
+    for (const l of store.learnings) {
+      if (typeof l.category !== "string" || !(LEARNING_CATEGORIES as readonly string[]).includes(l.category)) l.category = "other";
+    }
   } else {
     store = { version: 1, count: 0, learnings: [] };
   }
@@ -367,11 +371,19 @@ function saveLearningUnlocked(
   );
 
   if (existing) {
+    // A re-import that changes nothing must leave no trace: no write, no `updated` bump,
+    // no audit event. Before 2026-09-05 every startup re-import emitted one learning.save
+    // per rule (2,000 to 5,000 events per server start) for records that did not change.
+    const newTags = extractTags(existing.rule, context, category);
+    const sameTags = JSON.stringify(newTags) === JSON.stringify(existing.tags || []);
+    if (existing.context === context && (!project || existing.project === project) && sameTags) {
+      return existing;
+    }
     // Update existing learning with new context
     existing.context = context;
     existing.updated = now;
     if (project) existing.project = project;
-    existing.tags = extractTags(existing.rule, context, category);
+    existing.tags = newTags;
     saveStore(store);
     safeAppend("learning.save", {
       id: existing.id,
@@ -470,7 +482,7 @@ export function listLearnings(category?: string, projects?: string[]): Learning[
 
   if (category) {
     result = result.filter(
-      (l) => l.category.toLowerCase() === category.toLowerCase()
+      (l) => String(l.category || "other").toLowerCase() === category.toLowerCase()
     );
   }
 
