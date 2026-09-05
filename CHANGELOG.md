@@ -4,7 +4,7 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
-## [Unreleased] — 2026-09-05 — The learnings store was a pile of headings
+## [2.5.7] — 2026-09-05 — The learnings store was a pile of headings
 
 Of 3,005 records, about 2,760 had been produced by the doc importer from ~160 ordinary docs
 (copilot-instructions, session docs, Claude memory files) and about 240 by an agent calling
