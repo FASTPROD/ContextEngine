@@ -135,5 +135,5 @@ Clean: after the commit, the same run passes the guard and stops at the first sh
 killed the script at the remote md5 step under `pipefail`, before the guard; the shim had to
 succeed empty for that one. An exit code alone would have called that a refusal.
 
-**Canonical lesson:** ContextEngine learning, category `deployment`, 2026-09-05. Global
+**Canonical lesson:** ContextEngine learning `mto8s97bwjfq`, category `deployment`, 2026-09-05 (written by the invoc merge session; this session's duplicate was deleted). Global
 CLAUDE.md and this repo's SKILLS.md carry a one-line pointer each, no restated prose.
