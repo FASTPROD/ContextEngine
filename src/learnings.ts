@@ -39,6 +39,8 @@ export interface Learning {
   tags: string[];
   created: string;
   updated: string;
+  /** Where an imported record came from (absolute file path). Absent on agent-saved records. */
+  source?: string;
 }
 
 export interface LearningsStore {
@@ -338,7 +340,8 @@ function saveLearningUnlocked(
   category: string,
   rule: string,
   context: string,
-  project?: string
+  project?: string,
+  source?: string,
 ): Learning {
   const trimmedRule = rule.trim();
 
@@ -376,13 +379,15 @@ function saveLearningUnlocked(
     // per rule (2,000 to 5,000 events per server start) for records that did not change.
     const newTags = extractTags(existing.rule, context, category);
     const sameTags = JSON.stringify(newTags) === JSON.stringify(existing.tags || []);
-    if (existing.context === context && (!project || existing.project === project) && sameTags) {
+    const sameSource = !source || existing.source === source;
+    if (existing.context === context && (!project || existing.project === project) && sameTags && sameSource) {
       return existing;
     }
     // Update existing learning with new context
     existing.context = context;
     existing.updated = now;
     if (project) existing.project = project;
+    if (source) existing.source = source;
     existing.tags = newTags;
     saveStore(store);
     safeAppend("learning.save", {
@@ -405,6 +410,7 @@ function saveLearningUnlocked(
     created: now,
     updated: now,
   };
+  if (source) learning.source = source;
 
   store.learnings.push(learning);
   saveStore(store);
@@ -535,25 +541,56 @@ export interface ImportResult {
   imported: number;
   updated: number;
   skipped: number;
+  /** Candidates the import rule left alone: headings, bold bullets and table rows outside a learnings scope. */
+  ignored: number;
   errors: string[];
 }
+
+export interface ImportOptions {
+  /** Import every heading, bold bullet and table row as a rule, the pre-2026-09-05 behaviour. */
+  permissive?: boolean;
+}
+
+// [LOCKED] [AUTO-IMPORT-ONLY-MARKED-LEARNINGS] 2026-09-05
+// [NEVER] let the auto-import (autoImportFromSources, run by every MCP server on every doc change)
+//         treat an H3 heading, a bold bullet or a table row in an ordinary doc as a learning again.
+// WHY: measured 2026-09-05 (Session 25): of 3,005 store records, about 2,760 had been produced by
+//      this importer from ~160 ordinary docs (copilot-instructions, session docs, Claude memory
+//      files) and about 240 by an agent calling save_learning. In a spread sample of 70 imported
+//      records, 32 were not rules at all ("Design Language:", "External References:", "Session 24
+//      TODO", "Files created (Phase 1 foundation)"), and the category of the rest came from a
+//      section title or a substring guess ("Flow A" under mobile). A count of headings is not a
+//      knowledge base; every one of those docs is already searchable as a doc.
+// FIX: a candidate becomes a learning only when the author marked it as one:
+//      (1) an inline-category bullet `- [category] rule → context`, anywhere;
+//      (2) any shape inside a file whose name says learnings (AGENT-LEARNINGS.md, LEARNINGS.md);
+//      (3) any shape under a heading that says learnings / lessons / gotchas / pitfalls / rules /
+//          anti-patterns / "never repeat" / "the hard way" (LEARNINGS_HEADING);
+//      (4) JSON files, which are explicit by construction.
+//      `permissive: true` (MCP `import_learnings`, CLI `--permissive`) restores the old parser for
+//      a file the user chose on purpose. Every imported record now carries `source`.
+export const LEARNINGS_FILE_NAME = /learnings?\.md$/i;
+export const LEARNINGS_HEADING =
+  /\b(learnings?|lessons?|gotchas?|pitfalls?|anti-?patterns?|never repeat|do not repeat|don'?t repeat|the hard way|hard way|mistakes?|rules?)\b/i;
 
 export function importLearningsFromFile(
   filePath: string,
   defaultCategory: string = "other",
   defaultProject?: string,
+  opts: ImportOptions = {},
 ): ImportResult {
   if (!existsSync(filePath)) {
-    return { imported: 0, updated: 0, skipped: 0, errors: [`File not found: ${filePath}`] };
+    return { imported: 0, updated: 0, skipped: 0, ignored: 0, errors: [`File not found: ${filePath}`] };
   }
 
   const content = readFileSync(filePath, "utf-8");
   const ext = filePath.split(".").pop()?.toLowerCase();
+  const permissive = opts.permissive === true || LEARNINGS_FILE_NAME.test(filePath.split("/").pop() || "");
 
   // One load, one save for the whole file. [LOCK] [STORE-NEVER-STARTS-FRESH-OVER-DATA]
   const result = withStoreBatch(() => ext === "json"
-    ? importFromJson(content, defaultProject)
-    : importFromMarkdown(content, defaultCategory, defaultProject));
+    ? importFromJson(content, defaultProject, filePath)
+    : importFromMarkdown(content, defaultCategory, defaultProject, { permissive, source: filePath }));
 
   // Aggregate event correlating the individual learning.save records emitted
   // inside the loop. Useful for compliance attribution: "this batch came from
@@ -565,14 +602,15 @@ export function importLearningsFromFile(
     imported: result.imported,
     updated: result.updated,
     skipped: result.skipped,
+    ignored: result.ignored,
     errors: result.errors.length,
   });
 
   return result;
 }
 
-function importFromJson(content: string, defaultProject?: string): ImportResult {
-  const result: ImportResult = { imported: 0, updated: 0, skipped: 0, errors: [] };
+function importFromJson(content: string, defaultProject?: string, source?: string): ImportResult {
+  const result: ImportResult = { imported: 0, updated: 0, skipped: 0, ignored: 0, errors: [] };
 
   try {
     const data = JSON.parse(content);
@@ -598,7 +636,7 @@ function importFromJson(content: string, defaultProject?: string): ImportResult 
         (l) => l.category === cat && typeof l.rule === "string" && l.rule.toLowerCase().trim() === item.rule.toLowerCase().trim()
       );
       try {
-        saveLearning(cat, item.rule, item.context || "", item.project || defaultProject);
+        saveLearning(cat, item.rule, item.context || "", item.project || defaultProject, source);
         if (existing) {
           result.updated++;
         } else {
@@ -619,13 +657,25 @@ function importFromMarkdown(
   content: string,
   defaultCategory: string,
   defaultProject?: string,
+  opts: { permissive: boolean; source?: string } = { permissive: false },
 ): ImportResult {
-  const result: ImportResult = { imported: 0, updated: 0, skipped: 0, errors: [] };
+  const result: ImportResult = { imported: 0, updated: 0, skipped: 0, ignored: 0, errors: [] };
   const lines = content.split("\n");
 
   let currentCategory = defaultCategory;
   let currentRule = "";
   let currentContext: string[] = [];
+  // Learnings scope, [LOCK] [AUTO-IMPORT-ONLY-MARKED-LEARNINGS]: unmarked shapes (H3, bold bullet,
+  // table row) count as rules only inside it. Three nested levels: the whole file (permissive,
+  // learnings file name, or an H1 that says so), an H2 section, an H3 subsection.
+  let fileScope = opts.permissive;
+  let h2Scope = false;
+  let h3Scope = false;
+  const inScope = () => fileScope || h2Scope || h3Scope;
+  // A candidate that arrives outside the scope is counted and dropped, never queued.
+  function candidate(text: string): void {
+    if (inScope()) currentRule = text; else result.ignored++;
+  }
 
   function flushRule(): void {
     if (!currentRule) return;
@@ -643,7 +693,7 @@ function importFromMarkdown(
       (l) => l.category === cat && typeof l.rule === "string" && l.rule.toLowerCase().trim() === currentRule.toLowerCase().trim()
     );
     try {
-      saveLearning(cat, currentRule, ctx, defaultProject);
+      saveLearning(cat, currentRule, ctx, defaultProject, opts.source);
       if (existing) {
         result.updated++;
       } else {
@@ -659,25 +709,33 @@ function importFromMarkdown(
   for (const line of lines) {
     const trimmed = line.trim();
 
-    // H1 — file title, skip
-    if (trimmed.startsWith("# ") && !trimmed.startsWith("## ")) continue;
+    // H1 — file title, skip; a title that says learnings puts the whole file in scope
+    if (trimmed.startsWith("# ") && !trimmed.startsWith("## ")) {
+      if (LEARNINGS_HEADING.test(trimmed.slice(2))) fileScope = true;
+      continue;
+    }
 
     // H2 — category (e.g., "## deployment" or "## Security & Server Administration")
     if (trimmed.startsWith("## ")) {
       flushRule();
       const heading = trimmed.replace(/^##\s+/, "").toLowerCase().trim();
       currentCategory = heading;
+      h2Scope = LEARNINGS_HEADING.test(heading);
+      h3Scope = false;
       continue;
     }
 
-    // H3 — rule (e.g., "### Never docker build | tee")
+    // H3 — rule (e.g., "### Never docker build | tee"), or a subsection that says learnings
     if (trimmed.startsWith("### ")) {
       flushRule();
-      const candidate = trimmed.replace(/^###\s+/, "").trim();
-      // Quality filter: skip short headings ("Fix", "UI", "DB")
-      if (candidate.length >= MIN_RULE_LENGTH) {
-        currentRule = candidate;
+      h3Scope = false; // an H3 subsection ends at the next H3
+      const text = trimmed.replace(/^###\s+/, "").trim();
+      if (!inScope() && LEARNINGS_HEADING.test(text)) {
+        h3Scope = true; // "### Lessons learned" opens a scope; the heading itself is not a rule
+        continue;
       }
+      // Quality filter: skip short headings ("Fix", "UI", "DB")
+      if (text.length >= MIN_RULE_LENGTH) candidate(text);
       continue;
     }
 
@@ -697,17 +755,18 @@ function importFromMarkdown(
       currentCategory = cat;
       // Split on → or — for rule/context separation
       const sepMatch = rest.match(/^(.+?)(?:\s*[→—]\s*|\s+[-–]\s+)(.+)$/);
+      // Marked by its author: imported in every mode. [LOCK] [AUTO-IMPORT-ONLY-MARKED-LEARNINGS]
       if (sepMatch) {
-        const candidate = sepMatch[1].trim();
-        if (candidate.length >= MIN_RULE_LENGTH) {
-          currentRule = candidate;
+        const text = sepMatch[1].trim();
+        if (text.length >= MIN_RULE_LENGTH) {
+          currentRule = text;
           currentContext = [sepMatch[2].trim()];
           flushRule();
         }
       } else {
-        const candidate = rest.trim();
-        if (candidate.length >= MIN_RULE_LENGTH) {
-          currentRule = candidate;
+        const text = rest.trim();
+        if (text.length >= MIN_RULE_LENGTH) {
+          currentRule = text;
           flushRule();
         }
       }
@@ -718,11 +777,13 @@ function importFromMarkdown(
     const tableMatch = trimmed.match(/^\|\s*\*\*(.+?)\*\*\s*\|(.+)\|(.+)\|/);
     if (tableMatch) {
       flushRule();
-      const candidate = tableMatch[1].trim();
-      if (candidate.length >= MIN_RULE_LENGTH) {
-        currentRule = candidate;
-        currentContext = [tableMatch[2].trim() + " — " + tableMatch[3].trim()];
-        flushRule();
+      const text = tableMatch[1].trim();
+      if (text.length >= MIN_RULE_LENGTH) {
+        candidate(text);
+        if (currentRule) {
+          currentContext = [tableMatch[2].trim() + " — " + tableMatch[3].trim()];
+          flushRule();
+        }
       }
       continue;
     }
@@ -733,13 +794,13 @@ function importFromMarkdown(
       flushRule();
       const boldMatch = trimmed.match(/^[-*]\s+\*\*(.+?)\*\*\s*(.*)$/);
       if (boldMatch) {
-        const candidate = boldMatch[1].trim();
+        const text = boldMatch[1].trim();
         // Quality filter: skip short/single-word headings
-        if (candidate.length < MIN_RULE_LENGTH) {
+        if (text.length < MIN_RULE_LENGTH) {
           continue;
         }
-        currentRule = candidate;
-        if (boldMatch[2]) {
+        candidate(text);
+        if (currentRule && boldMatch[2]) {
           // Strip leading separators
           currentContext = [boldMatch[2].replace(/^[\s—→:]+/, "").trim()];
         }
@@ -764,120 +825,195 @@ function importFromMarkdown(
   return result;
 }
 
-/** Infer a category from rule text + context when "other" is provided */
-function inferCategory(rule: string, context: string): LearningCategory {
-  const text = `${rule} ${context}`.toLowerCase();
-  const keywords: Record<string, LearningCategory> = {
-    "deploy": "deployment", "rsync": "deployment", "publish": "deployment", "release": "deployment",
-    "ci/cd": "devops", "ci cd": "devops", "pipeline": "devops", "github actions": "devops", "docker": "devops",
-    "nginx": "infrastructure", "ssl": "infrastructure", "server": "infrastructure", "pm2": "infrastructure", "vps": "infrastructure",
-    "api": "api", "endpoint": "api", "rest": "api", "graphql": "api", "webhook": "api",
-    "sql": "database", "sqlite": "database", "mysql": "database", "postgres": "database", "query": "database", "migration": "database",
-    "react": "frontend", "vue": "frontend", "css": "frontend", "html": "frontend", "dom": "frontend", "component": "frontend", "ui": "frontend",
-    "express": "backend", "node": "backend", "flask": "backend", "middleware": "backend",
-    "auth": "security", "cors": "security", "xss": "security", "csrf": "security", "helmet": "security", "encrypt": "security", "password": "security",
-    "test": "testing", "vitest": "testing", "jest": "testing", "spec": "testing", "assert": "testing",
-    "debug": "debugging", "error": "debugging", "stack trace": "debugging", "breakpoint": "debugging", "log": "debugging",
-    "npm": "dependencies", "package": "dependencies", "yarn": "dependencies", "pnpm": "dependencies", "version": "dependencies",
-    "git": "git", "commit": "git", "branch": "git", "merge": "git", "rebase": "git",
-    "perf": "performance", "latency": "performance", "cache": "performance", "optimize": "performance",
-    "eslint": "tooling", "lint": "tooling", "prettier": "tooling", "vscode": "tooling", "editor": "tooling",
-    "pattern": "architecture", "refactor": "architecture", "module": "architecture", "design": "architecture",
-    "ios": "mobile", "android": "mobile", "expo": "mobile", "react native": "mobile",
-  };
+// [LOCKED] [CATEGORY-BY-WHOLE-WORD-SCORE] 2026-09-05
+// [NEVER] go back to a first-hit `text.includes(keyword)` over an unanchored substring list,
+//         in inferCategory() or in normalizeCategory().
+// WHY: measured 2026-09-05 (Session 25) on 189 store records whose category an agent had
+//      chosen by hand: 21 correct, 11%. "expose" matched "expo" (mobile), "access" matched
+//      "css" (frontend), "restart" matched "rest" (api), "build" matched "ui", "login" matched
+//      "log" (debugging), and the FIRST hit won whatever the rest of the text said, so
+//      "Scoring internals are trade secrets, don't expose point values" was filed under mobile.
+// FIX: whole-word and whole-phrase matches only; every match counts; a match in the rule text
+//      weighs double a match in the context; the highest total wins; ties go to the more
+//      specific category (CATEGORY_TIE_ORDER); no match at all is "other", never a guess.
+//      Regression floors in src/learnings-category.test.ts against tests/fixtures/category-labels.json.
 
-  for (const [keyword, cat] of Object.entries(keywords)) {
-    if (text.includes(keyword)) return cat;
-  }
-  return "other";
+/** Terms per category. Single words match as whole tokens, phrases as whole phrases. */
+const CATEGORY_TERMS: Record<Exclude<LearningCategory, "other">, string[]> = {
+  deployment: ["deploy", "deploys", "deployed", "deploying", "deployment", "deployments", "rsync",
+    "scp", "publish", "published", "publishing", "release", "releases", "released", "rollout",
+    "rollback", "ship", "shipped", "shipping", "go live", "go-live", "cutover", "staging",
+    "production", "prod", "tarball", "npm publish", "verify-release", "preflight", "hotfix",
+    "live-verify"],
+  devops: ["ci", "ci/cd", "cicd", "pipeline", "pipelines", "github actions", "workflow",
+    "workflows", "docker", "dockerfile", "container", "containers", "compose", "kubernetes", "k8s",
+    "cron", "crontab", "launchd", "scheduler", "scheduled", "automation", "automated",
+    "orchestration"],
+  infrastructure: ["nginx", "apache", "ssl", "tls", "certificate", "certificates", "letsencrypt",
+    "server", "servers", "vps", "pm2", "ssh", "dns", "domain", "domains", "firewall", "ufw",
+    "fail2ban", "systemd", "backup", "backups", "restore", "disk", "ovh", "gandi", "hosting",
+    "smtp", "cloudflare", "proxy", "reverse proxy", "load balancer", "uptime", "monitoring", "ram",
+    "cpu", "swap", "reboot", "restart", "restarted", "daemon",
+    "box", "machine", "process", "processes", "host", "hosts"],
+  api: ["api", "apis", "endpoint", "endpoints", "rest", "graphql", "webhook", "webhooks", "route",
+    "routes", "router", "request", "requests", "response", "responses", "http", "https",
+    "status code", "payload", "rate limit", "rate-limit", "throttle", "throttling", "header",
+    "headers", "url", "urls", "fetch", "axios", "curl", "openapi", "swagger"],
+  database: ["sql", "sqlite", "mysql", "postgres", "postgresql", "mongodb", "mongo", "mongoose",
+    "query", "queries", "migration", "migrations", "schema", "table", "tables", "column", "columns",
+    "collection", "collections", "aggregate", "redis", "orm", "sqlalchemy", "prisma", "eloquent",
+    "transaction", "transactions", "row", "rows", "db", "database", "databases", "pg_dump",
+    "setval", "primary key", "foreign key", "upsert", "insert",
+    "index", "indexes", "join", "select", "sequence", "dump"],
+  frontend: ["react", "vue", "svelte", "css", "html", "dom", "component", "components", "ui", "ux",
+    "jsx", "tsx", "tailwind", "vite", "webpack", "render", "renders", "rendering", "rendered",
+    "page", "pages", "button", "buttons", "modal", "chip", "chips", "localstorage", "browser",
+    "usestate", "useeffect", "spinner", "layout", "responsive", "widget", "widgets", "form",
+    "forms", "click", "scroll", "font", "fonts", "color", "colors", "colour", "colours", "contrast",
+    "display", "screen", "screens", "frontend", "front-end", "pwa", "service worker", "bundle",
+    "hydration"],
+  backend: ["express", "node", "nodejs", "flask", "fastapi", "django", "laravel", "php", "python",
+    "middleware", "uvicorn", "gunicorn", "worker", "workers", "queue", "queues", "controller",
+    "controllers", "service", "services", "artisan", "i18n", "server-side", "backend", "back-end",
+    "handler", "handlers", "model", "models", "trait", "setdefault", "asyncio", "celery",
+    "cache_key"],
+  security: ["auth", "authentication", "authorization", "oauth", "jwt", "token", "tokens", "cors",
+    "xss", "csrf", "helmet", "encrypt", "encrypted", "encryption", "password", "passwords",
+    "passkey", "passkeys", "webauthn", "credential", "credentials", "secret", "secrets", "vault",
+    "permission", "permissions", "tenant", "isolation", "rbac", "hash", "hashed", "injection",
+    "sanitize", "sanitise", "vulnerability", "vulnerabilities", "cve", "exposed", "expose",
+    "cookie", "cookies", "login", "logout", "signin", "sign-in", "2fa", "mfa", "otp", "magic code",
+    "allowlist", "whitelist", "trade secret", "trade secrets", "lockout",
+    "origin", "leak", "leaks", "leaked"],
+  performance: ["perf", "performance", "latency", "cache", "cached", "caching", "optimize",
+    "optimise", "optimization", "optimisation", "slow", "slower", "bottleneck", "bottlenecks",
+    "throughput", "memory leak", "n+1", "benchmark", "loop invariant", "nested loop", "timeout",
+    "timeouts", "concurrency", "batch size",
+    "parallel", "expensive"],
+  testing: ["test", "tests", "testing", "tested", "vitest", "jest", "pytest", "spec", "specs",
+    "assert", "assertion", "assertions", "mock", "mocks", "mocked", "fixture", "fixtures", "e2e",
+    "end-to-end", "headless", "playwright", "cypress", "test suite", "regression", "tdd", "green",
+    "red", "smoke", "smoke test", "collect", "collected", "harness", "canary"],
+  debugging: ["debug", "debugging", "error", "errors", "stack trace", "traceback", "breakpoint",
+    "log", "logs", "logging", "diagnose", "diagnosis", "diagnostic", "diagnostics", "symptom",
+    "symptoms", "crash", "crashes", "crashed", "hang", "hangs", "freeze", "frozen", "root cause",
+    "reproduce", "repro", "bug", "bugs", "silent", "silently", "off-by-one", "stale",
+    "wrong", "invisible"],
+  tooling: ["eslint", "lint", "linter", "prettier", "vscode", "vs code", "editor", "cli", "script",
+    "scripts", "shell", "bash", "zsh", "terminal", "claude code", "agent", "agents", "subagent",
+    "subagents", "mcp", "extension", "plugin", "plugins", "tsc", "compiler", "formatter",
+    "makefile", "pipefail", "set -e", "grep", "sed", "regex", "quoting", "command", "commands",
+    "flag", "flags", "dry run", "dry-run", "--check", "prompt", "prompts", "transcript",
+    "transcripts", "copilot"],
+  git: ["git", "commit", "commits", "committed", "branch", "branches", "merge", "merged", "rebase",
+    "push", "pushed", "pull", "pull request", "pr", "prs", "checkout", "stash", "cherry-pick",
+    "no-verify", "--no-verify", "pre-commit", "post-commit", "pre-push", "post-push", "gitignore",
+    ".gitignore", "git push", "git pull", "bare repo", "worktree", "revert", "squash",
+    "history", "remote", "remotes", "tag", "tags", "conflict", "conflicts", "hook", "hooks"],
+  dependencies: ["npm", "package", "packages", "yarn", "pnpm", "pip", "composer", "dependency",
+    "dependencies", "upgrade", "upgraded", "semver", "lockfile", "package.json", "node_modules",
+    "requirements.txt", "sdk", "pubspec", "peer dependency", "bump", "bumped", "outdated", "npx",
+    "version", "versions", "install", "installed", "pin", "pinned", "pinning"],
+  architecture: ["pattern", "patterns", "refactor", "refactoring", "module", "modules", "design",
+    "architecture", "single source of truth", "coupling", "boundary", "boundaries", "abstraction",
+    "interface", "interfaces", "layer", "layers", "event bus", "invariant", "invariants", "guard",
+    "guards", "contract", "contracts", "decision", "decisions", "encode", "encoded", "absence",
+    "unknown", "responsibility", "coupled", "decoupled",
+    "trace", "structure", "structural"],
+  data: ["csv", "dataset", "datasets", "data", "categoriser", "categorizer", "categorisation",
+    "categorization", "taxonomy", "parse", "parser", "parsed", "encoding", "unicode", "nfc", "nfd",
+    "dedup", "deduplicate", "normalization", "normalisation", "etl", "classifier", "verdict",
+    "verdicts", "denominator", "nutri-score", "catalog", "catalogue", "spreadsheet", "excel",
+    "count", "counts", "figure", "figures", "json", "product", "products", "field", "fields", "label", "labels", "labelled", "coverage", "metric", "metrics", "import", "imports", "export", "exports", "record", "records"],
+  mobile: ["ios", "android", "expo", "react native", "flutter", "dart", "swift", "kotlin", "xcode",
+    "app store", "play store", "google play", "testflight", "apk", "aab", "ipa", "riverpod",
+    "app store connect", "simulator", "emulator", "mobile", "gradle", "cocoapods", "pod", "pods",
+    "mainactivity", "flutterfragmentactivity", "flutteractivity", "revenuecat", "subscription",
+    "subscriptions", "guideline", "review team", "samsung", "iphone", "device", "devices",
+    "widget tree"],
+};
+
+/** Unambiguous technology names: one occurrence outweighs two generic words. */
+const STRONG_TERMS = new Set<string>([
+  "rsync", "docker", "dockerfile", "kubernetes", "nginx", "fail2ban", "ufw", "pm2", "letsencrypt",
+  "graphql", "webhook", "webhooks", "endpoint", "endpoints", "sqlite", "mysql", "postgres", "postgresql",
+  "mongodb", "mongoose", "sqlalchemy", "prisma", "eloquent", "pg_dump", "react", "vue", "svelte",
+  "tailwind", "usestate", "useeffect", "localstorage", "express", "flask", "fastapi", "django", "laravel",
+  "uvicorn", "gunicorn", "artisan", "jwt", "csrf", "xss", "webauthn", "passkey", "passkeys", "oauth",
+  "vitest", "jest", "pytest", "playwright", "cypress", "stack trace", "traceback", "eslint", "prettier",
+  "vscode", "vs code", "rebase", "cherry-pick", "no-verify", "--no-verify", "pre-commit", "gitignore",
+  "npm", "yarn", "pnpm", "pip", "composer", "semver", "package.json", "node_modules", "csv", "unicode",
+  "flutter", "dart", "swift", "kotlin", "xcode", "testflight", "apk", "aab", "ipa", "riverpod", "expo",
+  "react native", "app store", "play store", "google play", "app store connect", "pubspec",
+  "single source of truth", "n+1", "memory leak", "loop invariant", "github actions", "trade secret",
+  "trade secrets", "git push", "git pull", "pull request", "mongo", "redis", "migration", "migrations",
+]);
+
+/** When two categories tie, the earlier one wins: the more specific before the more generic. */
+const CATEGORY_TIE_ORDER: LearningCategory[] = [
+  "mobile", "database", "security", "git", "testing", "deployment", "api", "devops", "infrastructure",
+  "frontend", "backend", "performance", "dependencies", "data", "tooling", "debugging", "architecture",
+];
+
+function normalizeForMatch(text: string): string {
+  // Lowercase; every run of characters outside [a-z0-9+#./_-] becomes one space, so a term like
+  // "ci/cd", "n+1", "--no-verify" or "package.json" survives as a phrase, and word boundaries
+  // become spaces. Padded with spaces so a term can be looked up as " term ".
+  return " " + text.toLowerCase().replace(/[^a-z0-9+#./_-]+/g, " ").trim() + " ";
 }
 
-/** Map free-form heading text to closest LEARNING_CATEGORIES value */
-function normalizeCategory(heading: string): LearningCategory {
-  const h = heading.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
+/** Whole-word / whole-phrase occurrence check on a normalised string. */
+function hasTerm(normalized: string, term: string): boolean {
+  return normalized.includes(` ${term} `);
+}
 
-  // Direct match
+/** Score every category over rule (x2) and context (x1); the caller picks the winner. */
+export function scoreCategories(rule: string, context: string): Map<LearningCategory, number> {
+  const r = normalizeForMatch(rule);
+  const c = normalizeForMatch(context || "");
+  const scores = new Map<LearningCategory, number>();
+  for (const [cat, terms] of Object.entries(CATEGORY_TERMS) as Array<[LearningCategory, string[]]>) {
+    let s = 0;
+    for (const term of terms) {
+      const w = STRONG_TERMS.has(term) ? 2 : 1;
+      if (hasTerm(r, term)) s += 2 * w;
+      else if (hasTerm(c, term)) s += w;
+    }
+    if (s > 0) scores.set(cat, s);
+  }
+  return scores;
+}
+
+/** Infer a category from rule text + context. "other" only when nothing matches at all. */
+export function inferCategory(rule: string, context: string): LearningCategory {
+  const scores = scoreCategories(rule, context);
+  let best: LearningCategory = "other";
+  let bestScore = 0;
+  for (const cat of CATEGORY_TIE_ORDER) {
+    const s = scores.get(cat) || 0;
+    if (s > bestScore) { best = cat; bestScore = s; }
+  }
+  return best;
+}
+
+/** Map free-form heading text to the closest LEARNING_CATEGORIES value. */
+export function normalizeCategory(heading: string): LearningCategory {
+  const h = normalizeForMatch(heading);
+  // A heading that IS a category name ("## deployment", "## Testing") maps directly.
   for (const cat of LEARNING_CATEGORIES) {
-    if (h === cat || h.startsWith(cat)) return cat;
+    if (h.trim() === cat) return cat;
   }
-
-  // Keyword mapping
-  const map: Record<string, LearningCategory> = {
-    "deploy": "deployment",
-    "ci/cd": "devops",
-    "ci cd": "devops",
-    "pipeline": "devops",
-    "docker": "devops",
-    "nginx": "infrastructure",
-    "server": "infrastructure",
-    "hosting": "infrastructure",
-    "ssl": "security",
-    "cors": "security",
-    "auth": "security",
-    "malware": "security",
-    "hack": "security",
-    "hardening": "security",
-    "terminal": "tooling",
-    "command": "tooling",
-    "monitoring": "tooling",
-    "vs code": "tooling",
-    "test": "testing",
-    "jest": "testing",
-    "spec": "testing",
-    "debug": "debugging",
-    "bug": "debugging",
-    "fix": "debugging",
-    "react": "frontend",
-    "vue": "frontend",
-    "css": "frontend",
-    "ui": "frontend",
-    "laravel": "backend",
-    "django": "backend",
-    "flask": "backend",
-    "express": "backend",
-    "mysql": "database",
-    "postgres": "database",
-    "sql": "database",
-    "migration": "database",
-    "npm": "dependencies",
-    "composer": "dependencies",
-    "pip": "dependencies",
-    "package": "dependencies",
-    "git": "git",
-    "commit": "git",
-    "branch": "git",
-    "hook": "git",
-    "perf": "performance",
-    "speed": "performance",
-    "cache": "performance",
-    "mobile": "mobile",
-    "expo": "mobile",
-    "flutter": "mobile",
-    "react native": "mobile",
-    "swift": "mobile",
-    "pattern": "architecture",
-    "design": "architecture",
-    "struct": "architecture",
-    "data type": "data",
-    "csv": "data",
-    "import": "data",
-    "export": "data",
-    "api": "api",
-    "endpoint": "api",
-    "rest": "api",
-    "smtp": "infrastructure",
-    "email": "infrastructure",
-    "queue": "infrastructure",
-    "audit": "security",
-    "version": "dependencies",
-    "upgrade": "dependencies",
-  };
-
-  for (const [keyword, cat] of Object.entries(map)) {
-    if (h.includes(keyword)) return cat;
+  // A few heading words that the term lists do not carry as rule vocabulary.
+  const headingWords: Array<[string, LearningCategory]> = [
+    ["lessons", "other"], ["learnings", "other"], ["gotchas", "other"],
+    ["hardening", "security"], ["malware", "security"], ["audit", "security"],
+    ["terminal", "tooling"], ["commands", "tooling"], ["monitoring", "infrastructure"],
+    ["bugs", "debugging"], ["fixes", "debugging"], ["speed", "performance"],
+  ];
+  for (const [word, cat] of headingWords) {
+    if (hasTerm(h, word)) return cat;
   }
-
-  return "other";
+  return inferCategory(heading, "");
 }
 
 /**
@@ -929,9 +1065,10 @@ export function learningsToChunks(projects?: string[]): Chunk[] {
  */
 export function autoImportFromSources(
   sources: Array<{ path: string; name: string }>,
-): { total: number; imported: number; updated: number } {
+): { total: number; imported: number; updated: number; ignored: number } {
   let totalImported = 0;
   let totalUpdated = 0;
+  let totalIgnored = 0;
   let processed = 0;
 
   // One load and one save for the whole sweep (~880 files), instead of one full-file
@@ -945,14 +1082,16 @@ export function autoImportFromSources(
     // Extract project name from source name (e.g., "ContextEngine — copilot-instructions.md")
     const project = source.name.split(" — ")[0]?.trim() || undefined;
 
+    // Strict by construction: only marked learnings. [LOCK] [AUTO-IMPORT-ONLY-MARKED-LEARNINGS]
     const result = importLearningsFromFile(source.path, "other", project);
     totalImported += result.imported;
     totalUpdated += result.updated;
+    totalIgnored += result.ignored;
     if (result.imported > 0 || result.updated > 0) processed++;
   }
   });
 
-  return { total: processed, imported: totalImported, updated: totalUpdated };
+  return { total: processed, imported: totalImported, updated: totalUpdated, ignored: totalIgnored };
 }
 
 /**

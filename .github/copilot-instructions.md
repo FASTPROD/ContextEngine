@@ -184,7 +184,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 - Policy contract: `.contextengine/policy.json` v1 — secret_patterns, doc_coverage, deploy_verify_hosts, bypass_tokens
 - Hook checkers: `contextengine hook secret-scan` + `hook doc-coverage` apply the policy against staged diff (TS path; bash hook migration is the next sprint)
 - Audit log: `~/.contextengine/audit.log` hash-chained JSONL — every state-changing op + every hook.block recorded. `audit-verify` walks the chain.
-- Auto-import: learnings extracted from doc sources during reindex + end-session
+- Auto-import: MARKED learnings extracted from doc sources during reindex + end-session (`[category]` bullets, `*LEARNINGS.md` files, learnings/lessons/gotchas/rules sections; since 2026-09-05, bare headings are ignored)
 - Privacy section: README documents local-first architecture, server never receives code/learnings
 - Learning quality gates: min 15 chars, auto-categorize "other", import filters (v1.19.1)
 - Learnings store: 1,023 quality rules (post-dedup + junk purge)

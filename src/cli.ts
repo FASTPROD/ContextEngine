@@ -2428,27 +2428,33 @@ async function cliImportLearnings(args: string[]): Promise<void> {
   let filePath = "";
   let category = "other";
   let project: string | undefined;
+  let permissive = false;
 
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "-c" || args[i] === "--category") && args[i + 1]) {
       category = args[++i];
     } else if ((args[i] === "-p" || args[i] === "--project") && args[i + 1]) {
       project = args[++i];
+    } else if (args[i] === "--permissive") {
+      permissive = true;
     } else if (!filePath) {
       filePath = args[i];
     }
   }
 
   if (!filePath) {
-    console.error("Usage: contextengine import-learnings <file.md|file.json> [-c category] [-p project]");
+    console.error("Usage: contextengine import-learnings <file.md|file.json> [-c category] [-p project] [--permissive]");
+    console.error("  Default: only marked learnings ([category] bullets, *LEARNINGS.md files, learnings/lessons/gotchas/rules sections, JSON).");
+    console.error("  --permissive: every H3 heading, bold bullet and table row too.");
     process.exit(1);
   }
 
-  const result = importLearningsFromFile(filePath, category, project);
+  const result = importLearningsFromFile(filePath, category, project, { permissive });
   console.log(`\n📥 Import Results:`);
   console.log(`   Imported: ${result.imported}`);
   console.log(`   Updated:  ${result.updated}`);
   console.log(`   Skipped:  ${result.skipped}`);
+  console.log(`   Ignored:  ${result.ignored} (unmarked headings/bullets/rows; --permissive imports them)`);
   if (result.errors.length > 0) {
     console.log(`   Errors:`);
     for (const err of result.errors) {

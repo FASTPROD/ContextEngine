@@ -74,6 +74,12 @@ const DEFAULT_PATTERNS = [
   "AGENTS.md",
   // Context engineering
   "CONTEXT_MAP.md",
+  // Learnings files: the only ordinary-looking docs the auto-import reads in full
+  // ([LOCK] [AUTO-IMPORT-ONLY-MARKED-LEARNINGS] in learnings.ts)
+  "AGENT-LEARNINGS.md",
+  "docs/AGENT-LEARNINGS.md",
+  "LEARNINGS.md",
+  "docs/LEARNINGS.md",
 ];
 
 /**

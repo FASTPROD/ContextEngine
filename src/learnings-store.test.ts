@@ -130,7 +130,9 @@ describe("imports are one batch", () => {
     const paths: Array<{ path: string; name: string }> = [];
     for (let f = 0; f < 3; f++) {
       const p = join(home, `src${f}.md`);
-      writeFileSync(p, `# Notes\n\n## testing\n\n### auto rule ${f} alpha long enough\nctx\n\n### auto rule ${f} beta long enough\nctx\n`);
+      // "## Lessons learned" puts the section in the learnings scope; a plain "## testing" no longer
+      // does ([LOCK] [AUTO-IMPORT-ONLY-MARKED-LEARNINGS]).
+      writeFileSync(p, `# Notes\n\n## Lessons learned\n\n### auto rule ${f} alpha long enough\nctx\n\n### auto rule ${f} beta long enough\nctx\n`);
       paths.push({ path: p, name: `Proj${f} — src${f}.md` });
     }
     const r = L.autoImportFromSources(paths);

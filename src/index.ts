@@ -1200,7 +1200,7 @@ server.tool(
 // ---------------------------------------------------------------------------
 server.tool(
   "import_learnings",
-  "Bulk-import learnings from a Markdown or JSON file. Parses headings, bullets, and tables to extract operational rules. Supports: (1) Structured Markdown (H2=category, H3=rule, bullets=context), (2) Inline bullets with [category] prefix, (3) JSON arrays of {category, rule, context}. Deduplicates against existing learnings.",
+  "Bulk-import learnings from a Markdown or JSON file. By default only MARKED learnings are imported: inline bullets with a [category] prefix, anything inside a *LEARNINGS.md file, anything under a heading that says learnings / lessons / gotchas / rules, and JSON arrays of {category, rule, context}. Set permissive=true to also import every H3 heading, bold bullet and table row (H2=category, H3=rule, bullets=context). Deduplicates against existing learnings.",
   {
     file_path: z
       .string()
@@ -1213,12 +1213,17 @@ server.tool(
       .string()
       .optional()
       .describe("Project name to tag all imported learnings with (e.g., 'FC_project')"),
+    permissive: z
+      .boolean()
+      .optional()
+      .describe("Import every heading, bold bullet and table row as a rule (the pre-2.5.7 behaviour). Default false: only marked learnings."),
   },
-  async ({ file_path, default_category, project }) => {
+  async ({ file_path, default_category, project, permissive }) => {
     const result = importLearningsFromFile(
       file_path,
       default_category || "other",
       project,
+      { permissive: permissive === true },
     );
 
     // Re-inject learnings into search index (project-scoped)
@@ -1233,6 +1238,7 @@ server.tool(
       `- **Imported:** ${result.imported} new learnings`,
       `- **Updated:** ${result.updated} existing learnings (dedup match)`,
       `- **Skipped:** ${result.skipped} entries (missing data)`,
+      `- **Ignored:** ${result.ignored} headings / bold bullets / table rows outside a learnings scope (pass permissive=true to import them)`,
       ``,
       `📊 Store total: ${stats.total} learnings across ${Object.keys(stats.categories).length} categories`,
       ``,

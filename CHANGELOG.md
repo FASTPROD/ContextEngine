@@ -4,6 +4,38 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [Unreleased] — 2026-09-05 — The learnings store was a pile of headings
+
+Of 3,005 records, about 2,760 had been produced by the doc importer from ~160 ordinary docs
+(copilot-instructions, session docs, Claude memory files) and about 240 by an agent calling
+`save_learning`. In a spread sample of 70 imported records, 32 were not rules at all ("Design
+Language:", "Session 24 TODO", "Files created (Phase 1 foundation)"), and the category of the rest
+came from a section title or a substring guess: "Flow A" under mobile, "Scoring internals are trade
+secrets" under mobile because "expose" contains "expo".
+
+### Changed
+
+- **Auto-import takes only marked learnings** (`[AUTO-IMPORT-ONLY-MARKED-LEARNINGS]`): inline
+  `- [category] rule → context` bullets anywhere; every shape inside a `*LEARNINGS.md` file; every
+  shape under a heading that says learnings / lessons / gotchas / pitfalls / rules / anti-patterns /
+  "never repeat" / "the hard way"; JSON. Bare H3 headings, bold bullets and table rows in ordinary
+  docs are reported as `ignored` and left alone; the docs stay searchable as docs. Replayed over the
+  818 discovered sources: 129 records instead of 1,879. `import_learnings` gains `permissive: true`
+  and the CLI `--permissive` for a file the user chose. Imported records carry `source`.
+- **Category inference scores whole words** (`[CATEGORY-BY-WHOLE-WORD-SCORE]`): every whole-word or
+  whole-phrase match counts, rule text weighs double the context, highest total wins, ties go to the
+  more specific category, no match is `other`. Measured: 11% → 27.5% agreement on 189 agent-labelled
+  records, 25% → 50% on 84 hand-labelled rules (`scripts/measure-categories.mjs`; the sample stays
+  outside the repo). `normalizeCategory()` no longer maps "Apple App Store" to api on a prefix.
+- New default source patterns: `AGENT-LEARNINGS.md`, `docs/AGENT-LEARNINGS.md`, `LEARNINGS.md`,
+  `docs/LEARNINGS.md`.
+
+### Added
+
+- `scripts/learnings-prune.mjs <plan.json> [--apply]`: dry run by default, backup before any
+  delete, one batched write under the store lock. The 2026-09-05 plan lists 2,635 import-derived
+  records to remove (370 kept), pending the owner's GO.
+
 ## [2.4.3] — 2026-08-17 — The audit verifier called concurrency "tampering" and condemned 316k records
 
 `audit-verify` reported `❌ Audit chain BROKEN at index 2826 (of 319438)` and told the user the

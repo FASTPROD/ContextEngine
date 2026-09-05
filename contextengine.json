@@ -13,7 +13,11 @@
     "~/FASTPROD"
   ],
   "patterns": [
-    ".github/copilot-instructions.md"
+    ".github/copilot-instructions.md",
+    "AGENT-LEARNINGS.md",
+    "docs/AGENT-LEARNINGS.md",
+    "LEARNINGS.md",
+    "docs/LEARNINGS.md"
   ],
   "codeDirs": [
     "src"

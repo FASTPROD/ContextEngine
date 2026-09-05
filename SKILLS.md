@@ -71,12 +71,28 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 - When modifying firewall: always test with `npx vitest run` — all 76 tests must pass
 - The `respond()` helper in `index.ts` is the single integration point — all tools funnel through it
 
-### Learning Quality Gates (v1.19.1)
-- **Minimum rule length**: `MIN_RULE_LENGTH = 15` in `src/learnings.ts` — `saveLearning()` throws if rule < 15 chars
-- **Auto-categorization**: `inferCategory()` maps 30+ keywords to proper categories when agent sends "other"
-- **Import filters**: `importFromMarkdown()` and `importFromJson()` skip rules < 15 chars silently
-- **MCP rejection**: `index.ts` `save_learning` handler has try-catch — surfaces rejection message to agents
-- All H3 headings, bold bullets, inline-category bullets, and table rows in markdown import check MIN_RULE_LENGTH
+### Learning Quality Gates (v1.19.1, import rule and category scorer 2026-09-05)
+- **Minimum rule length**: `MIN_RULE_LENGTH = 15` in `src/learnings.ts`, `saveLearning()` throws if rule < 15 chars
+- **Auto-categorization**: `inferCategory()` scores whole words and phrases per category, a match in the
+  rule text counts double a match in the context, highest total wins, no match = `other`. LOCK
+  `[CATEGORY-BY-WHOLE-WORD-SCORE]`. The old first-hit substring matcher read "expose" as expo and filed
+  "Scoring internals are trade secrets" under mobile: 11% right on 189 agent-labelled records, the scorer
+  27.5%; 25% vs 50% on 84 hand-labelled rules. Measure again with
+  `node scripts/measure-categories.mjs ~/.contextengine/category-labels-20260905.json` (the sample stays
+  outside this public repo). Floors in `src/learnings-category.test.ts`.
+- **Import rule** (LOCK `[AUTO-IMPORT-ONLY-MARKED-LEARNINGS]`): the auto-import that every MCP server
+  runs on every doc change takes ONLY marked learnings: `- [category] rule → context` bullets anywhere;
+  every shape inside a `*LEARNINGS.md` file (`AGENT-LEARNINGS.md`, `docs/AGENT-LEARNINGS.md`,
+  `LEARNINGS.md` are now default patterns); every shape under a heading that says learnings / lessons /
+  gotchas / pitfalls / rules / anti-patterns / "never repeat" / "the hard way"; JSON files. Bare H3
+  headings, bold bullets and table rows in ordinary docs are counted as `ignored` and left alone; the docs
+  stay searchable as docs. Before this rule the store held 3,005 records of which ~2,760 were doc headings
+  ("Design Language:", "Files created (Phase 1)"); the strict rule reproduces 129 of them.
+  `import_learnings` (MCP, `permissive: true`) and `contextengine import-learnings --permissive` restore
+  the old parser for a file the user chose. Imported records carry `source` (the file path).
+- **Cleanup**: `node scripts/learnings-prune.mjs <plan.json>` is a dry run; `--apply` deletes the listed ids
+  under the lock after a backup copy. The Session 25 plan is `~/.contextengine/learnings-cleanup-plan-20260905.json`.
+- **MCP rejection**: `index.ts` `save_learning` handler has try-catch, surfaces the rejection message to agents
 - `flushRule()` has its own length check + try-catch to prevent import crashes
 
 ### Build & Test
