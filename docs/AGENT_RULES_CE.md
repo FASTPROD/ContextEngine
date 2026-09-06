@@ -52,6 +52,11 @@ not open is not a rule, so the mechanism matters more than the prose._
 - When asking Yan to test: what to run, what to look for, one or two lines.
 - Details go in the session doc, not the chat.
 - Report faithfully: a failed test is reported with its output, a skipped step is named as skipped.
+- Session save is a gate, not a reminder (2026-09-06): every fleet repo runs `scripts/session-gate.sh`
+  as a Claude Code Stop hook. A turn cannot end while the CE session for that repo is older than
+  HEAD; the message names the session to save, the session doc, and how far copilot-instructions
+  is behind. Source of truth here, copied out by `scripts/sync-session-gate.sh` (`--check` default,
+  `--apply` copies, wires and proves). Never hand-copy it.
 
 ## 6. What ContextEngine gives the agent (state at 2.5.6 published, 2026-09-05 evening)
 

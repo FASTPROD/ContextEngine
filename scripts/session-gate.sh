@@ -19,10 +19,26 @@ case "$input" in *'"stop_hook_active":true'*|*'"stop_hook_active": true'*) exit 
 repo="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 cd "$repo" || exit 0
 name="$(basename "$repo")"
-session="${CE_GATE_SESSION_FILE:-${CONTEXTENGINE_HOME:-$HOME/.contextengine}/sessions/${name}.json}"
+sessions_dir="${CONTEXTENGINE_HOME:-$HOME/.contextengine}/sessions"
+norm() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]'; }
+mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
+
+# The session for this repo: CE_GATE_SESSION_FILE (tests), else the newest session file whose
+# normalized name starts with the repo's normalized basename ("admin-CROWLR" and "admin.CROWLR"
+# both count for admin.CROWLR). None = never saved = older than any commit.
+session_ts=0; session_name="$name"
+if [ -n "${CE_GATE_SESSION_FILE:-}" ]; then
+  [ -f "$CE_GATE_SESSION_FILE" ] && session_ts="$(mtime "$CE_GATE_SESSION_FILE")"
+else
+  want="$(norm "$name")"
+  for f in "$sessions_dir"/*.json; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f" .json)"
+    case "$(norm "$base")" in "$want"*) t="$(mtime "$f")"; if [ "$t" -gt "$session_ts" ]; then session_ts=$t; session_name="$base"; fi ;; esac
+  done
+fi
 
 commit_ts="$(git log -1 --format=%ct 2>/dev/null || echo 0)"
-if [ -f "$session" ]; then session_ts="$(stat -f %m "$session" 2>/dev/null || stat -c %Y "$session" 2>/dev/null || echo 0)"; else session_ts=0; fi
 
 # Doc staleness, informational: commits touching src/ since copilot-instructions.md last changed.
 ci=".github/copilot-instructions.md"
@@ -33,8 +49,9 @@ latest_session_doc="$(ls -t docs/sessions/SESSION_*.md 2>/dev/null | head -1)"
 if [ "$session_ts" -lt "$commit_ts" ]; then
   fmt() { date -r "$1" "+%Y-%m-%d %H:%M" 2>/dev/null || date -d "@$1" "+%Y-%m-%d %H:%M"; }
   {
-    echo "CE session gate: session '$name' ($(fmt "$session_ts")) is older than the last commit ($(fmt "$commit_ts")). Before ending:"
-    echo "1. save_session (MCP) session='$name' keys summary and open, with what changed since the last save;"
+    if [ "$session_ts" -eq 0 ]; then when="never saved"; else when="$(fmt "$session_ts")"; fi
+    echo "CE session gate: session '$session_name' ($when) is older than the last commit ($(fmt "$commit_ts")). Before ending:"
+    echo "1. save_session (MCP) session='$session_name' keys summary and open, with what changed since the last save;"
     echo "2. update ${latest_session_doc:-docs/sessions/SESSION_N.md} if the work changed and commit it;"
     echo "3. $ci is $stale src commit(s) behind; update it if any of them changed how the project works;"
     echo "4. save_learning for any reusable lesson. Then end the turn; this gate passes once the session file is newer than HEAD."
