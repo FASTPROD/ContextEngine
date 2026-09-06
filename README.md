@@ -162,8 +162,10 @@ Companion commands: `uninstall-autostart`, `autostart-status`.
 **3c. Wire Claude Code terminal sessions**
 
 ```bash
-npx @compr/opscontext-mcp install-claude-hook
+npm i -g @compr/opscontext-mcp && opscontext install-claude-hook
 ```
+
+(Prefer the global install here: the hook scripts keep absolute paths to the CLI, and an `npx` cache copy can be pruned.)
 
 Adds `UserPromptSubmit`, `PostToolUse`, and `SessionStart` hook entries to `~/.claude/settings.json` so every Claude Code prompt + tool call lands in the same audit log as the browser events, plus a `Stop` entry: the **session gate** (2.7.0). A Claude Code turn cannot end while the repo's OpsContext session is older than the last commit; the agent is told which session to save, which session doc to update, and how far the agent docs are behind. No more "did you save the session?" at the end of a day. Details: `npx @compr/opscontext-mcp session-gate --help`.
 
