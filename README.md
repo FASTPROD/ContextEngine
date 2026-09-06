@@ -525,7 +525,7 @@ Everything happens locally — search, scoring, learnings, sessions, embeddings.
 | Learnings (operational rules) | `~/.contextengine/learnings.json` | ❌ Never |
 | Sessions (decisions, progress) | `~/.contextengine/sessions/` | ❌ Never |
 | Session stats (value meter) | `~/.contextengine/session-stats.json` | ❌ Never |
-| Search index & embeddings | In-memory + `~/.contextengine/embedding-cache.json` | ❌ Never |
+| Search index & embeddings | In-memory + `~/.contextengine/embeddings.bin` (vectors) and `~/.contextengine/index/` (shared index) | ❌ Never |
 | Git history & branches | Local `git` commands | ❌ Never |
 | Dependencies & package.json | Read locally | ❌ Never |
 | .env variable names | Read locally (values are never read) | ❌ Never |

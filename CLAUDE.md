@@ -64,11 +64,11 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 | Terminal `contextengine` | `npm link` → this repo (`lib/node_modules/@compr/contextengine-mcp` is a **symlink** to `/Users/yan/Projects/ContextEngine`, still under the old package name) | `npm run build` — nothing else, no reinstall |
 | VS Code MCP server | `.vscode/mcp.json` → `/Users/yan/Projects/ContextEngine/dist/index.js` (absolute path) | `npm run build`, then **reload the VS Code window** — the MCP process is long-lived and holds the old code until it restarts |
 | **launchd autostart MCP server** | `~/Library/LaunchAgents/com.opscontext.mcp.plist` → the same `dist/index.js` | `npm run build`, then **`launchctl kickstart -k gui/$(id -u)/com.opscontext.mcp`**. A VS Code reload does **NOT** touch this — it is a separate process owned by launchd |
-| Claude Code MCP (project) | `.mcp.json` → `node dist/index.js`, cwd = this repo, i.e. the local build (since 2026-09-05; see the wiring note below) | `npm run build`, then restart Claude Code |
-| Claude Code MCP (global) | `~/.claude.json` user scope (`claude mcp add --scope user contextengine -- npx -y @compr/opscontext-mcp`), the **published** package; applies to **every other project on this machine** | `npm publish`, then restart Claude Code |
+| Claude Code MCP (project) | `.mcp.json` → `node dist/index.js`, cwd = this repo, i.e. the local build, with `CONTEXTENGINE_SHARED_INDEX=1` (since 2026-09-05; see the wiring note below) | `npm run build`, then restart Claude Code |
+| Claude Code MCP (global) | `~/.claude.json` user scope → `/Users/yan/Projects/ContextEngine/dist/index.js`, the **repo build** too, with `CONTEXTENGINE_SHARED_INDEX=1` (checked 2026-09-05 22:05; the earlier "published package" wording was stale). `~/.zshrc` exports `CONTEXTENGINE_CONFIG` to this repo's config, so every chat on this machine shares one corpus and one indexer (SKILLS.md § One indexer, many readers) | `npm run build`, then reload the windows; `contextengine servers` shows who is `indexer` |
 | VS Code extension `css-llc.contextengine` | shells out to the CLI | inherits the link automatically |
 
-So: **`npm run build` updates the tooling; `npm publish` does not** — except for the global Claude Code entry above, which runs the *published* package and therefore DOES need a publish.
+So: **`npm run build` updates the tooling on this machine; `npm publish` does not** (it matters for other machines only). Long-lived servers keep the old code until restarted: `contextengine servers` flags them STALE BUILD.
 
 ⚠ **Claude Code wiring, corrected 2026-09-05.** Two things were wrong for weeks and nothing said so:
 (1) `mcpServers` in `~/.claude/settings.json` is not read by Claude Code at all; MCP servers live in

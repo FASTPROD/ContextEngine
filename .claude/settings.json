@@ -63,6 +63,16 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/yan/Projects/ContextEngine/scripts/session-gate.sh"
+          }
+        ]
+      }
     ]
   }
 }

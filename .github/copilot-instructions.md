@@ -32,7 +32,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 ## Architecture
 - MCP protocol over `stdio` transport — works with Claude Desktop, VS Code Copilot, Cursor, etc.
 - **CLI**: 16 subcommands — `search`, `list-sources`, `list-projects`, `score`, `list-learnings`, `save-learning`, `audit`, `activate`, `deactivate`, `status`, `save-session`, `load-session`, `list-sessions`, `end-session`, `import-learnings`, `stats` (no MCP required)
-- Dual search: BM25 keyword (instant) + semantic embeddings (Xenova `all-MiniLM-L6-v2`, ~200ms from cache)
+- Dual search: BM25 keyword (instant) + semantic embeddings (Xenova `all-MiniLM-L6-v2`; vectors are content-addressed in `~/.contextengine/embeddings.bin`, shared by every server, so a start or a doc change embeds only texts never seen before)
 - Sources auto-discovered: `copilot-instructions.md`, `CLAUDE.md`, `SKILLS.md`, `contextengine.json`, session docs
 - Operational context: git log, branch, recent commits, file tree, dependency versions
 - Learnings store: append-only JSON in `~/.contextengine/learnings.json`
@@ -126,7 +126,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 | `src/scoring.ts` | Project health scoring — 12 checks, weighted rubric |
 | `src/audit.ts` | Beyond-A+ audit — security, performance, DX, architecture |
 | `src/ports.ts` | Port conflict detector across projects |
-| `src/embeddings.ts` | Xenova transformer embeddings, disk cache |
+| `src/embeddings.ts` | Xenova transformer embeddings; `src/embedding-store.ts` content-addressed vector store; `src/shared-index.ts` one indexer, many readers (`CONTEXTENGINE_SHARED_INDEX=1`) |
 | `src/chunker.ts` | Markdown/code-aware chunking with 4-line overlap |
 | `src/config.ts` | `contextengine.json` loader, project aliases |
 | `src/activation.ts` | License validation, delta decryption, machine fingerprint, heartbeat |
@@ -173,7 +173,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 - 81 vitest tests across 6 files (search 11, activation 8, learnings 6, cli 8, sessions 16, firewall 36)
 - ESLint typescript-eslint flat config (0 errors, 36 warnings)
 - Keyword search: instant (BM25 with IDF)
-- Semantic search: ~200ms from cache, ~15s first run
+- Semantic search: seconds from the shared vector store, about 2 min unloaded the very first time a corpus is embedded on a machine (2.6.0)
 - CI: GitHub Actions — Node 18/20/22, lint + build + test + smoke
 - Score: 95% A+ (30/30 doc, 25/30 infra, 20/20 quality, 20/20 security)
 - VS Code Extension: v0.6.7 published on marketplace (css-llc.contextengine)
@@ -198,7 +198,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 | `src/activation.ts` | 2026-08-14 | License validation, AES-256-CBC delta decryption, machine fingerprint, daily heartbeat, delta version pinning (`[DELTA-VERSION-PIN]`) | E2E verified Feb 23 2026, all 4 Pro tools; 2 pin tests |
 | `src/firewall.ts` | 2026-03-03 | Protocol Firewall: round-based escalation, auto-inject learnings, cross-window state, 10-min session timer | 36 tests (16 unit + 5 round + 7 injection + 3 cross-window + 5 session timer) |
 | `src/search.ts` | 2026-03-03 | BM25 keyword search with IDF, temporal decay, lock marker detection | 11 search tests |
-| `src/embeddings.ts` | 2026-03-03 | Xenova all-MiniLM-L6-v2 local CPU embeddings, disk cache, non-blocking startup | Stable since v1.0 |
+| `src/embeddings.ts` | 2026-03-03, cache replaced 2026-09-05 | Xenova all-MiniLM-L6-v2 local CPU embeddings; vectors content-addressed in `embeddings.bin` (`[EMBEDDINGS-ARE-CONTENT-ADDRESSED]`) | Stable since v1.0; store since 2.6.0 |
 | `src/learnings.ts` | 2026-03-03 | Learning store: quality gates (min 15 chars), auto-categorize, dedup, project-scoped filtering | 6 learnings tests |
 | `src/audit.ts` | 2026-06-10 | Hash-chained JSONL audit log, SHA-256 canonical serialization, genesis hash, tamper detection (`[AUDIT-CHAIN]` LOCK) | 19 audit tests (tamper, splicing, forgery, range, CSV) |
 | `src/policy.ts` | 2026-06-10 | Declarative policy v1 schema + zod validator + disk loader (`[POLICY-CONTRACT]` LOCK) | 18 policy tests (acceptance, defaults, rejection, malformed JSON, disk) |
@@ -241,7 +241,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 | Failure-aware exec | post-2.1.3 (unreleased) | Aug 2026 | `src/agents.ts` | ✅ LOCKED `[EXEC-FAILURE-IS-NOT-EMPTY]` — `execChecked()` returns `{ok, output}`; a failed command is never read as an empty-but-valid answer |
 
 ## Critical Rules
-1. **NEVER commit `.contextengine/`** — user data directory (learnings, embeddings cache, activation state)
+1. **NEVER commit `.contextengine/`** — user data directory (learnings, vector store, shared index, activation state)
 2. **BSL-1.1 license** — non-compete clause: no hosted/SaaS offering using this codebase
 3. **Bundled defaults are immutable** — `defaults/*.json` ship with npm; user learnings go to `~/.contextengine/`
 4. **Search ranking weights are IP** — do NOT expose exact BM25 tuning, decay constants, or boost factors in docs/README
