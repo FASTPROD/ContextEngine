@@ -954,7 +954,7 @@ async function cliSaveLearning(args: string[]): Promise<void> {
   console.log(`   Rule:     ${learning.rule}`);
   if (learning.project) console.log(`   Project:  ${learning.project}`);
   if (learning.context) console.log(`   Context:  ${learning.context}`);
-  console.log(`   Tags:     ${learning.tags.join(", ")}`);
+  console.log(`   Tags:     ${(learning.tags ?? []).join(", ")}`); // [LOCK] [LEARNING-FIELDS-ARE-OPTIONAL-ON-READ]
 }
 
 async function cliDeleteLearning(id: string): Promise<void> {

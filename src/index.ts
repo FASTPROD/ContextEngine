@@ -1312,7 +1312,7 @@ server.tool(
               `- **ID:** \`${learning.id}\``,
               `- **Category:** ${category}`,
               project ? `- **Project:** ${project}` : "",
-              `- **Tags:** ${learning.tags.join(", ")}`,
+              `- **Tags:** ${(learning.tags ?? []).join(", ")}`, // [LOCK] [LEARNING-FIELDS-ARE-OPTIONAL-ON-READ]
               ``,
               `📊 Store: ${stats.total} learnings across ${Object.keys(stats.categories).length} categories`,
               ``,

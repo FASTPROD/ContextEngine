@@ -463,7 +463,16 @@ export function searchLearnings(query: string): Learning[] {
   const scored: Array<{ learning: Learning; score: number }> = [];
 
   for (const learning of store.learnings) {
-    const text = `${learning.category} ${learning.rule} ${learning.context} ${learning.project || ""} ${learning.tags.join(" ")}`.toLowerCase();
+    // [LOCKED] [LEARNING-FIELDS-ARE-OPTIONAL-ON-READ] 2026-09-06
+    // [NEVER] dereference an optional field of a store record (tags, context, project) without a
+    //         fallback on a read path, and [NEVER] "fix" such a record by rewriting the store.
+    // WHY: 20 agent-saved records (s57_*, s78_*, kept on purpose in the SESSION_25 prune) have no
+    //      `tags` array. `learning.tags.join` threw here, inside the firewall's learning injection,
+    //      so every tool that passes a context hint (search_context, score_project, ...) answered
+    //      "Cannot read properties of undefined (reading 'join')" on every server, on 2.5.9 as on
+    //      2.6.0, while save_learning (exempt from the firewall) worked. Another chat noticed.
+    // FIX: read with fallbacks; the records stay as they are (the store is data, not ours to edit).
+    const text = `${learning.category} ${learning.rule} ${learning.context ?? ""} ${learning.project || ""} ${(learning.tags ?? []).join(" ")}`.toLowerCase();
     let score = 0;
 
     for (const token of tokens) {

@@ -213,3 +213,16 @@ describe("[STORE-GROWTH-IS-A-TRIPWIRE-TOO]", () => {
     expect(readStore().learnings.length).toBe(base);
   });
 });
+
+describe("[LEARNING-FIELDS-ARE-OPTIONAL-ON-READ]", () => {
+  it("searches a store holding records without tags or context instead of throwing on every tool with a hint", () => {
+    seed(2);
+    const store = readStore();
+    store.learnings.push({ id: "s78_no_tags", category: "security", rule: "After creating any Firebase project, deploy security rules first", created: "2026-08-01T00:00:00.000Z", updated: "2026-08-01T00:00:00.000Z" });
+    store.count = store.learnings.length;
+    writeFileSync(storePath, JSON.stringify(store));
+    const hits = L.searchLearnings("firebase security rules");
+    expect(hits.map((h) => h.id)).toContain("s78_no_tags");
+    expect(readStore().learnings.find((l: any) => l.id === "s78_no_tags").tags).toBeUndefined(); // the record is not rewritten
+  });
+});
