@@ -4,6 +4,21 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [2.6.1] 2026-09-06: readers never embed; a store record without tags no longer breaks search
+
+### Fixed
+
+- **`search_context` and `score_project` answered "Cannot read properties of undefined (reading
+  'join')"** on every server, 2.5.9 included, while `save_learning` worked. `searchLearnings`
+  dereferenced `tags.join` on 20 agent-saved store records that have no `tags` array, inside the
+  firewall's learning injection, which runs for every tool that passes a context hint. Optional
+  fields are now read with fallbacks (`[LEARNING-FIELDS-ARE-OPTIONAL-ON-READ]`); the records are
+  not rewritten.
+- **A reader that starts before its indexer has published** (every reader when all windows
+  restart at once) used to build locally and embed the whole corpus itself. It now builds
+  keyword-only, embeds nothing, and adopts the shared index the moment it appears. The trial
+  script starts all three servers together and asserts zero embed runs on the readers.
+
 ## [2.6.0] 2026-09-05: One indexer, many readers
 
 Every Claude Code chat spawns its own MCP server, plus launchd, plus VS Code. Measured on
