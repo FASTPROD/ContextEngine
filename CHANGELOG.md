@@ -4,7 +4,7 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
-## [2.7.1] unreleased: the autostart agent is the standing indexer; servers --cost
+## [2.7.1] 2026-09-06: the autostart agent is the standing indexer; servers --cost
 
 ### Changed
 
