@@ -268,8 +268,8 @@ function getInfoHtml(snapshot?: GitSnapshot, stats?: SessionStats, sessionActive
   <div class="card" style="text-align: center;">
     <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
       <div>
-        <div style="font-size: 2em; font-weight: 700; color: var(--vscode-testing-iconPassed, #4caf50);">~${stats.timeSavedMinutes}</div>
-        <div style="color: var(--vscode-descriptionForeground); font-size: 0.8em;">MIN SAVED</div>
+        <div style="font-size: 2em; font-weight: 700; color: var(--vscode-testing-iconPassed, #4caf50);">${stats.uptimeMinutes}</div>
+        <div style="color: var(--vscode-descriptionForeground); font-size: 0.8em;">SESSION MIN</div>
       </div>
       <div>
         <div style="font-size: 2em; font-weight: 700; color: var(--vscode-textLink-foreground);">${stats.searchRecalls + (stats.learningsInjected || 0)}</div>

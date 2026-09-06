@@ -47,6 +47,7 @@ import {
 } from "./sessions.js";
 import { verifyChain, readAuditLog, filterByRange, autoRotateAuditLog, safeAppend } from "./audit.js";
 import { registerServer, listServers, formatServers } from "./server-registry.js";
+import { computeFleetHealth, writeFleetHealth } from "./fleet-health.js";
 import { startEventIngestServer } from "./http-server.js";
 import { detect } from "./detector.js";
 import { buildCostReport } from "./cost-report.js";
@@ -294,7 +295,7 @@ function publishIndex(): void {
       keys: chunks.map(embedKeyOf),
     });
     lastIndexMtime = sharedIndexMtime(corpus);
-    safeAppend("index.write", { corpus, seq: indexSeq, chunks: chunks.length, vectors: embeddedChunks.length, bytes: r.bytes, ms: r.ms });
+    safeAppend("index.write", { pid: process.pid, corpus, seq: indexSeq, chunks: chunks.length, vectors: embeddedChunks.length, bytes: r.bytes, ms: r.ms });
     console.error(`[ContextEngine] 📤 Shared index written: seq ${indexSeq}, ${chunks.length} chunks, ${Math.round(r.bytes / 1024)} KB, ${r.ms} ms`);
   } catch (err) {
     console.error(`[ContextEngine] ⚠ shared index write failed: ${(err as Error).message}`);
@@ -525,10 +526,35 @@ function evaluateRole(reason: string): void {
   }
 }
 
+let healthTick = 0;
+let lastStaleCount = -1;
+
+/**
+ * The indexer writes ~/.contextengine/fleet-health.json once a minute: version drift, reindex
+ * rate, today's blocks and refusals, the last verified release. Every surface reads that file.
+ * [LOCK] [HEALTH-IS-MEASURED-NEVER-ESTIMATED]
+ */
+function publishHealth(): void {
+  try {
+    const h = computeFleetHealth({ version: PKG_VERSION });
+    if (h.servers.stale.length !== lastStaleCount) {
+      lastStaleCount = h.servers.stale.length;
+      if (lastStaleCount > 0) console.error(`[ContextEngine] 🧭 ${lastStaleCount} server(s) on an old build: pid ${h.servers.stale.map((s) => s.pid).join(", ")}`);
+    }
+    if (role === "indexer") writeFleetHealth(h);
+  } catch (err) {
+    console.error(`[ContextEngine] ⚠ fleet health failed: ${(err as Error).message}`);
+  }
+}
+
 function startRolePolling(): void {
-  if (rolePoll || !corpus) return;
-  rolePoll = setInterval(() => evaluateRole("periodic"), ROLE_POLL_MS);
+  if (rolePoll) return;
+  rolePoll = setInterval(() => {
+    if (corpus) evaluateRole("periodic");
+    if (++healthTick % 4 === 0) publishHealth(); // every 60 s
+  }, ROLE_POLL_MS);
   rolePoll.unref();
+  setTimeout(publishHealth, 5_000).unref();
 }
 
 // ---------------------------------------------------------------------------

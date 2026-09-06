@@ -28,6 +28,7 @@
 import * as vscode from "vscode";
 import { GitMonitor } from "./gitMonitor";
 import { StatusBarController } from "./statusBar";
+import { FleetHealthPoller } from "./fleetHealthPoller";
 import { NotificationManager } from "./notifications";
 import { registerChatParticipant } from "./chatParticipant";
 import { InfoStatusBarController, showInfoPanel, updateInfoPanel } from "./infoPanel";
@@ -108,11 +109,21 @@ export function activate(context: vscode.ExtensionContext): void {
   statsPoller = new StatsPoller();
   disposables.push(statsPoller);
 
+  // 2d. Fleet health (written by the indexing server once a minute): the only source of the
+  // status bar's warning colour besides git. Measured, never estimated.
+  const healthPoller = new FleetHealthPoller();
+  disposables.push(healthPoller);
+  disposables.push(healthPoller.onHealth((h) => {
+    outputChannel.appendLine(h ? `Fleet health: ${h.warnings.length} warning(s), ${h.servers.total} servers, ${h.today.blocks} blocks today` : "Fleet health: no fresh file");
+    statusBar.updateHealth(h);
+  }));
+  healthPoller.start(15_000);
+
   // Connect stats poller → status bar + info panel (only fires on change)
   disposables.push(
     statsPoller.onStats((stats) => {
       outputChannel.appendLine(
-        `Stats changed: toolCalls=${stats.toolCalls}, recalls=${stats.searchRecalls}, saved=${stats.learningsSaved}, timeSaved=${stats.timeSavedMinutes}min, active=${statsPoller.isActive}`
+        `Stats changed: toolCalls=${stats.toolCalls}, recalls=${stats.searchRecalls}, saved=${stats.learningsSaved}, active=${statsPoller.isActive}`
       );
       statusBar.updateStats(stats, statsPoller.isActive);
       // Also refresh the info panel if open

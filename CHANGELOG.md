@@ -4,6 +4,32 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [2.8.0] unreleased: health is measured, never estimated
+
+### Added
+
+- **Fleet health** (`[HEALTH-IS-MEASURED-NEVER-ESTIMATED]`, `src/fleet-health.ts`): the indexing
+  server writes `~/.contextengine/fleet-health.json` once a minute: servers on an old build
+  (version drift), shared-index writes in the last hour (reindex rate, ceiling 30), today's
+  pre-commit blocks with file and reason, learnings-store refusals, learnings saved (creates,
+  not a sweep's updates), and the last release for which `verify-release` passed. Every number
+  is counted from the audit log, the server registry or a file on disk. Warnings list measured
+  problems only. Shown by `contextengine servers` (exit 1 on any warning) and by `end-session`
+  § 3b; each server logs "N server(s) on an old build" when that number changes.
+- `index.write` audit events carry the writer's pid.
+
+### VS Code extension 0.12.0
+
+- **Status bar redesign** (Session 25 item 4): warning colour only on a measured problem (a
+  store refusal, servers on an old build, an index-write storm, commits made since the last
+  saved CE session, no MCP session, too many uncommitted files). Never on a timer. Default text
+  `CE` plus blocks prevented and recalls surfaced. Tooltip: measured problems, today's counts,
+  the last blocks with file and reason, servers and roles, version and last verified release,
+  the repo's CE session and commits since it was saved. "Time saved" is gone from the bar and
+  the info panel: it was a multiplier nobody could check.
+- `fleetHealthPoller.ts` reads the health file every 15 s and treats a file older than 5 min as
+  absent.
+
 ## [2.7.1] 2026-09-06: the autostart agent is the standing indexer; servers --cost
 
 ### Changed

@@ -761,6 +761,7 @@ import {
 } from "./hooks.js";
 import { safeAppend } from "./audit.js";
 import { listServers, formatServers } from "./server-registry.js";
+import { computeFleetHealth, formatFleetHealth } from "./fleet-health.js";
 import {
   installSkill,
   locateBundledSkill,
@@ -2391,7 +2392,7 @@ async function cliEndSession(): Promise<void> {
   // --- Check 3b: running servers ([LOCK] [SERVERS-ARE-INVENTORIED]) ---
   checks.push("## 3b. Running servers\n");
   const fleet = listServers();
-  checks.push("```\n" + formatServers(fleet) + "\n```");
+  checks.push("```\n" + formatServers(fleet) + "\n" + formatFleetHealth(computeFleetHealth({ version: readPackageVersion(), report: fleet })) + "\n```");
   if (fleet.warnings.length > 0) failCount += fleet.warnings.length;
   checks.push("");
 
@@ -2880,8 +2881,10 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
   cliAuditRotate(process.argv.slice(3));
 } else if (command === "servers") {
   const fleet = listServers();
+  const health = computeFleetHealth({ version: readPackageVersion(), report: fleet });
   console.log(formatServers(fleet, undefined, { cost: process.argv.includes("--cost") }));
-  process.exit(fleet.warnings.length > 0 ? 1 : 0);
+  console.log(formatFleetHealth(health));
+  process.exit(fleet.warnings.length > 0 || health.warnings.length > 0 ? 1 : 0);
 } else if (command === "audit-verify") {
   cliAuditVerify().catch((err) => {
     console.error("Error:", err);

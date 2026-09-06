@@ -171,6 +171,23 @@ files and re-embedding every chunk on every save, 9.3 CPU-hours in 1.4 h, load a
   `install-claude-hook` against `HOME=$(mktemp -d)` and fire the written script with
   `{"stop_hook_active":false}` on stdin.
 
+### Fleet health (2.8.0, LOCK `[HEALTH-IS-MEASURED-NEVER-ESTIMATED]`, `src/fleet-health.ts`)
+
+- `computeFleetHealth()` reads the last 8 MB of the audit log, the server registry and the
+  `verified-<version>` markers: version drift (servers whose build differs from the file on
+  disk), shared-index writes in the last hour (ceiling `REINDEX_PER_HOUR_WARN` = 30), today's
+  `hook.block` events (last three with file and reason), store refusals (`learning.store_*`),
+  learnings saved (creates only), last verified release. `warnings` holds measured problems only.
+- The indexer writes `~/.contextengine/fleet-health.json` every 60 s (temp + rename) from its
+  role poll; every server logs a change in the stale count. Readers: `contextengine servers`
+  (exit 1 on any warning), `end-session` § 3b, and the VS Code status bar
+  (`vscode-extension/src/fleetHealthPoller.ts`, 15 s, stale after 5 min).
+- The status bar (`vscode-extension/src/statusBar.ts`) shows warning colour only on measured
+  problems: store refusals, old builds, index-write storm, commits since the repo's CE session
+  was saved (same rule as `session-gate`), no MCP session, uncommitted files above the
+  threshold. Default `CE` plus blocks prevented and recalls surfaced. No timers, no estimates.
+- Tests: `src/fleet-health.test.ts` (fake audit log and registry in the throwaway HOME).
+
 ### Build & Test
 - `npx tsc` — TypeScript compilation (strict mode)
 - `npx vitest run` — 76 tests across 6 files (search, learnings, activation, cli, sessions, firewall)
