@@ -127,6 +127,9 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 | `src/audit.ts` | Beyond-A+ audit — security, performance, DX, architecture |
 | `src/ports.ts` | Port conflict detector across projects |
 | `src/embeddings.ts` | Xenova transformer embeddings; `src/embedding-store.ts` content-addressed vector store; `src/shared-index.ts` one indexer, many readers (`CONTEXTENGINE_SHARED_INDEX=1`) |
+| `src/server-registry.ts` | Every server's pid, build, corpus and role; `contextengine servers [--cost]` |
+| `src/fleet-health.ts` | Measured fleet health (version drift, reindex rate, blocks, refusals, last verified release) written by the indexer to `~/.contextengine/fleet-health.json`; read by `servers`, `end-session` and the VS Code status bar |
+| `src/session-gate.ts` | `contextengine session-gate`, the Claude Code Stop hook installed by `install-claude-hook`: a turn cannot end while the repo's CE session is older than HEAD |
 | `src/chunker.ts` | Markdown/code-aware chunking with 4-line overlap |
 | `src/config.ts` | `contextengine.json` loader, project aliases |
 | `src/activation.ts` | License validation, delta decryption, machine fingerprint, heartbeat |
