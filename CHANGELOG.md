@@ -4,6 +4,22 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [2.7.1] unreleased: the autostart agent is the standing indexer; servers --cost
+
+### Changed
+
+- **`install-autostart` writes a plist that makes the agent the standing indexer**
+  (`[AUTOSTART-IS-THE-STANDING-INDEXER]`): `ProcessType Standard` instead of `Background` (as
+  Background it got 2.5 s of CPU in 15 minutes under load and served nobody),
+  `CONTEXTENGINE_SHARED_INDEX=1`, and `CONTEXTENGINE_CONFIG` / `CONTEXTENGINE_WORKSPACES` passed
+  through from the installing shell so its corpus id equals the chats'. The Claude-memory skip is
+  no longer a default; it is passed through only when the installer itself ran with it. Re-run
+  `install-autostart --force` to pick this up.
+- **`contextengine servers --cost`**: CPU time and resident memory per server and in total, the
+  number that was invisible on 2026-09-05 until someone ran `ps` by hand.
+- **The session-gate wrapper prefers a global install** of the CLI (`npm root -g`) over the
+  directory the installer ran from, so an npx cache prune cannot break the Stop hook.
+
 ## [2.7.0] 2026-09-06: the session gate ships in the package
 
 ### Added

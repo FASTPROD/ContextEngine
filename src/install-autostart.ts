@@ -87,7 +87,24 @@ function detectOpscontextEntry(): { kind: "global" | "devtree" | "npx"; path: st
   return null;
 }
 
-function buildPlist(nodePath: string, entryPath: string, nodeBinDir: string): string {
+// [LOCKED] [AUTOSTART-IS-THE-STANDING-INDEXER] 2026-09-06
+// [NEVER] run the agent as ProcessType Background, drop CONTEXTENGINE_SHARED_INDEX from its
+//         environment, or give it a corpus the chats do not have.
+// WHY: measured 2026-09-05 (SESSION_26): as Background the agent got 2.5 s of CPU in 15 minutes
+//      under load, took 4.5 min from exec to main(), served no MCP client (stdin is /dev/null),
+//      lost the browser-event port to whichever chat started first, and, with the memory skip and
+//      no config, indexed a corpus no chat used. It burned CPU keeping a cache warm that never
+//      hit. As the standing indexer it is the oldest server at every login, so it wins the
+//      election, every chat opens onto a ready index, and it owns the port from boot.
+// FIX: Standard priority; the shared-index flag; CONTEXTENGINE_CONFIG passed through from the
+//      installing shell so its corpus id equals the chats'; the memory skip only if the installer
+//      was itself run with it (an explicit choice, not a default).
+export function buildPlist(nodePath: string, entryPath: string, nodeBinDir: string, env: NodeJS.ProcessEnv = process.env): string {
+  const passthrough: Array<[string, string]> = [["CONTEXTENGINE_SHARED_INDEX", "1"]];
+  if (env.CONTEXTENGINE_CONFIG) passthrough.push(["CONTEXTENGINE_CONFIG", env.CONTEXTENGINE_CONFIG]);
+  if (env.CONTEXTENGINE_WORKSPACES) passthrough.push(["CONTEXTENGINE_WORKSPACES", env.CONTEXTENGINE_WORKSPACES]);
+  if (env.OPSCONTEXT_SKIP_CLAUDE_MEMORY === "1") passthrough.push(["OPSCONTEXT_SKIP_CLAUDE_MEMORY", "1"]);
+  const extraEnv = passthrough.map(([k, v]) => `        <key>${k}</key>\n        <string>${v.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</string>`).join("\n");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -107,8 +124,7 @@ function buildPlist(nodePath: string, entryPath: string, nodeBinDir: string): st
         <string>${nodeBinDir}:/usr/local/bin:/usr/bin:/bin</string>
         <key>HOME</key>
         <string>${homedir()}</string>
-        <key>OPSCONTEXT_SKIP_CLAUDE_MEMORY</key>
-        <string>1</string>
+${extraEnv}
     </dict>
 
     <key>WorkingDirectory</key>
@@ -130,7 +146,7 @@ function buildPlist(nodePath: string, entryPath: string, nodeBinDir: string): st
     <string>${join(LOG_DIR, "mcp-stderr.log")}</string>
 
     <key>ProcessType</key>
-    <string>Background</string>
+    <string>Standard</string>
 </dict>
 </plist>
 `;

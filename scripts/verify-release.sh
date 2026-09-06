@@ -35,3 +35,5 @@ TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 EXPECT_VERSION="$VERSION" node "$PROBE" "$TMP" npx -y "$PKG@$VERSION" | sed 's/^/  /' || { echo "  PUBLISHED PACKAGE FAILED THE HANDSHAKE"; exit 1; }
 
 echo "[verify-release] OK: $VERSION answers initialize + tools/list from the repo build and from the registry"
+# The proof leaves a marker for scripts/release-gate.sh ([PUBLISHED-MEANS-VERIFIED]).
+mkdir -p "${CONTEXTENGINE_HOME:-$HOME/.contextengine}" && date -u +%Y-%m-%dT%H:%M:%SZ > "${CONTEXTENGINE_HOME:-$HOME/.contextengine}/verified-$VERSION"

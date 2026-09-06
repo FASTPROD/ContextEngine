@@ -147,16 +147,49 @@ export function listServers(): ServerReport {
   return report;
 }
 
-export function formatServers(report: ServerReport, home: string = homedir()): string {
+/** CPU seconds consumed and resident memory of a live pid, from ps (hardcoded argv, no shell). */
+export function processCost(pid: number): { cpuSeconds: number; rssMb: number } | null {
+  try {
+    const out = execFileSync("ps", ["-o", "time=,rss=", "-p", String(pid)], { encoding: "utf8", timeout: 2000 }).trim();
+    const [time, rss] = out.split(/\s+/);
+    if (!time) return null;
+    const parts = time.split(":").map(Number);
+    const cpuSeconds = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + (parts[1] || 0);
+    return { cpuSeconds, rssMb: Math.round(Number(rss || 0) / 1024) };
+  } catch {
+    return null;
+  }
+}
+
+function fmtCpu(s: number): string {
+  if (s >= 3600) return `${(s / 3600).toFixed(1)} CPU-h`;
+  if (s >= 60) return `${Math.round(s / 60)} CPU-min`;
+  return `${Math.round(s)} CPU-s`;
+}
+
+/**
+ * The listing. With `cost`, each line also carries CPU time and memory, and the total: this is
+ * the number that was invisible on 2026-09-05 (9.3 CPU-hours across eleven servers) until
+ * someone ran ps by hand. [LOCK] [ONE-INDEXER-MANY-READERS]
+ */
+export function formatServers(report: ServerReport, home: string = homedir(), opts: { cost?: boolean } = {}): string {
   const short = (p: string) => p.startsWith(home) ? "~" + p.slice(home.length) : p;
   const lines: string[] = [];
   lines.push(`${report.servers.length} server(s) running${report.removed ? `, ${report.removed} dead record(s) removed` : ""}`);
+  let cpuTotal = 0, rssTotal = 0;
   for (const s of report.servers) {
     const t = s.started.slice(11, 19) + "Z";
     const flag = s.staleBuild ? `STALE BUILD (disk ${s.currentBuild})` : s.currentBuild === null ? "script missing on disk" : "current";
     const role = s.role ? `  ${s.role.padEnd(7)} corpus ${s.corpus ?? "?"}` : "";
-    lines.push(`  pid ${String(s.pid).padEnd(6)} ${t}  v${s.version}  build ${s.build}  ${flag}${role}  parent ${s.parent}  cwd ${short(s.cwd)}`);
+    let cost = "";
+    if (opts.cost) {
+      const c = processCost(s.pid);
+      if (c) { cpuTotal += c.cpuSeconds; rssTotal += c.rssMb; cost = `  ${fmtCpu(c.cpuSeconds).padStart(11)} ${String(c.rssMb).padStart(5)} MB`; }
+      else cost = "  (cost unknown)";
+    }
+    lines.push(`  pid ${String(s.pid).padEnd(6)} ${t}  v${s.version}  build ${s.build}  ${flag}${role}${cost}  parent ${s.parent}  cwd ${short(s.cwd)}`);
   }
+  if (opts.cost && report.servers.length > 0) lines.push(`  total: ${fmtCpu(cpuTotal)}, ${rssTotal} MB resident, across ${report.servers.length} server(s)`);
   for (const w of report.warnings) lines.push(`  ⚠ ${w}`);
   return lines.join("\n");
 }

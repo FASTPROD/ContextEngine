@@ -2688,7 +2688,7 @@ Usage:
                                        Export hash-chained audit log (evidence aligned with
                                        SOC 2 CC7.2 + ISO 27001 A.12.4.1 — not a certification)
   contextengine audit-verify           Verify audit log chain integrity (tamper detection)
-  contextengine servers                List running MCP servers, their build vs the file on disk
+  contextengine servers [--cost]       List running MCP servers, their build vs the file on disk, role; --cost adds CPU time and memory
   contextengine audit-redact-ack       Acknowledge deliberately redacted records on the chain (--index i,j --reason "...")
   contextengine audit-rotate [--keep-days N] [--max-records N] [--dry-run]
                                        Move old history into an archive segment. Archives
@@ -2880,7 +2880,7 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
   cliAuditRotate(process.argv.slice(3));
 } else if (command === "servers") {
   const fleet = listServers();
-  console.log(formatServers(fleet));
+  console.log(formatServers(fleet, undefined, { cost: process.argv.includes("--cost") }));
   process.exit(fleet.warnings.length > 0 ? 1 : 0);
 } else if (command === "audit-verify") {
   cliAuditVerify().catch((err) => {

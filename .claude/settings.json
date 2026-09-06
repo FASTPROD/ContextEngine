@@ -3,7 +3,7 @@
     "allow": [
       "Bash(node -e ' *)",
       "Bash(git --git-dir=\"/Users/yan/Library/CloudStorage/GoogleDrive-yannick@compr.ch/My Drive/CTRL/ContextEngine.git\" log --oneline -1)",
-      "Bash(perl -0pi -e 's/const icon = c\\\\.status === \"pass\" \\\\? \"✅\" : c\\\\.status === \"partial\" \\\\? \"🟡\" : \"❌\";/const icon = statusIcon\\(c.status\\);/g' src/agents.ts)",
+      "Bash(perl -0pi -e 's/const icon = c\\\\.status === \"pass\" \\\\? \"\u2705\" : c\\\\.status === \"partial\" \\\\? \"\ud83d\udfe1\" : \"\u274c\";/const icon = statusIcon\\(c.status\\);/g' src/agents.ts)",
       "Bash(npx . score ContextEngine)",
       "mcp__contextengine__save_learning",
       "Bash(git rev-list *)",
@@ -33,7 +33,7 @@
       "Bash(contextengine)",
       "Bash(echo \"=== what does the `contextengine` binary on PATH point to? ===\")",
       "Bash(node -p \"require\\('./package.json'\\).version\")",
-      "Bash(echo \"MCP server \\(VS Code\\): /Users/yan/Projects/ContextEngine/dist/index.js → build $\\(node -p \"require\\('./package.json'\\).version\"\\) \\(this repo\\)\")",
+      "Bash(echo \"MCP server \\(VS Code\\): /Users/yan/Projects/ContextEngine/dist/index.js \u2192 build $\\(node -p \"require\\('./package.json'\\).version\"\\) \\(this repo\\)\")",
       "Bash(code --list-extensions --show-versions)",
       "Bash(node -p \"'repo version: '+require\\('./package.json'\\).version\")",
       "Bash(node -p \"require\\('/Users/yan/.nvm/versions/node/v20.19.4/lib/node_modules/@compr/opscontext-mcp/package.json'\\).version\")",
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r 'if (.tool_input.command // \"\") | test(\"\\\\bgit\\\\s+push\\\\b\") then \"<system-reminder>CE Rule 10 — post-push checkpoint: call end_session (MCP tool) before ending your turn. If MCP is not connected, run `npx @compr/opscontext-mcp end-session` in terminal instead. Resolve any FAIL items it reports before finishing.</system-reminder>\" else empty end'"
+            "command": "jq -r 'if (.tool_input.command // \"\") | test(\"\\\\bgit\\\\s+push\\\\b\") then \"<system-reminder>CE Rule 10 \u2014 post-push checkpoint: call end_session (MCP tool) before ending your turn. If MCP is not connected, run `npx @compr/opscontext-mcp end-session` in terminal instead. Resolve any FAIL items it reports before finishing.</system-reminder>\" else empty end'"
           }
         ]
       },
@@ -59,7 +59,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "jq -r 'if (.tool_input.file_path // \"\") | test(\"ContextEngine/package\\\\.json$\") then \"<system-reminder>CE Rule 3 — IP PROTECTION: You just edited package.json. Verify the files array does NOT include server/, server/**, or any glob that would sweep in server/. server/ contains delta modules (agents.ts, collectors.ts, search.ts, activation server) and MUST NEVER ship to npm. If you added server/ intentionally, STOP and confirm with the user before commit.</system-reminder>\" else empty end'"
+            "command": "jq -r 'if (.tool_input.file_path // \"\") | test(\"ContextEngine/package\\\\.json$\") then \"<system-reminder>CE Rule 3 \u2014 IP PROTECTION: You just edited package.json. Verify the files array does NOT include server/, server/**, or any glob that would sweep in server/. server/ contains delta modules (agents.ts, collectors.ts, search.ts, activation server) and MUST NEVER ship to npm. If you added server/ intentionally, STOP and confirm with the user before commit.</system-reminder>\" else empty end'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/yan/Projects/ContextEngine/scripts/release-gate.sh",
+            "timeout": 20
           }
         ]
       }

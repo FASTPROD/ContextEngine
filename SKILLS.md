@@ -143,8 +143,14 @@ files and re-embedding every chunk on every save, 9.3 CPU-hours in 1.4 h, load a
   HOME, one doc change; exit 0 only if one server re-indexed, both readers answered with the
   new content, reader CPU flat, readers never embedded even when started before the index
   existed). 2026-09-05 runs: readers reloaded 4.5 s, then 2.0 s, after the write.
-- Not shared: the launchd server keeps its own corpus (`WorkingDirectory ~`, memory skipped)
-  until its plist changes, so it is its own indexer either way.
+- The launchd agent is the standing indexer since 2.7.1 (`[AUTOSTART-IS-THE-STANDING-INDEXER]`,
+  `src/install-autostart.ts`): Standard priority, the flag, `CONTEXTENGINE_CONFIG` passed through,
+  so it shares the chats' corpus and, being the oldest server at every login, wins the election.
+  `contextengine servers --cost` shows CPU time and memory per server and in total.
+- Release gate, this repo only (`scripts/release-gate.sh`, LOCK `[PUBLISHED-MEANS-VERIFIED]`, Stop
+  hook in `.claude/settings.json`): a turn cannot end while the version in package.json is on npm
+  and `npm run verify-release` has not passed for it (the script writes
+  `~/.contextengine/verified-<version>` when green).
 
 ### Session gate (2.7.0, LOCK `[SESSION-SAVE-IS-A-GATE]`, `src/session-gate.ts`)
 
