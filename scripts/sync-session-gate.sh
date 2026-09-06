@@ -12,13 +12,20 @@
 #      into .claude/settings.json (created if missing, other hooks kept), then PROVES the copy: an
 #      old session must block (exit 2) and stop_hook_active must pass (exit 0).
 #
-# Usage: scripts/sync-session-gate.sh            # report, write nothing
-#        scripts/sync-session-gate.sh --apply    # copy, wire, prove; then commit each repo yourself
+# RETIRED 2026-09-06, same day, by 2.7.0: the gate now ships in the package (`contextengine
+# session-gate`, src/session-gate.ts) and `contextengine install-claude-hook` wires one Stop entry
+# at user scope, which covers every repo without a copy. The LOCK above keeps its WHY; the only
+# live mode left is --remove, which takes the 33 copies and their Stop entries back out.
+#
+# Usage: scripts/sync-session-gate.sh            # report copies still present
+#        scripts/sync-session-gate.sh --remove   # delete each repo's copy and its Stop entry (ours only)
+#        scripts/sync-session-gate.sh --apply    # retired: refuses
 set -u
+if [ "${1:-}" = "--apply" ]; then echo "retired: the gate ships in the package since 2.7.0; run: contextengine install-claude-hook"; exit 1; fi
 cd "$(dirname "$0")/.."
 SRC="$PWD/scripts/session-gate.sh"
 MODE="${1:---check}"
-SRC_HASH=$(md5 -q "$SRC" 2>/dev/null || md5sum "$SRC" | cut -d' ' -f1)
+SRC_HASH=$( [ -f "$SRC" ] && (md5 -q "$SRC" 2>/dev/null || md5sum "$SRC" | cut -d' ' -f1) || echo retired )
 SELF="$PWD"
 
 merge_settings() { # $1 = repo dir; prints "added" | "present"
@@ -40,7 +47,23 @@ merge_settings() { # $1 = repo dir; prints "added" | "present"
   ' "$1"
 }
 
-current=0; todo=0; failed=0; applied=0
+remove_entry() { # $1 = repo dir; prints removed | absent
+  node -e '
+    const fs = require("fs"), path = require("path");
+    const file = path.join(process.argv[1], ".claude", "settings.json");
+    if (!fs.existsSync(file)) { console.log("absent"); process.exit(0); }
+    let c; try { c = JSON.parse(fs.readFileSync(file, "utf8")); } catch { console.log("absent"); process.exit(0); }
+    const stop = (c.hooks && c.hooks.Stop) || [];
+    const kept = stop.filter((e) => !(e.hooks || []).some((h) => String(h.command || "").includes("scripts/session-gate.sh")));
+    if (kept.length === stop.length) { console.log("absent"); process.exit(0); }
+    if (kept.length) c.hooks.Stop = kept; else delete c.hooks.Stop;
+    if (c.hooks && Object.keys(c.hooks).length === 0) delete c.hooks;
+    if (Object.keys(c).length === 0) fs.unlinkSync(file); else fs.writeFileSync(file, JSON.stringify(c, null, 2) + "\n");
+    console.log("removed");
+  ' "$1"
+}
+
+current=0; todo=0; failed=0; applied=0; removed=0
 for d in "$HOME"/Projects/*/ "$HOME/COMPR" "$HOME/FASTPROD"; do
   d="${d%/}"; name="$(basename "$d")"
   [ "$d" = "$SELF" ] && continue
@@ -49,6 +72,12 @@ for d in "$HOME"/Projects/*/ "$HOME/COMPR" "$HOME/FASTPROD"; do
   if [ -f "$copy" ]; then h=$(md5 -q "$copy" 2>/dev/null || md5sum "$copy" | cut -d' ' -f1); [ "$h" = "$SRC_HASH" ] && cstate="current" || cstate="drifted"; else cstate="missing"; fi
   grep -q "session-gate.sh" "$settings" 2>/dev/null && wstate="wired" || wstate="unwired"
   ign=""; git -C "$d" check-ignore -q .claude/settings.json 2>/dev/null && ign=" (settings gitignored: local only)"
+  if [ "$MODE" = "--remove" ]; then
+    r="nothing"; [ -f "$copy" ] && { rm -f "$copy"; r="copy"; }
+    e=$(remove_entry "$d"); [ "$e" = "removed" ] && r="$r+entry"
+    rmdir "$d/scripts" 2>/dev/null; rmdir "$d/.claude" 2>/dev/null
+    printf "  🧹 %-26s %s\n" "$name" "$r"; [ "$r" != "nothing" ] && ((removed++)); continue
+  fi
   if [ "$cstate" = "current" ] && [ "$wstate" = "wired" ]; then printf "  ✅ %-26s current, wired%s\n" "$name" "$ign"; ((current++)); continue; fi
   if [ "$MODE" != "--apply" ]; then printf "  ⚠  %-26s copy %s, %s%s\n" "$name" "$cstate" "$wstate" "$ign"; ((todo++)); continue; fi
   mkdir -p "$d/scripts" && cp "$SRC" "$copy" && chmod +x "$copy" || { printf "  ❌ %-26s copy failed\n" "$name"; ((failed++)); continue; }
@@ -61,6 +90,7 @@ for d in "$HOME"/Projects/*/ "$HOME/COMPR" "$HOME/FASTPROD"; do
   rm -f "$old"
   if [ $r1 -eq 2 ] && [ $r2 -eq 0 ]; then printf "  ✅ %-26s copied, settings %s, proved (block=2, guard=0)%s\n" "$name" "$m" "$ign"; ((applied++)); else printf "  ❌ %-26s copied but the proof failed (block=%s, guard=%s)\n" "$name" "$r1" "$r2"; ((failed++)); fi
 done
+[ "$MODE" = "--remove" ] && { echo "removed from $removed repo(s)"; exit 0; }
 echo "current=$current  $( [ "$MODE" = "--apply" ] && echo applied=$applied || echo todo=$todo )  failed=$failed"
-[ "$MODE" != "--apply" ] && [ $todo -gt 0 ] && echo "Run with --apply to copy and wire them, then commit scripts/session-gate.sh and .claude/settings.json in each repo (never from here)."
+[ "$MODE" != "--apply" ] && [ $todo -gt 0 ] && echo "Copies are retired: the gate comes from 'contextengine install-claude-hook' (user scope). Run --remove to clean any copy left."
 [ $failed -eq 0 ]

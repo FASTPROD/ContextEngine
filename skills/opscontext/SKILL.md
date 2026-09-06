@@ -120,6 +120,7 @@ Add to your OpenClaw `openclaw.json` MCP servers section:
 | `list_projects` | Discover and analyze all projects (tech stack, git, docker, pm2) |
 | `check_ports` | Scan all projects for port conflicts |
 | `run_audit` | Compliance agent — git remotes, hooks, .env, Docker, PM2, versions |
+| CLI `session-gate` | Claude Code Stop hook (installed by `install-claude-hook`): a turn cannot end while the repo's CE session is older than the last commit |
 | `score_project` | AI-readiness scoring 0-100% with anti-gaming v2 (symlink/ghost config detection) |
 | `save_session` | Save key-value entry to a named session for cross-session persistence |
 | `load_session` | Load all entries from a named session |

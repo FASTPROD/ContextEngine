@@ -4,6 +4,27 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [2.7.0] 2026-09-06: the session gate ships in the package
+
+### Added
+
+- **`contextengine session-gate`** (`[SESSION-SAVE-IS-A-GATE]`, `src/session-gate.ts`): the body of
+  a Claude Code Stop hook. A turn cannot end (exit 2, reason on stderr) while the repo's CE session
+  (newest `~/.contextengine/sessions/*.json` whose name starts with the repo's name) is older than
+  the last commit. The message names the session to save, the newest `docs/sessions/SESSION_*.md`,
+  and how many `src/` commits `.github/copilot-instructions.md` is behind. Passes outside git,
+  before the first commit, and when Claude Code reports `stop_hook_active`. Why: the owner had to
+  type "check and update session and ce docs" at the end of every session; a reminder is not a rule.
+- **`install-claude-hook` wires the gate** as a fourth entry (`Stop`) at user scope, through
+  `~/.claude/hooks/opscontext-session-gate.sh` with absolute node and CLI paths. Idempotent;
+  `uninstall-claude-hook` removes it with the others.
+
+### Fixed
+
+- **`install-claude-hook` crashed with "__dirname is not defined"** from the published package:
+  the module is ESM and looked up `defaults/` through a CommonJS global. It had never worked
+  outside the dev tree. Resolved through `import.meta.url` (`[M2-ESM-FILENAME-FIX]`).
+
 ## [2.6.1] 2026-09-06: readers never embed; a store record without tags no longer breaks search
 
 ### Fixed

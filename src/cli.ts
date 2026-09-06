@@ -2709,7 +2709,8 @@ Usage:
   contextengine install-autostart [--force]
                                        Install macOS LaunchAgent so MCP server auto-starts at login
                                        (uninstall-autostart / autostart-status — companion commands)
-  contextengine install-claude-hook    Wire Claude Code terminal sessions into the OpsContext audit log
+  contextengine install-claude-hook    Wire Claude Code terminal sessions into the OpsContext audit log, plus the Stop session gate
+  contextengine session-gate           Claude Code Stop hook body: exit 2 while the repo's CE session is older than HEAD
                                        (UserPromptSubmit + PostToolUse + SessionStart hook entries)
   contextengine watch [--json] [--severity info|warn|critical] [--once] [--window SECONDS]
                                        Stream drift / loop / stuck-tool / fabrication alerts from the audit log
@@ -2946,6 +2947,11 @@ npm:  https://www.npmjs.com/package/@compr/opscontext-mcp
   ).catch((err) => {
     console.error("Error:", err instanceof Error ? err.message : err);
     process.exit(1);
+  });
+} else if (command === "session-gate") {
+  import("./session-gate.js").then((m) => m.cliSessionGate(process.argv.slice(3))).catch((err) => {
+    console.error("Error:", err);
+    process.exit(0); // a broken gate must never trap the user in a turn
   });
 } else if (command === "install-claude-hook") {
   import("./install-claude-hook.js").then((m) =>

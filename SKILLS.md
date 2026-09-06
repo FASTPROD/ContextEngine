@@ -146,6 +146,25 @@ files and re-embedding every chunk on every save, 9.3 CPU-hours in 1.4 h, load a
 - Not shared: the launchd server keeps its own corpus (`WorkingDirectory ~`, memory skipped)
   until its plist changes, so it is its own indexer either way.
 
+### Session gate (2.7.0, LOCK `[SESSION-SAVE-IS-A-GATE]`, `src/session-gate.ts`)
+
+- `contextengine session-gate` is the body of a Claude Code **Stop** hook: exit 2 while the
+  repo's CE session (newest `~/.contextengine/sessions/*.json` whose normalized name starts with
+  the repo's normalized basename, so `admin-CROWLR` counts for `admin.CROWLR`) is older than the
+  last commit; the message names the session, the newest session doc, and how far
+  `copilot-instructions.md` is behind `src/`. Exit 0 outside git, before the first commit, and on
+  `stop_hook_active` (never block twice).
+- `contextengine install-claude-hook` writes `~/.claude/hooks/opscontext-session-gate.sh`
+  (absolute node + CLI paths, hooks run without the shell PATH) and one `Stop` entry in
+  `~/.claude/settings.json`, user scope, so it covers every repo the user opens. Idempotent;
+  `uninstall-claude-hook` removes it. A failing gate exits 0 on purpose: never trap the user.
+- History: born 2026-09-06 as `scripts/session-gate.sh` copied into 33 repos by
+  `scripts/sync-session-gate.sh` (retired the same day; `--remove` took the copies back). Any
+  fleet tooling a customer would also want goes into the package, not into repo files.
+- Tests: `src/session-gate.test.ts` (real git repos in a temp dir). Real trigger: run
+  `install-claude-hook` against `HOME=$(mktemp -d)` and fire the written script with
+  `{"stop_hook_active":false}` on stdin.
+
 ### Build & Test
 - `npx tsc` — TypeScript compilation (strict mode)
 - `npx vitest run` — 76 tests across 6 files (search, learnings, activation, cli, sessions, firewall)
