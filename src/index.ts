@@ -1686,6 +1686,15 @@ async function main() {
   else startIndexPolling();
   startRolePolling();
 
+  // 5b. A daemon (launchd, OPSCONTEXT_DAEMON=1) has stdin on /dev/null, so the stdio transport
+  // closes at once; as a reader it holds no watchers and every poller is unref'd, and the loop
+  // would drain and exit 0, which KeepAlive turns into a restart every 10 s. Hold the loop open.
+  // [LOCK] [AUTOSTART-IS-THE-STANDING-INDEXER]
+  if (process.env.OPSCONTEXT_DAEMON === "1") {
+    setInterval(() => { /* keep the event loop alive: this process serves the index, not a client */ }, 60_000);
+    console.error("[ContextEngine] 🛡 Daemon mode: staying alive without an MCP client");
+  }
+
   // 6. Boot the local HTTP event-ingest endpoint for the browser extension.
   // Local 127.0.0.1:7842 only; auth via shared secret at
   // ~/.contextengine/extension-secret (see init-extension-secret CLI).

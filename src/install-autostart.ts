@@ -100,7 +100,10 @@ function detectOpscontextEntry(): { kind: "global" | "devtree" | "npx"; path: st
 //      installing shell so its corpus id equals the chats'; the memory skip only if the installer
 //      was itself run with it (an explicit choice, not a default).
 export function buildPlist(nodePath: string, entryPath: string, nodeBinDir: string, env: NodeJS.ProcessEnv = process.env): string {
-  const passthrough: Array<[string, string]> = [["CONTEXTENGINE_SHARED_INDEX", "1"]];
+  // OPSCONTEXT_DAEMON tells the server it has no MCP client on stdin and must stay alive on its
+  // own: as a reader it holds no file watchers, and every poller is unref'd, so without this the
+  // event loop drained and launchd restarted it every 10 s (found 2026-09-06, first real run).
+  const passthrough: Array<[string, string]> = [["CONTEXTENGINE_SHARED_INDEX", "1"], ["OPSCONTEXT_DAEMON", "1"]];
   if (env.CONTEXTENGINE_CONFIG) passthrough.push(["CONTEXTENGINE_CONFIG", env.CONTEXTENGINE_CONFIG]);
   if (env.CONTEXTENGINE_WORKSPACES) passthrough.push(["CONTEXTENGINE_WORKSPACES", env.CONTEXTENGINE_WORKSPACES]);
   if (env.OPSCONTEXT_SKIP_CLAUDE_MEMORY === "1") passthrough.push(["OPSCONTEXT_SKIP_CLAUDE_MEMORY", "1"]);

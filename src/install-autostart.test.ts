@@ -11,6 +11,7 @@ describe("buildPlist", () => {
     expect(p).toMatch(/<key>ProcessType<\/key>\s*<string>Standard<\/string>/);
     expect(p).not.toMatch(/Background/);
     expect(p).toMatch(/<key>CONTEXTENGINE_SHARED_INDEX<\/key>\s*<string>1<\/string>/);
+    expect(p).toMatch(/<key>OPSCONTEXT_DAEMON<\/key>\s*<string>1<\/string>/);
     expect(p).not.toMatch(/OPSCONTEXT_SKIP_CLAUDE_MEMORY/);
   });
   it("passes the installing shell's corpus inputs through, so its corpus id equals the chats'", () => {
