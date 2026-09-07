@@ -2401,7 +2401,7 @@ async function cliEndSession(): Promise<void> {
   checks.push("## 3c. CI on HEAD\n");
   const ci = ciStatusForHead(process.cwd());
   checks.push(...formatCiStatus(ci));
-  if (ci.state === "failed") { failCount++; checks.push("- ❌ FAIL — a workflow run for HEAD failed; a push is not done until its CI is"); }
+  if (ci.state === "failed") { failCount++; checks.push("- ❌ FAIL: a workflow run for HEAD failed; a push is not done until its CI is"); }
   else if (ci.state === "ok") passCount++;
   checks.push("");
 
