@@ -762,6 +762,7 @@ import {
 import { safeAppend } from "./audit.js";
 import { listServers, formatServers } from "./server-registry.js";
 import { computeFleetHealth, formatFleetHealth } from "./fleet-health.js";
+import { ciStatusForHead, formatCiStatus } from "./ci-status.js";
 import {
   installSkill,
   locateBundledSkill,
@@ -2394,6 +2395,14 @@ async function cliEndSession(): Promise<void> {
   const fleet = listServers();
   checks.push("```\n" + formatServers(fleet) + "\n" + formatFleetHealth(computeFleetHealth({ version: readPackageVersion(), report: fleet })) + "\n```");
   if (fleet.warnings.length > 0) failCount += fleet.warnings.length;
+  checks.push("");
+
+  // --- Check 3c: CI on HEAD ([LOCK] [PUSHED-MEANS-CI-READ]) ---
+  checks.push("## 3c. CI on HEAD\n");
+  const ci = ciStatusForHead(process.cwd());
+  checks.push(...formatCiStatus(ci));
+  if (ci.state === "failed") { failCount++; checks.push("- ❌ FAIL — a workflow run for HEAD failed; a push is not done until its CI is"); }
+  else if (ci.state === "ok") passCount++;
   checks.push("");
 
   checks.push("## 4. Sessions\n");

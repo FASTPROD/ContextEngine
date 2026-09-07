@@ -619,3 +619,16 @@ as a floor.
    (`sh: opscontext: command not found`: the local package shadows the
    published bin and its bin is not linked). Use the repo's own build:
    `node dist/cli.js score`, which writes SCORE.md in place.
+
+## 2026-09-07: main was red for thirty commits and the alert fired every time
+
+Found by reading Yan's notification feed, then `gh run list`, not from memory. Two causes:
+one `prefer-const` in `src/firewall.ts` (since 2026-09-04) and, once that was fixed, the Node 18
+matrix job failing at lint (`util.styleText is not a function`: eslint 10 needs Node 20.19+),
+with `fail-fast` cancelling the 20 and 22 jobs before tests ran. The Telegram alert workflow did
+its job each time; the loop that pushes (post-commit hook) and checkpoints (`end-session`) never
+read the result. Mechanisms, not reminders: `end-session` § 3c reads every run for HEAD via `gh`
+and fails on a red one (`[PUSHED-MEANS-CI-READ]`, `src/ci-status.ts`); the matrix is 20 and 22
+with `fail-fast: false`; Doc Freshness diffs the change instead of timing the docs
+(`[DOC-GATE-MEASURES-THE-DIFF]`). After a push: `gh run watch` or wait for `end-session` § 3c.
+

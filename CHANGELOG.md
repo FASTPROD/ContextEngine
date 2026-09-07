@@ -6,6 +6,20 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 ## Unreleased
 
+### Added
+
+- **`end-session` check 3c, CI on HEAD** (`[PUSHED-MEANS-CI-READ]`, `src/ci-status.ts`): every
+  workflow run for the exact HEAD sha through `gh run list`; a failed run is a FAIL item (exit 1).
+  No gh, no remote, or no runs yet is "not checked", never a pass. Why: main's CI had been red
+  on every commit since 2026-09-04 and the Telegram alert fired each time; thirty commits and
+  five releases went by with nobody reading it.
+
+### Changed
+
+- CI runs on Node 20 and 22 with `fail-fast: false`; Node 18 is EOL and eslint 10 needs 20.19+,
+  and the 18 job's failure was cancelling the others before tests ran. `engines.node` is now
+  `>=20.19.0`, which is what is tested.
+
 ### Fixed
 
 - CI was red on every pull request for one `prefer-const` lint error in `src/firewall.ts`.

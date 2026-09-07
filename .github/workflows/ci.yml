@@ -16,8 +16,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      # Node 18 is EOL and eslint 10 needs 20.19+; fail-fast off so one job's failure never
+      # cancels the others and hides whether the tests even ran. [DOC-GATE-MEASURES-THE-DIFF]
+      # came from the same morning: a matrix that lies is a matrix nobody reads.
+      fail-fast: false
       matrix:
-        node-version: [18, 20, 22]
+        node-version: [20, 22]
 
     steps:
       - uses: actions/checkout@v4
