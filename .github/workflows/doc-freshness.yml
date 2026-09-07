@@ -1,5 +1,18 @@
-# Doc-freshness gate — server-side enforcement that agents cannot bypass.
-# Even if an agent uses --no-verify locally, this CI check will fail the PR/push.
+# Doc-coverage gate, server side: a change to src/ must come with a doc change in the same
+# push or pull request. Agents cannot --no-verify their way past CI.
+#
+# [LOCKED] [DOC-GATE-MEASURES-THE-DIFF] 2026-09-07
+# [NEVER] gate on the wall-clock age of a doc again.
+# WHY: the previous version failed any push or PR made more than 8 hours after the last
+#      SKILLS.md commit, whatever the change was. On 2026-09-07 two Dependabot bumps that touched
+#      only package files failed "Doc Freshness" at 06:16Z because the docs were 21 hours old,
+#      and the Telegram alert fired twice for nothing. A timer is not a measurement (the same
+#      lesson as [HEALTH-IS-MEASURED-NEVER-ESTIMATED] in src/fleet-health.ts): the question is
+#      "did this change touch source without touching docs", and git answers it exactly.
+# FIX: diff the range (base..head for a PR, before..after for a push). Source = src/, server/src/,
+#      vscode-extension/src/. Docs = SKILLS.md, CHANGELOG.md, README.md, docs/**,
+#      .github/copilot-instructions.md, CLAUDE.md. Source changed and no doc changed = fail,
+#      with the source files listed. Anything else passes, including a bump that touches nothing.
 name: Doc Freshness
 
 on:
@@ -14,47 +27,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history for git log timestamps
+          fetch-depth: 0
 
       - name: Check CE doc freshness
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
-
-          MAX_AGE_HOURS=8
-          NOW=$(date +%s)
-          STALE=()
-
-          for doc in SKILLS.md SCORE.md; do
-            if [ ! -f "$doc" ]; then
-              echo "⚠️  $doc does not exist — skipping freshness check"
-              continue
-            fi
-
-            # Last commit timestamp for this file
-            LAST_COMMIT=$(git log -1 --format="%ct" -- "$doc" 2>/dev/null || echo "0")
-            if [ "$LAST_COMMIT" = "0" ]; then
-              echo "⚠️  $doc has no git history — skipping"
-              continue
-            fi
-
-            AGE_HOURS=$(( (NOW - LAST_COMMIT) / 3600 ))
-            echo "📄 $doc — last updated ${AGE_HOURS}h ago (threshold: ${MAX_AGE_HOURS}h)"
-
-            if [ "$AGE_HOURS" -gt "$MAX_AGE_HOURS" ]; then
-              STALE+=("$doc (${AGE_HOURS}h stale)")
-            fi
-          done
-
-          if [ ${#STALE[@]} -gt 0 ]; then
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE" 2>/dev/null || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "no comparable base for this $EVENT (first push or unknown sha); nothing to measure"
+            exit 0
+          fi
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD")
+          SRC=$(echo "$CHANGED" | grep -E '^(src|server/src|vscode-extension/src)/' || true)
+          DOCS=$(echo "$CHANGED" | grep -E '^(SKILLS\.md|CHANGELOG\.md|README\.md|CLAUDE\.md|docs/|\.github/copilot-instructions\.md)' || true)
+          echo "range: ${BASE:0:12}..${HEAD:0:12} ($EVENT)"
+          echo "source files changed: $(echo "$SRC" | grep -c . || true)"
+          echo "doc files changed:    $(echo "$DOCS" | grep -c . || true)"
+          if [ -n "$SRC" ] && [ -z "$DOCS" ]; then
             echo ""
-            echo "❌ STALE DOCS DETECTED:"
-            for s in "${STALE[@]}"; do
-              echo "   - $s"
-            done
+            echo "❌ SOURCE CHANGED WITHOUT A DOC CHANGE:"
+            echo "$SRC" | sed 's/^/   - /'
             echo ""
-            echo "Update these files before pushing. The pre-commit hook checks this locally too."
-            echo "Using --no-verify to bypass the local hook does NOT bypass this CI check."
+            echo "Add the matching update to SKILLS.md, CHANGELOG.md, docs/ or copilot-instructions.md in the same change."
             exit 1
           fi
-
-          echo "✅ All docs are fresh"
+          echo "✅ doc coverage holds for this change"

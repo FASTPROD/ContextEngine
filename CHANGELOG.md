@@ -4,6 +4,16 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## Unreleased
+
+### Fixed
+
+- CI was red on every pull request for one `prefer-const` lint error in `src/firewall.ts`.
+- The Doc Freshness workflow failed any push or PR made more than 8 hours after the last
+  SKILLS.md commit, whatever the change (two Dependabot bumps on 2026-09-07). It now measures
+  the change itself: source touched without a doc touched fails, anything else passes
+  (`[DOC-GATE-MEASURES-THE-DIFF]`).
+
 ## [2.8.0] 2026-09-06: health is measured, never estimated
 
 ### Added

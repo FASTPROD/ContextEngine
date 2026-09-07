@@ -49,6 +49,10 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 - **NEVER expose all learnings without project scoping** — cross-project IP leakage risk
 
 ### Protocol Firewall (v1.19.0, round-based v1.21.0)
+- 2026-09-07: `wrap()` held the composed response in a `let` that was never reassigned; eslint
+  `prefer-const` was the one error that made CI red on every pull request (Dependabot's bumps
+  included) while nothing else was wrong. Now `const`. Lint runs in CI: keep `npm run lint` at
+  0 errors before a commit that touches `src/`.
 - **File**: `src/firewall.ts` — `ProtocolFirewall` class
 - Wraps EVERY tool response via `respond(toolName, text, contextHint?)` helper in `index.ts`
 - Replaced old `maybeNudge()` system (only on 2/17 tools, zero consequences)

@@ -246,7 +246,7 @@ export class ProtocolFirewall {
     if (sessionUrgent && level === "footer") level = "header";
 
     // Prepend learning injection to response (always, if available)
-    let text = injection ? injection + "\n\n" + responseText : responseText;
+    const text = injection ? injection + "\n\n" + responseText : responseText;
 
     // Build session urgency block (always prepended when overdue)
     const urgentBlock = sessionUrgent ? this.buildSessionUrgentBlock() : null;
