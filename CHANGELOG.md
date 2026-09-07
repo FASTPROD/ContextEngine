@@ -16,6 +16,10 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 ### Changed
 
+- CI installs the activation server's own packages too: the first time the Test step actually
+  ran, `server/src/community-rules-server.test.ts` could not load (`ERR_MODULE_NOT_FOUND`).
+- The Doc Freshness gate fails only when 20 or more source lines change without a doc change; a
+  one-line lint fix is not a documented change (its first run paged Telegram for a dash).
 - CI runs on Node 20 and 22 with `fail-fast: false`; Node 18 is EOL and eslint 10 needs 20.19+,
   and the 18 job's failure was cancelling the others before tests ran. `engines.node` is now
   `>=20.19.0`, which is what is tested.

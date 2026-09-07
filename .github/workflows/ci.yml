@@ -35,6 +35,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # vitest includes server/src/**/*.test.ts, and the activation server has its own package
+      # tree; without this the server test file cannot load on CI (ERR_MODULE_NOT_FOUND, seen the
+      # first time the Test step actually ran on 2026-09-07). The server itself is never published.
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
       - name: Lint
         run: npm run lint
 

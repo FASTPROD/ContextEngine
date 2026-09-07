@@ -11,8 +11,10 @@
 #      "did this change touch source without touching docs", and git answers it exactly.
 # FIX: diff the range (base..head for a PR, before..after for a push). Source = src/, server/src/,
 #      vscode-extension/src/. Docs = SKILLS.md, CHANGELOG.md, README.md, docs/**,
-#      .github/copilot-instructions.md, CLAUDE.md. Source changed and no doc changed = fail,
-#      with the source files listed. Anything else passes, including a bump that touches nothing.
+#      .github/copilot-instructions.md, CLAUDE.md. Source changed by MIN_SRC_LINES or more lines
+#      (added plus deleted) and no doc changed = fail, with the source files listed. Below that
+#      floor a change is a lint fix or a typo, not something a reader needs told about: the
+#      first run of this gate failed a one-character dash fix and paged Telegram for it.
 name: Doc Freshness
 
 on:
@@ -40,13 +42,18 @@ jobs:
             echo "no comparable base for this $EVENT (first push or unknown sha); nothing to measure"
             exit 0
           fi
+          MIN_SRC_LINES=20
           CHANGED=$(git diff --name-only "$BASE" "$HEAD")
           SRC=$(echo "$CHANGED" | grep -E '^(src|server/src|vscode-extension/src)/' || true)
           DOCS=$(echo "$CHANGED" | grep -E '^(SKILLS\.md|CHANGELOG\.md|README\.md|CLAUDE\.md|docs/|\.github/copilot-instructions\.md)' || true)
+          SRC_LINES=0
+          if [ -n "$SRC" ]; then
+            SRC_LINES=$(git diff --numstat "$BASE" "$HEAD" -- src server/src vscode-extension/src | awk '{a+=$1; d+=$2} END {print a+d+0}')
+          fi
           echo "range: ${BASE:0:12}..${HEAD:0:12} ($EVENT)"
-          echo "source files changed: $(echo "$SRC" | grep -c . || true)"
+          echo "source files changed: $(echo "$SRC" | grep -c . || true) (${SRC_LINES} lines, floor ${MIN_SRC_LINES})"
           echo "doc files changed:    $(echo "$DOCS" | grep -c . || true)"
-          if [ -n "$SRC" ] && [ -z "$DOCS" ]; then
+          if [ -n "$SRC" ] && [ "$SRC_LINES" -ge "$MIN_SRC_LINES" ] && [ -z "$DOCS" ]; then
             echo ""
             echo "❌ SOURCE CHANGED WITHOUT A DOC CHANGE:"
             echo "$SRC" | sed 's/^/   - /'
