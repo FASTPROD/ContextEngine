@@ -4,6 +4,16 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [Unreleased]
+
+### Added
+
+- **One-line summary per source in `list_sources` and `contextengine list-sources`**
+  (`src/source-summary.ts`): frontmatter `description` when the file has one, else H1 title
+  plus first prose line, else the module docstring or header comment for code. Read from the
+  first 4 KB of each file only. Why: with 800+ sources an agent opened two or three whole
+  documents to find the right one; the summary lets it pick once.
+
 ## [2.8.1] 2026-09-07: a push is not done until its CI is read
 
 ### Added

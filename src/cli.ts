@@ -672,6 +672,7 @@ async function runInit(): Promise<void> {
 
 import { loadSources, loadProjectDirs, loadConfig, resolveProjectDir, findProjectRoot, hasProjectMarker, looksLikePath, type KnowledgeSource } from "./config.js";
 import { ingestSources, type Chunk } from "./ingest.js";
+import { summarizeSource } from "./source-summary.js";
 import { searchChunks } from "./search.js";
 import { SERVER_COMMANDS, suggestCommands } from "./cli-commands.js";
 import { collectProjectOps, collectSystemOps } from "./collectors.js";
@@ -875,6 +876,8 @@ async function cliListSources(): Promise<void> {
     const count = chunks.filter((c) => c.source === s.name).length;
     const status = exists ? `✅ ${count} chunks` : "⚠ file not found";
     console.log(`  ${s.name}: ${status}`);
+    const summary = exists ? summarizeSource(s) : "";
+    if (summary) console.log(`    ${summary}`);
     console.log(`    ${s.path}`);
   }
   console.log("");

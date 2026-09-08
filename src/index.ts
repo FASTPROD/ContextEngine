@@ -5,6 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { loadSources, loadProjectDirs, loadConfig, resolveProjectDir, KnowledgeSource } from "./config.js";
 import { ingestSources, Chunk } from "./ingest.js";
+import { summarizeSource } from "./source-summary.js";
 import { searchChunks, SearchResult } from "./search.js";
 import {
   initEmbeddings,
@@ -699,7 +700,7 @@ server.tool(
 // ---------------------------------------------------------------------------
 server.tool(
   "list_sources",
-  "List all knowledge sources indexed by ContextEngine, with their status (found/missing) and chunk counts.",
+  "List all knowledge sources indexed by ContextEngine, each with a one-line summary (from the file's own head: frontmatter description, title plus first sentence, or module docstring), status (found/missing) and chunk counts. Read the summary to pick the right source before calling read_source.",
   {},
   async () => {
     const lines = sources.map((s) => {
@@ -711,7 +712,8 @@ server.tool(
       const status = exists
         ? `✅ ${count} chunks${embeddedCount > 0 ? ` (${embeddedCount} embedded)` : ""}`
         : "⚠ file not found";
-      return `${s.name}: ${status}\n  ${s.path}`;
+      const summary = exists ? summarizeSource(s) : "";
+      return `${s.name}: ${status}${summary ? `\n  ${summary}` : ""}\n  ${s.path}`;
     });
 
     const embStatus = isEmbeddingsReady()
