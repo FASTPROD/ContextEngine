@@ -4,7 +4,7 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
-## [Unreleased]
+## [2.8.2] 2026-09-08: every source says what it is
 
 ### Added
 
