@@ -76,8 +76,11 @@ Rules behind the table:
    not a dead URL before keeping it), `cancel_url` = `https://api.compr.ch/contextengine/pricing`,
    statement descriptor `COMPR OPSCONTEXT`. Then the six plans of section 2, Sync each, and check
    every plan shows a Stripe price id.
-2. **Agent, receiver.** `POST /contextengine/hub-callback` in `server/src/server.ts` (or a new
-   `server/src/hub-callback.ts`), modelled on the FC_project reference (`FC/routes/subscription.py`,
+2. **Agent, receiver. Done 2026-09-12** (`server/src/hub-callback.ts`, 24 tests in
+   `server/src/hub-callback.test.ts`, the real server booted locally and answered 503 / 403 / 200 /
+   duplicate / cancel in that order). One deviation from the text below: crypto callbacks carry no
+   object id, so their idempotency key is the SHA-256 of the raw body (a hub resend is
+   byte-identical). `POST /contextengine/hub-callback`, modelled on the FC_project reference (`FC/routes/subscription.py`,
    LOCK `[HUB_CALLBACK_ACTIVATES_TIER]`) and the admin.CROWLR receiver
    (`StripeHubCallbackController`, LOCK `[HUB_CALLBACK_ACTIVATES_PACKAGE]`):
    - Auth: the shared key as the `key` query parameter, constant-time compare against
@@ -99,7 +102,9 @@ Rules behind the table:
    - The key travels in the URL, and nginx on crowlr2 logs request lines (hub finding 1). The
      activation server itself logs no request lines. Until the hub signs callbacks, this is the same
      exposure invoc.me carries; the HMAC path above is the way out, not an nginx change.
-3. **Agent, checkout.** `server/public/pricing.js`: the buy buttons post to
+3. **Agent, checkout. Done 2026-09-12** (email field added to `pricing.html`, buttons carry
+   `data-plan-slug-*`, `pricing.js` posts to the hub; the hub appends `session_id` to
+   `success_url` itself, so the page passes the bare URL). `server/public/pricing.js`: the buy buttons post to
    `https://api.compr.ch/stripe-hub/api/checkout` with `project_slug: "contextengine"`,
    `plan_slug` from the table, `customer_email` (the hub requires it: add an email field to the
    pricing page, validated client side), `success_url`, `cancel_url`, then follow the returned

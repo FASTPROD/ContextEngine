@@ -7,6 +7,7 @@
  *   GET  /contextengine/health                 — health check
  *   POST /contextengine/create-checkout-session — Stripe Checkout for purchasing a plan
  *   POST /contextengine/webhook                — Stripe webhook (auto-provisions license)
+ *   POST /contextengine/hub-callback           — Stripe Hub callback (the fleet's Stripe integration)
  *
  * Database: SQLite (licenses.db) — simple, no external deps
  */
@@ -29,6 +30,7 @@ import {
 } from "./stripe.js";
 import { loadPrivateKey, signLicensePayload } from "./license-sig.js";
 import { createCommunityRulesRouter } from "./community-rules-server.js";
+import { createHubCallbackRouter } from "./hub-callback.js";
 
 // Load the Ed25519 private key once at startup. Fail loud if missing —
 // never silently degrade to "no signature" mode.
@@ -161,6 +163,21 @@ app.use(cors({
   ],
 }));
 
+const db = initDB();
+
+// ⚠ Stripe Hub callback MUST receive raw body — register BEFORE express.json().
+// [LOCK] [HUB_CALLBACK_ACTIVATES_LICENSE] in hub-callback.ts. The hub sells for
+// ContextEngine (docs/STRIPE_HUB_INTEGRATION_PLAN.md); the server's own Stripe
+// route below is the pre-hub path, kept until plan step 8.
+app.use(
+  createHubCallbackRouter({
+    db,
+    callbackKey: process.env.HUB_CALLBACK_KEY || "",
+    callbackSecret: process.env.HUB_CALLBACK_SECRET || "",
+    logAudit: (event, key, machineId, ip, details) => logAudit(db, event, key, machineId, ip, details),
+  }),
+);
+
 // ⚠ Stripe webhook MUST receive raw body — register BEFORE express.json()
 if (isStripeEnabled()) {
   app.post(
@@ -263,8 +280,6 @@ app.use("/contextengine/heartbeat", activationLimiter);
 
 // Trust proxy (for X-Forwarded-For behind nginx)
 app.set("trust proxy", 1);
-
-const db = initDB();
 
 // Prepared statements
 const findLicense = db.prepare("SELECT * FROM licenses WHERE key = ? AND is_active = 1");

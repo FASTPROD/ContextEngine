@@ -380,6 +380,39 @@
       margin-left: 4px;
     }
 
+    /* Email field (the hub checkout requires it; the licence key is mailed there) */
+    .checkout-email {
+      max-width: 420px;
+      margin: 0 auto 32px;
+      text-align: center;
+    }
+    .checkout-email label {
+      display: block;
+      font-size: 0.9em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .checkout-email input {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 1em;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .checkout-email input:focus { border-color: var(--accent); }
+    .checkout-email.invalid input { border-color: #f85149; }
+    .email-error {
+      display: none;
+      color: #f85149;
+      font-size: 0.85em;
+      margin-top: 8px;
+    }
+    .checkout-email.invalid .email-error { display: block; }
+
     /* Loading state */
     .plan-cta.loading {
       opacity: 0.6;
@@ -422,6 +455,12 @@
       <span class="toggle-label" data-period="annual">Annual <span class="save-badge">SAVE 17%</span></span>
     </div>
 
+    <div class="checkout-email">
+      <label for="customerEmail">Email for your licence key</label>
+      <input type="email" id="customerEmail" name="email" placeholder="you@company.com" autocomplete="email" required>
+      <div class="email-error" id="emailError">Enter a valid email address to continue.</div>
+    </div>
+
     <div class="pricing-grid">
 
       <!-- Pro -->
@@ -430,7 +469,7 @@
         <div class="plan-desc">Ops intelligence for your projects</div>
         <div class="plan-price" data-monthly="CHF 2" data-annual="CHF 20">CHF 2<span class="price-period">/mo</span></div>
         <div class="plan-annual" data-monthly="or CHF 20/year (save 17%)" data-annual="CHF 1.67/mo — billed annually">or CHF 20/year (save 17%)</div>
-        <button class="plan-cta cta-outline" data-plan-key-monthly="pro_monthly" data-plan-key-annual="pro_annual">Get Pro</button>
+        <button class="plan-cta cta-outline" data-plan-slug-monthly="pro-monthly" data-plan-slug-annual="pro-annual">Get Pro</button>
         <ul class="plan-features">
           <li>Everything in Free</li>
           <li>Project health score (A+ to F)</li>
@@ -448,7 +487,7 @@
         <div class="plan-desc">Small teams</div>
         <div class="plan-price" data-monthly="CHF 12" data-annual="CHF 120">CHF 12<span class="price-period">/mo</span></div>
         <div class="plan-annual" data-monthly="or CHF 120/year (save 17%)" data-annual="CHF 10/mo — billed annually">or CHF 120/year (save 17%)</div>
-        <button class="plan-cta cta-primary" data-plan-key-monthly="team_monthly" data-plan-key-annual="team_annual">Get Team</button>
+        <button class="plan-cta cta-primary" data-plan-slug-monthly="team-monthly" data-plan-slug-annual="team-annual">Get Team</button>
         <ul class="plan-features">
           <li>Everything in Pro</li>
           <li>5 machines</li>
@@ -462,7 +501,7 @@
         <div class="plan-desc">Larger teams</div>
         <div class="plan-price" data-monthly="CHF 36" data-annual="CHF 360">CHF 36<span class="price-period">/mo</span></div>
         <div class="plan-annual" data-monthly="or CHF 360/year (save 17%)" data-annual="CHF 30/mo — billed annually">or CHF 360/year (save 17%)</div>
-        <button class="plan-cta cta-outline" data-plan-key-monthly="enterprise_monthly" data-plan-key-annual="enterprise_annual">Get Enterprise</button>
+        <button class="plan-cta cta-outline" data-plan-slug-monthly="enterprise-monthly" data-plan-slug-annual="enterprise-annual">Get Enterprise</button>
         <ul class="plan-features">
           <li>Everything in Pro</li>
           <li>10 machines</li>

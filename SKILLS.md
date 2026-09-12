@@ -464,6 +464,17 @@ code references already point at it._
 - **Let's Encrypt SSL** — certbot auto-renewal on `api.compr.ch`
 
 ### Stripe Payment Integration
+- **Sales go through the Stripe Hub since 2026-09-12** (`~/Projects/STRIPE backend`, live at
+  `api.compr.ch/stripe-hub`, project slug `contextengine`). Plan and hands:
+  `docs/STRIPE_HUB_INTEGRATION_PLAN.md`. The pricing page posts to the hub's `/api/checkout`
+  with `customer_email` (field on the page) and a plan slug `<family>-<cycle>`; the hub calls
+  back `POST /contextengine/hub-callback?key=<HUB_CALLBACK_KEY>` (`server/src/hub-callback.ts`,
+  LOCK `[HUB_CALLBACK_ACTIVATES_LICENSE]`). The receiver: constant-time key or
+  `X-Hub-Signature` HMAC (`HUB_CALLBACK_SECRET`, dormant until the hub signs), 503 when neither
+  is configured, four event shapes, one row per `(event_type, object id)` in
+  `hub_callback_events` (crypto callbacks carry no id: the raw-body hash stands in), an unknown
+  plan slug answers 200 and audits `hub_callback_unknown_plan`. Tests:
+  `server/src/hub-callback.test.ts`. The server's own Stripe route below stays until plan step 8.
 - **Stripe SDK v14** — checkout session creation, webhook handler (signature verification)
 - **Webhook events** — `checkout.session.completed`, `customer.subscription.deleted`, `invoice.payment_failed`
 - **License provisioning** — auto-seeds license on payment, dedup via email+plan match
