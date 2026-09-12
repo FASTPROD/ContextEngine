@@ -27,7 +27,7 @@
 //   }
 
 import { Router, Request, Response } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import Database from "better-sqlite3";
 import { existsSync, readFileSync, statSync } from "fs";
 import { sign, KeyObject } from "crypto";
@@ -285,11 +285,18 @@ export function createCommunityRulesRouter(opts: MountOptions): Router {
       max: 10,
       standardHeaders: true,
       legacyHeaders: false,
+      // [LOCKED] [LIMITER-IPV6-KEY] 2026-09-12
+      // [NEVER] return req.ip directly from this keyGenerator.
+      // WHY: express-rate-limit 8 logs ERR_ERL_KEY_GEN_IPV6 at every boot for a
+      //      custom keyGenerator that falls back to the raw IP (seen in the
+      //      crowlr2 error log, 2026-09-12): an IPv6 client can rotate through
+      //      its /64 and never share a bucket, so the per-IP fallback was void.
+      // FIX: ipKeyGenerator() collapses IPv6 to its /56 and leaves IPv4 as is.
       keyGenerator: (req) => {
         const mid = (req.body && typeof req.body.machine_id === "string"
           ? req.body.machine_id
           : "") as string;
-        return mid || req.ip || "unknown";
+        return mid || (req.ip ? ipKeyGenerator(req.ip) : "unknown");
       },
       message: {
         error: "Too many community-rules fetches. Try again tomorrow (limit: 10/day).",

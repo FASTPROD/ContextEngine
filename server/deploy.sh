@@ -125,13 +125,24 @@ log "  ✅ Pre-flight complete"
 # ===================================================================
 log "Phase 1 — rsync to server"
 
-# Server code (source + compiled dist + .secrets/). NOTE: --delete here is
-# DELIBERATELY scoped to server/ on the remote. .secrets/ is included in
-# the rsync (no exclude), so the private key rides along with mode 0600.
+# Server code (source + compiled dist + .secrets/). No --delete: the remote
+# dir also holds ecosystem.config.cjs, data/ and node_modules/, which never
+# come from here. .secrets/ is included in the rsync (no exclude), so the
+# licence-signing key rides along with mode 0600.
+# [LOCKED] [RSYNC-EXCLUDE-JUNK-AND-SSH-KEYS] 2026-09-12
+# [NEVER] drop the .DS_Store or id_* excludes below, or add --delete.
+# WHY: the 2026-09-12 read-only audit of crowlr2 found server/.DS_Store copied
+#      up by this rsync, and a copy of the owner's PRIVATE SSH key (id_ed25519,
+#      same fingerprint as the Mac key) sitting in the web directory. Whatever
+#      exists in server/ locally is shipped verbatim; nothing else filters it.
+# FIX: exclude Finder junk and any id_* key file explicitly. The licence
+#      signing key lives in .secrets/ and is still shipped on purpose.
 run rsync -az \
   --exclude='node_modules/' \
   --exclude='data/' \
   --exclude='.gitignore' \
+  --exclude='.DS_Store' \
+  --exclude='id_*' \
   -e "ssh -i $SSH_KEY" \
   "$SCRIPT_DIR/" "$SERVER:$REMOTE_DIR/"
 

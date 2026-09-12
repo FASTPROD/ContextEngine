@@ -458,7 +458,7 @@ code references already point at it._
 ### Server & Infrastructure
 - **Express 4** — activation/licensing server, 5 endpoints (activate, heartbeat, health, checkout, webhook)
 - **SQLite3** (better-sqlite3) — license database, synchronous API
-- **PM2** — process manager on Gandi VPS (Debian 10)
+- **PM2**: process manager on crowlr2 (OVH, `debian@137.74.175.123`, ssh alias `crowlr2`) since the 2026-08-20 migration; the Gandi box is frozen
 - **Nginx** — reverse proxy with path-based routing (`/contextengine/` → port 8010)
 - **GitHub Actions CI** — Node 18/20/22 matrix, build + lint + test + smoke
 - **Let's Encrypt SSL** — certbot auto-renewal on `api.compr.ch`
@@ -470,6 +470,9 @@ code references already point at it._
 - **Email delivery** — Nodemailer v6, Gandi SMTP (`mail.gandi.net:465`), HTML templates
 - **Graceful degradation** — server runs without `STRIPE_SECRET_KEY` (payment endpoints not mounted)
 - **Plan mapping** — `metadata.plan_key` in Stripe checkout → `PLAN_CONFIG` → maxMachines + months
+- **Where the secrets sit, verified 2026-09-12** (session 28): the server on crowlr2 runs a **test-mode** key, so the endpoint `https://api.compr.ch/contextengine/webhook` (`we_1T42YVJARWpNRnC4mFpskAiB`, the three events above) exists in Stripe test mode only. `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` live in `ecosystem.config.cjs` in the server directory, on the SAME line, never in an env file and never in git; count them with `grep -c`, never print the file. `pm2 restart` keeps the old env: a reload is `pm2 delete contextengine-api`, then `pm2 start ecosystem.config.cjs --only contextengine-api`, then `pm2 save --force` (LOCK `[PM2-START-FROM-ECOSYSTEM-ONLY]` in `server/deploy.sh`).
+- **Proving the wiring without side effects**: an unsigned `curl -X POST` to the endpoint answers 400 `Invalid signature` when the secret is loaded and 500 `Webhook secret not configured` when it is empty, and writes nothing. The signed proof is `stripe events resend <evt_> --webhook-endpoint we_1T42YVJARWpNRnC4mFpskAiB` with any test-mode event: the handler answers 200 to every type, and a bad signature logs `Webhook signature verification failed` in the pm2 error log. Events are mode-scoped, a live event can never reach the test endpoint. `stripe trigger` fans out to every test endpoint of the Crowlr account (Stripe Hub included), so prefer resend. Three test licences from 2026-03-27 in `stripe_mapping` prove the flow worked before the migration.
+- **Going live, not done**: the six `STRIPE_PRICE_*` values that `create-checkout-session` maps `plan_key` to must point to live prices, `STRIPE_SECRET_KEY` to an `sk_live_` key, a live-mode endpoint with its own `whsec_`, then the pm2 reload above and one real purchase as proof.
 
 ### npm Publishing
 - **Scoped package** — `@compr/opscontext-mcp` on npmjs.com
@@ -479,7 +482,7 @@ code references already point at it._
 
 ### Deploy Automation
 - **Root `deploy.sh`** — unified script: `npm` (publish), `server` (VPS rsync + PM2), `all`
-- **VPS auth** — sshpass password-based SSH (key passphrase lost)
+- **VPS auth**: key auth, `ssh -i ~/.ssh/id_ed25519 debian@crowlr2` (the sshpass note was the Gandi era)
 - **rsync excludes** — `node_modules/`, `data/` preserved on server
 - **Post-deploy** — `npm install` on VPS (compiled locally), PM2 restart
 - **Learnings store integrity** (2026-09-05, LOCK `[STORE-NEVER-STARTS-FRESH-OVER-DATA]` in `src/learnings.ts`): atomic temp+rename writes, cross-process lock dir `learnings.json.lock`, an unreadable file is kept as `.corrupt-<ts>` and the load throws (never an empty store), a write of less than half the on-disk records is refused (`CONTEXTENGINE_ALLOW_SHRINK=1` to override), imports are one load + one save, daily `learnings.json.bak-YYYYMMDD` (7 kept). Why: the store was wiped and rebuilt with new ids by concurrent MCP servers, 54 times since June, twice on 2026-09-05. Tests: `src/learnings-store.test.ts` + a real 3-process race.
