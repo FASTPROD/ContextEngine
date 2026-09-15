@@ -36,18 +36,18 @@ const GATE_SCRIPT = join(HOOKS_DIR, "opscontext-session-gate.sh");
 
 const EVENT_KINDS = ["UserPromptSubmit", "PostToolUse", "SessionStart"] as const;
 
-interface HookCommand {
+export interface HookCommand {
   type: string;
   command: string;
   timeout?: number;
 }
 
-interface HookEntry {
+export interface HookEntry {
   matcher?: string;
   hooks: HookCommand[];
 }
 
-interface Settings {
+export interface Settings {
   hooks?: Record<string, HookEntry[]>;
   [k: string]: unknown;
 }
@@ -71,9 +71,72 @@ function backupSettings(): string {
   return backup;
 }
 
-function hookAlreadyWired(entries: HookEntry[] | undefined, hookScript: string): boolean {
-  if (!entries) return false;
-  return entries.some((e) => e.hooks?.some((h) => h.command?.startsWith(hookScript)));
+// [LOCKED] [HOOKS-COMPARED-BY-EXPANDED-PATH] - 2026-09-15
+// [NEVER] compare a hook command with startsWith or any other literal text match again.
+// WHY: settings.json held the emit hooks as "$HOME/.claude/hooks/opscontext-emit.sh <Kind>",
+//      hand-wired on 2026-06-23 before this installer existed. On 2026-09-06 the 2.7.0 rollout
+//      ran install-claude-hook; its startsWith(absolute path) check did not see them, printed
+//      "4 hook entries added, 0 already present" and wrote a second set. From 2026-09-06
+//      08:20:21Z every Claude Code event reached the audit log twice (0 doubled events in the 8
+//      days before, 99.5 to 100 percent every day after), doubling the stuck and silent_failure
+//      inputs that [OPSCONTEXT-CC-HOOK] protects.
+// FIX: compare the script path after expanding $HOME, ${HOME} and a leading ~; installing also
+//      removes extra copies of our own commands under the same matcher, and nothing else.
+
+/** The script path of a hook command, with $HOME, ${HOME} or a leading ~ expanded. */
+export function hookScriptPath(command: string, home: string = homedir()): string {
+  const m = /^\s*(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(command ?? "");
+  const path = m ? (m[1] ?? m[2] ?? m[3]) : "";
+  return path.replace(/^(?:\$HOME|\$\{HOME\}|~)(?=\/)/, home);
+}
+
+/** The command with its script path expanded, so two spellings of one call compare equal. */
+function normalizedCommand(command: string, home: string): string {
+  const args = (command ?? "").trim().replace(/^(?:"[^"]*"|'[^']*'|\S+)/, "").trim();
+  return `${hookScriptPath(command, home)} ${args}`.trim();
+}
+
+function hookAlreadyWired(entries: HookEntry[] | undefined, hookScript: string, home: string = homedir()): boolean {
+  return (entries ?? []).some((e) => e.hooks?.some((h) => hookScriptPath(h.command, home) === hookScript));
+}
+
+/** Removes repeated registrations of our scripts under the same matcher. Keeps the first copy
+ *  and every hook that is not ours; drops an entry only when that leaves it empty. */
+export function dropDuplicateHooks(
+  entries: HookEntry[],
+  ourScripts: string[],
+  home: string = homedir(),
+): { entries: HookEntry[]; removed: number } {
+  const seen = new Set<string>();
+  let removed = 0;
+  const kept: HookEntry[] = [];
+  for (const entry of entries) {
+    const before = entry.hooks ?? [];
+    const hooks = before.filter((h) => {
+      if (!ourScripts.includes(hookScriptPath(h.command, home))) return true;
+      const key = `${entry.matcher ?? ""}\u0000${normalizedCommand(h.command, home)}`;
+      if (seen.has(key)) {
+        removed++;
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+    if (hooks.length > 0 || before.length === 0) kept.push({ ...entry, hooks });
+  }
+  return { entries: kept, removed };
+}
+
+/** How many times each event runs `script`. A correct install has exactly 1 everywhere. */
+export function countOurHooks(
+  settings: Settings,
+  events: readonly string[],
+  script: string,
+  home: string = homedir(),
+): Record<string, number> {
+  const count = (ev: string) =>
+    (settings.hooks?.[ev] ?? []).flatMap((e) => e.hooks ?? []).filter((h) => hookScriptPath(h.command, home) === script).length;
+  return Object.fromEntries(events.map((ev) => [ev, count(ev)]));
 }
 
 /** Path to the reference hook script bundled with this package. */
@@ -152,7 +215,17 @@ Run: opscontext install-autostart
   if (backup) console.log(`✅ Backed up settings.json → ${backup}`);
 
   settings.hooks ??= {};
-  const hookCmdPrefix = `${HOOK_SCRIPT}`; // command string starts with this
+  const hookCmdPrefix = `${HOOK_SCRIPT}`; // compared by expanded path, [HOOKS-COMPARED-BY-EXPANDED-PATH]
+
+  // [LOCK] [HOOKS-COMPARED-BY-EXPANDED-PATH]: remove extra copies before deciding what to add.
+  let deduped = 0;
+  for (const kind of [...EVENT_KINDS, "Stop"]) {
+    const entries = settings.hooks[kind];
+    if (!entries) continue;
+    const r = dropDuplicateHooks(entries, [HOOK_SCRIPT, GATE_SCRIPT]);
+    settings.hooks[kind] = r.entries;
+    deduped += r.removed;
+  }
 
   let added = 0;
   let skipped = 0;
@@ -197,7 +270,27 @@ Run: opscontext install-autostart
   console.log(`✅ Installed session gate: ${GATE_SCRIPT}`);
 
   writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + "\n");
-  console.log(`✅ ${added} hook entries added, ${skipped} already present.`);
+  const removedNote = deduped ? `, ${deduped} duplicate registrations removed` : "";
+  console.log(`✅ ${added} hook entries added, ${skipped} already present${removedNote}.`);
+
+  // [LOCKED] [INSTALL-VERIFIES-BY-COUNT] - 2026-09-15
+  // [NEVER] treat the added/present counters above as proof of a correct install.
+  // WHY: on 2026-09-06 this command printed "0 already present" over three existing hooks, and
+  //      the session that ran it recorded "they were not there"; the doubled audit events then
+  //      went unseen for nine days.
+  // FIX: re-read settings.json from disk and require exactly one registration per event.
+  const written = readSettings();
+  const counts = {
+    ...countOurHooks(written, EVENT_KINDS, HOOK_SCRIPT),
+    ...countOurHooks(written, ["Stop"], GATE_SCRIPT),
+  };
+  const wrong = Object.entries(counts).filter(([, n]) => n !== 1);
+  if (wrong.length > 0) {
+    const detail = wrong.map(([ev, n]) => `${ev}=${n}`).join(", ");
+    console.error(`❌ settings.json must hold exactly one OpsContext hook per event, found ${detail}. Backup: ${backup || "none"}`);
+    process.exit(1);
+  }
+  console.log(`✅ Verified in settings.json: exactly one registration for ${Object.keys(counts).join(", ")}.`);
   console.log(``);
   console.log(`Test live:`);
   console.log(`  1. Open a NEW VS Code terminal (settings.json is read at session start).`);

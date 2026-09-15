@@ -1,0 +1,164 @@
+// [LOCK] [HOOKS-COMPARED-BY-EXPANDED-PATH] [INSTALL-VERIFIES-BY-COUNT]: the 2026-09-06 doubling,
+// replayed through the real installer. Throwaway HOME via src/test-setup.ts: the real
+// ~/.claude/settings.json is never read or written here.
+import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { HookEntry, Settings } from "./install-claude-hook.js";
+
+let I: typeof import("./install-claude-hook.js");
+const HOME = process.env.HOME as string;
+const EMIT = join(HOME, ".claude", "hooks", "opscontext-emit.sh");
+const GATE = join(HOME, ".claude", "hooks", "opscontext-session-gate.sh");
+const SETTINGS = join(HOME, ".claude", "settings.json");
+const KINDS = ["UserPromptSubmit", "PostToolUse", "SessionStart"];
+
+beforeAll(async () => {
+  I = await import("./install-claude-hook.js");
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+const cmd = (command: string, timeout = 5) => ({ type: "command", command, timeout });
+const dollarEmit = (kind: string) => cmd(`$HOME/.claude/hooks/opscontext-emit.sh ${kind}`);
+const absEmit = (kind: string) => cmd(`${EMIT} ${kind}`);
+
+/** Runs the installer with console and process.exit captured; returns what it printed. */
+async function install(): Promise<{ out: string; err: string }> {
+  expect(HOME).toMatch(/ce-test-home-/); // never the real HOME
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+    throw new Error(`exit ${code}`);
+  }) as never);
+  await I.cliInstallClaudeHook([]);
+  return { out: log.mock.calls.flat().join("\n"), err: error.mock.calls.flat().join("\n") };
+}
+
+function writeSettings(settings: Settings): void {
+  mkdirSync(join(HOME, ".claude"), { recursive: true });
+  writeFileSync(SETTINGS, JSON.stringify(settings, null, 2));
+}
+
+describe("hookScriptPath", () => {
+  const home = "/Users/me";
+  const emit = "/Users/me/.claude/hooks/opscontext-emit.sh";
+
+  it("gives the same file for $HOME, ${HOME}, ~, quoted and absolute spellings", () => {
+    for (const c of [
+      "$HOME/.claude/hooks/opscontext-emit.sh PostToolUse",
+      "${HOME}/.claude/hooks/opscontext-emit.sh PostToolUse",
+      "~/.claude/hooks/opscontext-emit.sh PostToolUse",
+      `"${emit}" PostToolUse`,
+      `${emit} PostToolUse`,
+    ]) {
+      expect(I.hookScriptPath(c, home)).toBe(emit);
+    }
+  });
+
+  it("does not take another file, another variable or a quoted path with spaces for ours", () => {
+    expect(I.hookScriptPath("$HOMEBREW/.claude/hooks/opscontext-emit.sh", home)).toBe("$HOMEBREW/.claude/hooks/opscontext-emit.sh");
+    expect(I.hookScriptPath(`${emit}.bak PostToolUse`, home)).not.toBe(emit);
+    expect(I.hookScriptPath('"/Users/me/My Hooks/x.sh" arg', home)).toBe("/Users/me/My Hooks/x.sh");
+    expect(I.hookScriptPath("jq -r '.x'", home)).toBe("jq");
+  });
+});
+
+describe("dropDuplicateHooks", () => {
+  const home = "/Users/me";
+  const emit = "/Users/me/.claude/hooks/opscontext-emit.sh";
+  const ours = [emit, "/Users/me/.claude/hooks/opscontext-session-gate.sh"];
+
+  it("removes the absolute copy of a $HOME-form hook and keeps the first one", () => {
+    const entries: HookEntry[] = [
+      { hooks: [cmd("$HOME/.claude/hooks/opscontext-emit.sh UserPromptSubmit")] },
+      { hooks: [cmd(`${emit} UserPromptSubmit`)] },
+    ];
+    const r = I.dropDuplicateHooks(entries, ours, home);
+    expect(r.removed).toBe(1);
+    expect(r.entries).toHaveLength(1);
+    expect(r.entries[0].hooks[0].command).toMatch(/^\$HOME\//);
+  });
+
+  it("never touches hooks that are not ours, even inside an entry that loses a duplicate", () => {
+    const entries: HookEntry[] = [
+      { matcher: "Read|Edit|Write", hooks: [cmd("jq -r '.tool_input.file_path'")] },
+      { matcher: ".*", hooks: [cmd(`${emit} PostToolUse`)] },
+      { matcher: ".*", hooks: [cmd("~/.claude/hooks/opscontext-emit.sh PostToolUse"), cmd("other.sh")] },
+    ];
+    const r = I.dropDuplicateHooks(entries, ours, home);
+    expect(r.removed).toBe(1);
+    expect(r.entries).toHaveLength(3);
+    expect(r.entries[0].hooks[0].command).toMatch(/^jq/);
+    expect(r.entries[2].hooks.map((h) => h.command)).toEqual(["other.sh"]);
+  });
+
+  it("keeps the same script under different matchers or with different arguments", () => {
+    const entries: HookEntry[] = [
+      { matcher: ".*", hooks: [cmd(`${emit} PostToolUse`)] },
+      { matcher: "Bash", hooks: [cmd(`${emit} PostToolUse`)] },
+      { matcher: ".*", hooks: [cmd(`${emit} SessionStart`)] },
+    ];
+    expect(I.dropDuplicateHooks(entries, ours, home).removed).toBe(0);
+  });
+});
+
+describe("cliInstallClaudeHook on the settings of 2026-09-06", () => {
+  it("recognises the $HOME-form hooks, removes the absolute duplicates, keeps everything else, verifies one per event", async () => {
+    writeSettings({
+      model: "keep-me",
+      hooks: {
+        PreToolUse: [{ matcher: "Bash", hooks: [cmd("guard.sh")] }],
+        PostToolUse: [
+          { matcher: "Read|Edit|Write", hooks: [cmd("jq -r '.tool_input.file_path'")] },
+          { matcher: ".*", hooks: [dollarEmit("PostToolUse")] },
+          { matcher: ".*", hooks: [absEmit("PostToolUse")] },
+        ],
+        UserPromptSubmit: [{ hooks: [dollarEmit("UserPromptSubmit")] }, { hooks: [absEmit("UserPromptSubmit")] }],
+        SessionStart: [{ hooks: [dollarEmit("SessionStart")] }, { hooks: [absEmit("SessionStart")] }],
+        Stop: [{ hooks: [cmd(GATE, 15)] }],
+      },
+    });
+
+    const first = await install();
+    expect(first.out).toMatch(/0 hook entries added, 4 already present, 3 duplicate registrations removed\./);
+    expect(first.out).toMatch(/Verified in settings\.json: exactly one registration/);
+    expect(process.exit).not.toHaveBeenCalled();
+
+    const s = JSON.parse(readFileSync(SETTINGS, "utf-8")) as Settings;
+    expect(I.countOurHooks(s, KINDS, EMIT)).toEqual({ UserPromptSubmit: 1, PostToolUse: 1, SessionStart: 1 });
+    expect(I.countOurHooks(s, ["Stop"], GATE)).toEqual({ Stop: 1 });
+    expect(s.model).toBe("keep-me");
+    expect(s.hooks?.PreToolUse?.[0].hooks[0].command).toBe("guard.sh");
+    expect(s.hooks?.PostToolUse?.[0].matcher).toBe("Read|Edit|Write");
+
+    vi.restoreAllMocks();
+    const second = await install();
+    expect(second.out).toMatch(/0 hook entries added, 4 already present\./);
+    expect(second.out).not.toMatch(/duplicate/);
+  });
+
+  it("counts a $HOME-form hook as installed and adds only the events that are missing", async () => {
+    writeSettings({ hooks: { UserPromptSubmit: [{ hooks: [dollarEmit("UserPromptSubmit")] }] } });
+    const r = await install();
+    expect(r.out).toMatch(/3 hook entries added, 1 already present\./);
+    const s = JSON.parse(readFileSync(SETTINGS, "utf-8")) as Settings;
+    expect(I.countOurHooks(s, KINDS, EMIT)).toEqual({ UserPromptSubmit: 1, PostToolUse: 1, SessionStart: 1 });
+  });
+
+  it("refuses to report success when an event still runs our hook twice (two matchers)", async () => {
+    writeSettings({
+      hooks: {
+        PostToolUse: [
+          { matcher: ".*", hooks: [absEmit("PostToolUse")] },
+          { matcher: "Bash", hooks: [absEmit("PostToolUse")] },
+        ],
+      },
+    });
+    await expect(install()).rejects.toThrow("exit 1");
+    const error = vi.mocked(console.error).mock.calls.flat().join("\n");
+    expect(error).toMatch(/exactly one OpsContext hook per event, found PostToolUse=2/);
+    expect(error).toMatch(/Backup: .*bak-pre-opscontext-/);
+  });
+});

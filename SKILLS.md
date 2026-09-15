@@ -168,6 +168,17 @@ files and re-embedding every chunk on every save, 9.3 CPU-hours in 1.4 h, load a
   (absolute node + CLI paths, hooks run without the shell PATH) and one `Stop` entry in
   `~/.claude/settings.json`, user scope, so it covers every repo the user opens. Idempotent;
   `uninstall-claude-hook` removes it. A failing gate exits 0 on purpose: never trap the user.
+- The installer compares hook commands by their script path with `$HOME`, `${HOME}` and `~`
+  expanded, removes extra copies of its own commands under the same matcher (never anyone
+  else's hooks), then re-reads `settings.json` and exits 1 unless each of `UserPromptSubmit`,
+  `PostToolUse`, `SessionStart` and `Stop` runs our script exactly once (LOCKs
+  `[HOOKS-COMPARED-BY-EXPANDED-PATH]`, `[INSTALL-VERIFIES-BY-COUNT]`). Why: the old
+  `startsWith(absolute path)` check missed hooks hand-wired as `$HOME/...` on 2026-06-23, printed
+  "0 already present" on 2026-09-06 and doubled every Claude Code audit event from 08:20:21Z
+  until 2026-09-15. Tests: `src/install-claude-hook.test.ts` replays those settings through the
+  real installer in the throwaway HOME. A throwaway-HOME check with a copy of real settings must
+  rewrite `/Users/<name>/` to the fake home first, or the absolute entries look foreign; and call
+  `node dist/cli.js`, since the `/opt/homebrew/bin/contextengine` shim finds the CLI through `$HOME`.
 - History: born 2026-09-06 as `scripts/session-gate.sh` copied into 33 repos by
   `scripts/sync-session-gate.sh` (retired the same day; `--remove` took the copies back). Any
   fleet tooling a customer would also want goes into the package, not into repo files.

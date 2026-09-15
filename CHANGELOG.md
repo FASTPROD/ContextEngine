@@ -4,6 +4,22 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [Unreleased] 2026-09-15: one hook per event, verified
+
+### Fixed
+
+- **`install-claude-hook` no longer registers the emit hooks twice** (`src/install-claude-hook.ts`,
+  LOCKs `[HOOKS-COMPARED-BY-EXPANDED-PATH]`, `[INSTALL-VERIFIES-BY-COUNT]`). Its "already
+  installed?" check compared command text literally, so hooks written as
+  `$HOME/.claude/hooks/opscontext-emit.sh` looked absent and a second set was added: on the
+  author's machine every Claude Code prompt and tool call reached the audit log twice from
+  2026-09-06 to 2026-09-15, doubling the inputs of the `stuck` and `silent_failure` heuristics.
+  The installer now compares script paths with `$HOME`, `${HOME}` and `~` expanded, removes
+  extra copies of its own commands (other hooks untouched), and after writing re-reads
+  `settings.json` and exits 1 unless each event runs its script exactly once. Running
+  `install-claude-hook` again repairs an affected machine; the audit log is left as it is (it is
+  hash-chained).
+
 ## [2.8.2] 2026-09-08: every source says what it is
 
 ### Added
