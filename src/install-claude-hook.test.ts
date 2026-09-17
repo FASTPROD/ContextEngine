@@ -11,6 +11,7 @@ const HOME = process.env.HOME as string;
 const EMIT = join(HOME, ".claude", "hooks", "opscontext-emit.sh");
 const GATE = join(HOME, ".claude", "hooks", "opscontext-session-gate.sh");
 const SETTINGS = join(HOME, ".claude", "settings.json");
+const SIMPLICITY = join(HOME, ".claude", "hooks", "opscontext-simplicity-gate.py");
 const KINDS = ["UserPromptSubmit", "PostToolUse", "SessionStart"];
 
 beforeAll(async () => {
@@ -25,14 +26,14 @@ const dollarEmit = (kind: string) => cmd(`$HOME/.claude/hooks/opscontext-emit.sh
 const absEmit = (kind: string) => cmd(`${EMIT} ${kind}`);
 
 /** Runs the installer with console and process.exit captured; returns what it printed. */
-async function install(): Promise<{ out: string; err: string }> {
+async function install(args: string[] = []): Promise<{ out: string; err: string }> {
   expect(HOME).toMatch(/ce-test-home-/); // never the real HOME
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const error = vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
     throw new Error(`exit ${code}`);
   }) as never);
-  await I.cliInstallClaudeHook([]);
+  await I.cliInstallClaudeHook(args);
   return { out: log.mock.calls.flat().join("\n"), err: error.mock.calls.flat().join("\n") };
 }
 
@@ -160,5 +161,73 @@ describe("cliInstallClaudeHook on the settings of 2026-09-06", () => {
     const error = vi.mocked(console.error).mock.calls.flat().join("\n");
     expect(error).toMatch(/exactly one OpsContext hook per event, found PostToolUse=2/);
     expect(error).toMatch(/Backup: .*bak-pre-opscontext-/);
+  });
+});
+
+describe("cliInstallClaudeHook --simplicity", () => {
+  const readBack = () => JSON.parse(readFileSync(SETTINGS, "utf-8")) as Settings;
+  const simplicityEntries = (s: Settings) =>
+    (s.hooks?.PostToolUse ?? []).filter((e) => e.hooks.some((h) => I.hookScriptPath(h.command) === SIMPLICITY));
+
+  it("registers the gate once under Edit|Write|MultiEdit, writes the script, and a re-run with or without the flag keeps exactly one", async () => {
+    writeSettings({ hooks: {} });
+    const first = await install(["--simplicity"]);
+    expect(first.out).toMatch(/5 hook entries added, 0 already present\./);
+    expect(first.out).toMatch(/Installed simplicity gate: .*opscontext-simplicity-gate\.py \(PostToolUse Edit\|Write\|MultiEdit\)/);
+    expect(first.out).toMatch(/exactly one registration for UserPromptSubmit, PostToolUse, SessionStart, Stop, PostToolUse\(simplicity\)\./);
+    expect(readFileSync(SIMPLICITY, "utf-8")).toMatch(/SIMPLICITY-GATE-SILENT-WHEN-BLIND/);
+    let entries = simplicityEntries(readBack());
+    expect(entries).toHaveLength(1);
+    expect(entries[0].matcher).toBe("Edit|Write|MultiEdit");
+    expect(entries[0].hooks).toEqual([{ type: "command", command: SIMPLICITY, timeout: 30 }]);
+    expect(I.countOurHooks(readBack(), KINDS, EMIT)).toEqual({ UserPromptSubmit: 1, PostToolUse: 1, SessionStart: 1 });
+
+    vi.restoreAllMocks();
+    const again = await install(["--simplicity"]);
+    expect(again.out).toMatch(/0 hook entries added, 5 already present\./);
+    vi.restoreAllMocks();
+    const plain = await install();
+    expect(plain.out).toMatch(/0 hook entries added, 5 already present\./);
+    entries = simplicityEntries(readBack());
+    expect(entries).toHaveLength(1);
+  });
+
+  it("a plain install does not add the gate, and says so in the verified list", async () => {
+    writeSettings({ hooks: {} });
+    const r = await install();
+    expect(r.out).toMatch(/4 hook entries added, 0 already present\./);
+    expect(r.out).toMatch(/exactly one registration for UserPromptSubmit, PostToolUse, SessionStart, Stop\./);
+    expect(simplicityEntries(readBack())).toHaveLength(0);
+  });
+
+  it("removes a duplicated gate registration like any other of ours", async () => {
+    writeSettings({
+      hooks: {
+        PostToolUse: [
+          { matcher: "Edit|Write|MultiEdit", hooks: [cmd("$HOME/.claude/hooks/opscontext-simplicity-gate.py", 30)] },
+          { matcher: "Edit|Write|MultiEdit", hooks: [cmd(SIMPLICITY, 30)] },
+        ],
+      },
+    });
+    const r = await install();
+    expect(r.out).toMatch(/1 duplicate registrations removed/);
+    expect(simplicityEntries(readBack())).toHaveLength(1);
+  });
+
+  it("uninstall --simplicity removes only the gate; a full uninstall removes all of ours", async () => {
+    writeSettings({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [cmd("guard.sh")] }] } });
+    await install(["--simplicity"]);
+    vi.restoreAllMocks();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    await I.cliUninstallClaudeHook(["--simplicity"]);
+    let s = readBack();
+    expect(simplicityEntries(s)).toHaveLength(0);
+    expect(I.countOurHooks(s, KINDS, EMIT)).toEqual({ UserPromptSubmit: 1, PostToolUse: 1, SessionStart: 1 });
+    expect(I.countOurHooks(s, ["Stop"], GATE)).toEqual({ Stop: 1 });
+    await I.cliUninstallClaudeHook([]);
+    s = readBack();
+    expect(s.hooks?.PostToolUse).toBeUndefined();
+    expect(s.hooks?.Stop).toBeUndefined();
+    expect(s.hooks?.PreToolUse?.[0].hooks[0].command).toBe("guard.sh");
   });
 });

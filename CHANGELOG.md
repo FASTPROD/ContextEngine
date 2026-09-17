@@ -4,6 +4,20 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
+## [Unreleased]
+
+### Added
+
+- **`install-claude-hook --simplicity`: a PostToolUse gate against complexity an edit just
+  introduced** (`defaults/simplicity-gate.py`, LOCK `[SIMPLICITY-GATE-SILENT-WHEN-BLIND]`).
+  After Claude edits or writes a Python file, ruff's complexity rules (C901, PLR0911, PLR0912,
+  PLR0915) run on the file and on its git HEAD version; only functions the edit made new
+  offenders or worse come back to Claude (exit 2) with the ask to simplify them without
+  changing behavior. Complexity that was already there, files outside git and a missing ruff
+  are silent. Registered once under `Edit|Write|MultiEdit` through the same count-verified
+  installer; a plain re-run keeps it, `uninstall-claude-hook --simplicity` removes only it.
+  Needs ruff (`brew install ruff`); the installer says where it found it, or that it did not.
+
 ## [2.8.3] 2026-09-16: one hook per event, verified
 
 ### Fixed

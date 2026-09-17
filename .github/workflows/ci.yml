@@ -41,6 +41,11 @@ jobs:
       - name: Install server dependencies
         run: npm ci --prefix server
 
+      # The simplicity gate (defaults/simplicity-gate.py) is fired for real by
+      # src/simplicity-gate.test.ts; without ruff its ruff cases skip and the gate is untested.
+      - name: Install ruff for the simplicity gate tests
+        run: python3 -m pip install --quiet ruff
+
       - name: Lint
         run: npm run lint
 

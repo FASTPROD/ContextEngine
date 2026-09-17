@@ -186,6 +186,29 @@ files and re-embedding every chunk on every save, 9.3 CPU-hours in 1.4 h, load a
   `install-claude-hook` against `HOME=$(mktemp -d)` and fire the written script with
   `{"stop_hook_active":false}` on stdin.
 
+### Simplicity gate (2.8.4, LOCK `[SIMPLICITY-GATE-SILENT-WHEN-BLIND]`, `defaults/simplicity-gate.py`)
+
+- `contextengine install-claude-hook --simplicity` copies `defaults/simplicity-gate.py` to
+  `~/.claude/hooks/opscontext-simplicity-gate.py` and registers it once under `PostToolUse`
+  with matcher `Edit|Write|MultiEdit` (timeout 30 s). The script reads the hook JSON, and for
+  a `.py` file inside a git repo runs ruff's complexity rules (C901, PLR0911, PLR0912,
+  PLR0915) on the file and on its `HEAD` version, then exits 2 with a message for Claude
+  naming only the functions the edit made new offenders or worse. Pre-existing complexity,
+  a file outside git, bad input, a missing ruff: exit 0, no output. ruff is looked up in
+  `SIMPLICITY_RUFF`, then `PATH`, then `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`,
+  `~/.cargo/bin`, because Claude Code runs hooks without the shell PATH; the installer prints
+  where it found ruff or that the gate stays silent until `brew install ruff`.
+- A plain re-run of `install-claude-hook` keeps an installed gate (refreshes its script) and
+  never adds one; the count verification expects the gate exactly once when wanted and never
+  otherwise. `uninstall-claude-hook --simplicity` removes only the gate entry.
+- Why: Yan asked (2026-09-15) for a mechanical way to keep agent code simple; the bake-off on
+  KONIVE showed tools cut branches, not lines, and a guidelines-only pass deleted a function a
+  newer commit used. Only a per-function diff against HEAD says "made worse". Python only so
+  far; a TypeScript rule set would plug into the same script shape.
+- Tests: `src/simplicity-gate.test.ts` fires the real script with python3 on temp git repos
+  (silent paths always; ruff cases wherever ruff is found, CI installs it), and
+  `src/install-claude-hook.test.ts` covers the flag, re-runs, duplicates and uninstall.
+
 ### Fleet health (2.8.0, LOCK `[HEALTH-IS-MEASURED-NEVER-ESTIMATED]`, `src/fleet-health.ts`)
 
 - `computeFleetHealth()` reads the last 8 MB of the audit log, the server registry and the

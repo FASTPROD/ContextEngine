@@ -130,7 +130,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 | `src/server-registry.ts` | Every server's pid, build, corpus and role; `contextengine servers [--cost]` |
 | `src/fleet-health.ts` | Measured fleet health (version drift, reindex rate, blocks, refusals, last verified release) written by the indexer to `~/.contextengine/fleet-health.json`; read by `servers`, `end-session` and the VS Code status bar |
 | `src/session-gate.ts` | `contextengine session-gate`, the Claude Code Stop hook installed by `install-claude-hook`: a turn cannot end while the repo's CE session is older than HEAD |
-| `src/install-claude-hook.ts` | `install-claude-hook` / `uninstall-claude-hook`: the emit hooks and the Stop gate in `~/.claude/settings.json`; commands compared by expanded path (`$HOME`, `${HOME}`, `~`), own duplicates removed, one registration per event verified after writing (`[HOOKS-COMPARED-BY-EXPANDED-PATH]`, `[INSTALL-VERIFIES-BY-COUNT]`) |
+| `src/install-claude-hook.ts` | `install-claude-hook` / `uninstall-claude-hook`: the emit hooks and the Stop gate in `~/.claude/settings.json`; commands compared by expanded path (`$HOME`, `${HOME}`, `~`), own duplicates removed, one registration per event verified after writing (`[HOOKS-COMPARED-BY-EXPANDED-PATH]`, `[INSTALL-VERIFIES-BY-COUNT]`); `--simplicity` adds the PostToolUse complexity gate from `defaults/simplicity-gate.py` (`[SIMPLICITY-GATE-SILENT-WHEN-BLIND]`) |
 | `src/chunker.ts` | Markdown/code-aware chunking with 4-line overlap |
 | `src/config.ts` | `contextengine.json` loader, project aliases |
 | `src/activation.ts` | License validation, delta decryption, machine fingerprint, heartbeat |
