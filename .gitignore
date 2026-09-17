@@ -12,3 +12,6 @@ server/.secrets/
 
 # install-skill artifacts — generated copies of skills/opscontext/, source of truth lives in skills/
 .claude/skills/
+
+# python bytecode from running defaults/simplicity-gate.py or its tests
+__pycache__/
