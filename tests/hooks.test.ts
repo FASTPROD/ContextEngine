@@ -19,7 +19,7 @@ import {
   formatSecretViolationsJson,
   type StagedFile,
 } from "../src/hooks.js";
-import { PolicySchema, type Policy } from "../src/policy.js";
+import { PolicySchema, loadRepoPolicy, type Policy } from "../src/policy.js";
 
 // ---------------------------------------------------------------------------
 // Glob matcher
@@ -145,6 +145,28 @@ describe("runSecretScan", () => {
     const v = runSecretScan(policy, files);
     expect(v).toHaveLength(1);
     expect(v[0].lineNumber).toBe(11);
+  });
+
+  it("the repo policy blocks a real value after the sshpass password flag and lets placeholders and variables through", () => {
+    // 2026-09-17: a purge note quoted two purged VPS passwords verbatim in this public repo for
+    // six months; key-shaped patterns never saw a plain password.
+    const r = loadRepoPolicy(process.cwd());
+    expect(r?.ok).toBe(true);
+    const policy = (r as { ok: true; policy: Policy }).policy;
+    expect(policy.secret_patterns.some((p) => p.id === "sshpass_password_literal")).toBe(true);
+    const S = "ssh" + "pass"; // split so this test file cannot trip the pattern when committed
+    const files = [
+      staged("docs/a.md", [
+        `${S} -p 'not-a-real-value-1' ssh admin@host`,   // 1: block
+        `${S} -p not-a-real-value-2 ssh admin@host`,     // 2: block
+        `${S} -p '<VPS_PASSWORD>' ssh admin@host`,       // 3: placeholder
+        `${S} -p "$VPS_SSH_PASS" ssh admin@host`,        // 4: variable
+        `${S} -p '\${VPS_SSH_PASS}' ssh admin@host`,     // 5: variable
+        `export SSHPASS=x; ${S} -e ssh admin@host`,      // 6: no -p
+      ]),
+    ];
+    const v = runSecretScan(policy, files).filter((x) => x.patternId === "sshpass_password_literal");
+    expect(v.map((x) => x.lineNumber)).toEqual([1, 2]);
   });
 
   it("NEVER returns the matched value (redaction contract)", () => {

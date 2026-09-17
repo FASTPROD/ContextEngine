@@ -22,6 +22,12 @@
       "pattern": "sk-[A-Za-z0-9]{40,}",
       "severity": "block",
       "description": "OpenAI API key (also catches many sibling sk- formats). Belongs in .env."
+    },
+    {
+      "id": "sshpass_password_literal",
+      "pattern": "ssh(?:pass) -p ['\"]?(?![<$])[^'\"\\s]+",
+      "severity": "block",
+      "description": "A real value after sshpass -p. Placeholders (<VPS_PASSWORD>) and variables ($VAR, ${VAR}) pass. Threat model: 2026-09-17, the note recording the Feb 28 filter-repo purge quoted both purged Gandi VPS passwords verbatim in a public repo for six months; the scanner matched key shapes only, so a plain password went through. Written as ssh(?:pass) so this line does not match itself."
     }
   ],
   "doc_coverage": [
@@ -99,7 +105,7 @@
         "SKILLS.md"
       ],
       "severity": "block",
-      "description": "Cost discipline for multi-agent fan-out must be visible to every agent surface. Cursor/Windsurf/Copilot read .github/copilot-instructions.md only — a rule living solely in CLAUDE.md is invisible to them."
+      "description": "Cost discipline for multi-agent fan-out must be visible to every agent surface. Cursor/Windsurf/Copilot read .github/copilot-instructions.md only \u2014 a rule living solely in CLAUDE.md is invisible to them."
     }
   ],
   "agent_cost": {
