@@ -17,6 +17,13 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
   are silent. Registered once under `Edit|Write|MultiEdit` through the same count-verified
   installer; a plain re-run keeps it, `uninstall-claude-hook --simplicity` removes only it.
   Needs ruff (`brew install ruff`); the installer says where it found it, or that it did not.
+- **Fleet health flags a doubled Claude Code hook within a minute, not nine days**
+  (`src/fleet-health.ts`). Two measured checks: the OpsContext registrations per event in
+  `~/.claude/settings.json`, counted the way the installer counts them (a registration above 1,
+  or a partial install, is a warning), and the day's `vscode.*` audit records that repeat the
+  previous one in event and payload within 2 s (a warning above 5 percent, once the day has 10
+  hook events). Both show in `contextengine servers` (exit 1), `end-session` and the VS Code
+  status bar. The 2026-09-06 doubling ran at 99.5 to 100 percent for nine days unseen.
 
 ## [2.8.3] 2026-09-16: one hook per event, verified
 

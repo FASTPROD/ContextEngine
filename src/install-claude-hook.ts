@@ -145,6 +145,27 @@ export function countOurHooks(
   return Object.fromEntries(events.map((ev) => [ev, count(ev)]));
 }
 
+/** How many times Claude Code runs each OpsContext hook, read from settings.json: the three
+ *  emit events, the Stop gate, and the optional simplicity gate as "PostToolUse(simplicity)".
+ *  null when there is no readable settings.json. Shared by the install verification
+ *  ([INSTALL-VERIFIES-BY-COUNT]) and fleet health, so both count the same way. */
+export function claudeHookRegistrations(settingsPath: string = SETTINGS_FILE, home: string = homedir()): Record<string, number> | null {
+  let settings: Settings;
+  try {
+    if (!existsSync(settingsPath)) return null;
+    settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Settings;
+  } catch {
+    return null;
+  }
+  const hooksDir = join(home, ".claude", "hooks");
+  const emit = join(hooksDir, "opscontext-emit.sh");
+  return {
+    ...countOurHooks(settings, EVENT_KINDS, emit, home),
+    ...countOurHooks(settings, ["Stop"], join(hooksDir, "opscontext-session-gate.sh"), home),
+    "PostToolUse(simplicity)": countOurHooks(settings, ["PostToolUse"], join(hooksDir, "opscontext-simplicity-gate.py"), home).PostToolUse,
+  };
+}
+
 /** Path to a file bundled under defaults/ with this package. */
 function bundledFile(name: string): string | null {
   // dist/install-claude-hook.js → ../defaults/<name> in dev tree,
@@ -333,14 +354,10 @@ Run: opscontext install-autostart
   //      the session that ran it recorded "they were not there"; the doubled audit events then
   //      went unseen for nine days.
   // FIX: re-read settings.json from disk and require exactly one registration per event.
-  const written = readSettings();
-  const counts: Record<string, number> = {
-    ...countOurHooks(written, EVENT_KINDS, HOOK_SCRIPT),
-    ...countOurHooks(written, ["Stop"], GATE_SCRIPT),
-  };
+  const counts = claudeHookRegistrations() ?? {};
+  // Every event exactly once; the optional gate exactly once when wanted, never otherwise (a
+  // dedup pass alone never adds it).
   const expected: Record<string, number> = Object.fromEntries(Object.keys(counts).map((ev) => [ev, 1]));
-  // The optional gate: exactly one when wanted, none otherwise (a dedup pass alone never adds it).
-  counts["PostToolUse(simplicity)"] = countOurHooks(written, ["PostToolUse"], SIMPLICITY_SCRIPT).PostToolUse;
   expected["PostToolUse(simplicity)"] = wantSimplicity ? 1 : 0;
   const wrong = Object.entries(counts).filter(([ev, n]) => n !== expected[ev]);
   if (wrong.length > 0) {

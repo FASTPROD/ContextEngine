@@ -13,6 +13,7 @@ import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readSync, readdi
 import { join } from "path";
 import { homedir } from "os";
 import { listServers, type ServerReport } from "./server-registry.js";
+import { claudeHookRegistrations } from "./install-claude-hook.js";
 
 export interface FleetHealth {
   generatedAt: string;
@@ -33,7 +34,16 @@ export interface FleetHealth {
     /** Above this many writes per hour a warning is raised. */
     threshold: number;
   };
+  /** Claude Code hook registrations per event, read from ~/.claude/settings.json the way the
+   *  installer counts them (paths expanded). null: no readable settings.json. A correct install
+   *  has 1 for every event; the 2026-09-06 doubling would have shown 2 here within a minute. */
+  claudeHooks: Record<string, number> | null;
   today: {
+    /** Claude Code hook events (vscode.*) since local midnight. */
+    hookEvents: number;
+    /** Of those, records identical in event and payload to the previous hook event within
+     *  DOUBLED_WINDOW_MS: what a hook registered twice produces. */
+    doubledHookEvents: number;
     /** Pre-commit blocks (hook.block) since local midnight. */
     blocks: number;
     /** Store refusals (unreadable, shrink refused, growth refused) since local midnight. */
@@ -49,6 +59,11 @@ export interface FleetHealth {
 }
 
 export const REINDEX_PER_HOUR_WARN = 30;
+/** Doubled hook events above this share of the day's hook events raise a warning, once the day
+ *  has at least DOUBLED_MIN_EVENTS of them (a single repeated call is not a doubled hook). */
+export const DOUBLED_HOOK_EVENTS_WARN_PCT = 5;
+export const DOUBLED_MIN_EVENTS = 10;
+export const DOUBLED_WINDOW_MS = 2000;
 const TAIL_BYTES = 8 * 1024 * 1024;
 
 function ceHome(): string {
@@ -122,7 +137,7 @@ export function lastVerifiedRelease(dir: string = ceHome()): string | null {
   return versions[versions.length - 1];
 }
 
-export function computeFleetHealth(opts: { now?: Date; version?: string; auditPath?: string; report?: ServerReport } = {}): FleetHealth {
+export function computeFleetHealth(opts: { now?: Date; version?: string; auditPath?: string; report?: ServerReport; settingsPath?: string } = {}): FleetHealth {
   const now = opts.now ?? new Date();
   const report = opts.report ?? listServers();
   const audit = opts.auditPath ?? join(ceHome(), "audit.log");
@@ -131,11 +146,18 @@ export function computeFleetHealth(opts: { now?: Date; version?: string; auditPa
   const hourAgo = now.getTime() - 3_600_000;
 
   const perCorpus: Record<string, number> = {};
-  let lastHourWrites = 0, blocks = 0, refusals = 0, learningsSaved = 0;
+  let lastHourWrites = 0, blocks = 0, refusals = 0, learningsSaved = 0, hookEvents = 0, doubledHookEvents = 0;
   const lastBlocks: FleetHealth["today"]["lastBlocks"] = [];
+  let prevHook: { t: number; event: string; payload: string } | null = null;
   for (const r of records) {
     const t = Date.parse(r.ts);
     if (Number.isNaN(t)) continue;
+    if (r.event.startsWith("vscode.") && t >= midnight) {
+      hookEvents++;
+      const payload = JSON.stringify(r.payload ?? {});
+      if (prevHook && prevHook.event === r.event && prevHook.payload === payload && t - prevHook.t <= DOUBLED_WINDOW_MS) doubledHookEvents++;
+      prevHook = { t, event: r.event, payload };
+    }
     if (r.event === "index.write" && t >= hourAgo) {
       lastHourWrites++;
       const c = String(r.payload?.corpus ?? "?");
@@ -153,8 +175,20 @@ export function computeFleetHealth(opts: { now?: Date; version?: string; auditPa
   const diskBuild = report.servers.find((s) => s.currentBuild)?.currentBuild ?? null;
   const indexers = report.servers.filter((s) => s.role !== "reader").length;
 
+  const claudeHooks = claudeHookRegistrations(opts.settingsPath);
+
   const warnings: string[] = [];
   if (stale.length > 0) warnings.push(`${stale.length} server(s) on an old build (pid ${stale.map((s) => s.pid).join(", ")}): reload their windows`);
+  if (claudeHooks) {
+    const doubled = Object.entries(claudeHooks).filter(([, n]) => n > 1);
+    if (doubled.length > 0) warnings.push(`Claude Code runs an OpsContext hook more than once (${doubled.map(([ev, n]) => `${ev}=${n}`).join(", ")}): every event reaches the audit log that many times, run install-claude-hook`);
+    const core = ["UserPromptSubmit", "PostToolUse", "SessionStart", "Stop"];
+    const present = core.filter((ev) => (claudeHooks[ev] ?? 0) >= 1);
+    if (present.length > 0 && present.length < core.length) warnings.push(`OpsContext hooks installed for ${present.join(", ")} but not ${core.filter((ev) => !present.includes(ev)).join(", ")}: run install-claude-hook`);
+  }
+  if (hookEvents >= DOUBLED_MIN_EVENTS && doubledHookEvents * 100 > hookEvents * DOUBLED_HOOK_EVENTS_WARN_PCT) {
+    warnings.push(`${doubledHookEvents} of ${hookEvents} Claude Code hook events today arrived twice within ${DOUBLED_WINDOW_MS / 1000} s: a hook is registered twice somewhere, run install-claude-hook`);
+  }
   if (lastHourWrites > REINDEX_PER_HOUR_WARN) warnings.push(`${lastHourWrites} shared-index writes in the last hour (ceiling ${REINDEX_PER_HOUR_WARN}): something saves in a loop`);
   if (refusals > 0) warnings.push(`${refusals} learnings-store refusal(s) today: a write looked like a wipe or a runaway import`);
   for (const w of report.warnings) if (/index on their own/.test(w)) warnings.push(w);
@@ -165,7 +199,8 @@ export function computeFleetHealth(opts: { now?: Date; version?: string; auditPa
     writerPid: process.pid,
     servers: { total: report.servers.length, indexers, readers: report.servers.length - indexers, stale, diskBuild },
     reindex: { lastHourWrites, perCorpus, threshold: REINDEX_PER_HOUR_WARN },
-    today: { blocks, refusals, learningsSaved, lastBlocks: lastBlocks.slice(-3) },
+    claudeHooks,
+    today: { hookEvents, doubledHookEvents, blocks, refusals, learningsSaved, lastBlocks: lastBlocks.slice(-3) },
     lastVerifiedRelease: lastVerifiedRelease(),
     warnings,
   };
@@ -187,6 +222,7 @@ export function formatFleetHealth(h: FleetHealth): string {
   lines.push(`  servers ${h.servers.total}: ${h.servers.indexers} indexing, ${h.servers.readers} reading, ${h.servers.stale.length} on an old build`);
   lines.push(`  shared-index writes last hour: ${h.reindex.lastHourWrites} (ceiling ${h.reindex.threshold})`);
   lines.push(`  today: ${h.today.blocks} block(s) prevented, ${h.today.refusals} store refusal(s), ${h.today.learningsSaved} learning(s) saved`);
+  lines.push(`  claude code: ${h.today.hookEvents} hook event(s) today, ${h.today.doubledHookEvents} doubled; registrations ${h.claudeHooks ? Object.entries(h.claudeHooks).map(([ev, n]) => `${ev}=${n}`).join(" ") : "no settings.json"}`);
   for (const b of h.today.lastBlocks) lines.push(`    ${b.ts.slice(11, 19)}Z ${b.kind}: ${b.detail}`);
   for (const w of h.warnings) lines.push(`  ⚠ ${w}`);
   return lines.join("\n");

@@ -39,7 +39,7 @@ describe("computeFleetHealth", () => {
     ].join("\n") + "\n");
     writeFileSync(join(home(), "verified-2.7.1"), "x");
     writeFileSync(join(home(), "verified-2.6.0"), "x");
-    const h = H.computeFleetHealth({ now, version: "2.8.0", auditPath: audit, report: report([{ pid: 1, role: "indexer", staleBuild: false }, { pid: 2, role: "reader", staleBuild: true }, { pid: 3, role: "reader", staleBuild: false }]) });
+    const h = H.computeFleetHealth({ now, version: "2.8.0", auditPath: audit, settingsPath: join(home(), "no-such-settings.json"), report: report([{ pid: 1, role: "indexer", staleBuild: false }, { pid: 2, role: "reader", staleBuild: true }, { pid: 3, role: "reader", staleBuild: false }]) });
     expect(h.today).toMatchObject({ blocks: 2, refusals: 1, learningsSaved: 2 });
     expect(h.today.lastBlocks.map((b) => b.detail)).toEqual(["secret-scan: docs/x.md:12 (jwt)", "doc-coverage: SKILLS.md#audit-log", "growth refused"]);
     expect(h.reindex.lastHourWrites).toBe(2);
@@ -61,6 +61,63 @@ describe("computeFleetHealth", () => {
     expect(green.today).toMatchObject({ blocks: 0, refusals: 0, learningsSaved: 0 });
     const storm = H.computeFleetHealth({ now, auditPath: audit, report: report([{ pid: 1, role: "indexer", staleBuild: false }]) });
     expect(storm.warnings.some((w) => /writes in the last hour/.test(w))).toBe(true);
+  });
+  it("counts Claude Code hook registrations per event from settings.json and warns on a doubled or partial install", () => {
+    const settings = join(home(), "settings-doubled.json");
+    const HOME = process.env.HOME as string;
+    const emit = `${HOME}/.claude/hooks/opscontext-emit.sh`;
+    const hook = (command: string) => ({ type: "command", command, timeout: 5 });
+    writeFileSync(settings, JSON.stringify({ hooks: {
+      UserPromptSubmit: [{ hooks: [hook(`$HOME/.claude/hooks/opscontext-emit.sh UserPromptSubmit`)] }, { hooks: [hook(`${emit} UserPromptSubmit`)] }],
+      PostToolUse: [{ matcher: ".*", hooks: [hook(`${emit} PostToolUse`)] }, { matcher: "Edit|Write|MultiEdit", hooks: [hook(`${HOME}/.claude/hooks/opscontext-simplicity-gate.py`)] }],
+      SessionStart: [{ hooks: [hook(`${emit} SessionStart`)] }],
+      Stop: [{ hooks: [hook(`${HOME}/.claude/hooks/opscontext-session-gate.sh`)] }],
+    } }));
+    const missing = join(home(), "missing.log");
+    const rep = report([{ pid: 1, role: "indexer", staleBuild: false }]);
+    const h = H.computeFleetHealth({ now, auditPath: missing, report: rep, settingsPath: settings });
+    expect(h.claudeHooks).toEqual({ UserPromptSubmit: 2, PostToolUse: 1, SessionStart: 1, Stop: 1, "PostToolUse(simplicity)": 1 });
+    expect(h.warnings).toEqual([expect.stringMatching(/runs an OpsContext hook more than once \(UserPromptSubmit=2\).*run install-claude-hook/)]);
+    expect(H.formatFleetHealth(h)).toMatch(/registrations UserPromptSubmit=2 PostToolUse=1/);
+
+    const partial = join(home(), "settings-partial.json");
+    writeFileSync(partial, JSON.stringify({ hooks: { Stop: [{ hooks: [hook(`${HOME}/.claude/hooks/opscontext-session-gate.sh`)] }] } }));
+    const p = H.computeFleetHealth({ now, auditPath: missing, report: rep, settingsPath: partial });
+    expect(p.warnings).toEqual([expect.stringMatching(/installed for Stop but not UserPromptSubmit, PostToolUse, SessionStart/)]);
+
+    const none = H.computeFleetHealth({ now, auditPath: missing, report: rep, settingsPath: join(home(), "no-such-settings.json") });
+    expect(none.claudeHooks).toBeNull();
+    expect(none.warnings).toEqual([]);
+    const empty = join(home(), "settings-empty.json");
+    writeFileSync(empty, JSON.stringify({ model: "x" }));
+    expect(H.computeFleetHealth({ now, auditPath: missing, report: rep, settingsPath: empty }).warnings).toEqual([]); // not installed is not a problem
+  });
+  it("counts today's Claude Code hook events and the ones that arrived twice, and warns above the share", () => {
+    const audit = join(home(), "audit-doubled.log");
+    const call = (i: number) => ({ surface: "claude-code", tool: "Bash", args_preview: `cmd ${i}`, session: "s" });
+    const lines: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      const ts = `2026-09-06T09:${String(10 + i).padStart(2, "0")}:00.000Z`;
+      lines.push(rec(ts, "vscode.tool_call", call(i)));
+      if (i < 3) lines.push(rec(ts.replace(":00.000Z", ":00.400Z"), "vscode.tool_call", call(i))); // the same record again 400 ms later
+    }
+    lines.push(rec("2026-09-06T09:30:00.000Z", "vscode.tool_call", call(99)));
+    lines.push(rec("2026-09-06T09:30:05.000Z", "vscode.tool_call", call(99))); // same call 5 s later: Claude repeated itself, not a doubled hook
+    lines.push(rec("2026-09-06T09:31:00.000Z", "vscode.prompt_submit", { text: "a" }));
+    lines.push(rec("2026-09-06T09:31:00.100Z", "vscode.tool_call", { text: "a" })); // different event: not doubled
+    writeFileSync(audit, lines.join("\n") + "\n");
+    const rep = report([{ pid: 1, role: "indexer", staleBuild: false }]);
+    const h = H.computeFleetHealth({ now, auditPath: audit, report: rep, settingsPath: join(home(), "no-such-settings.json") });
+    expect(h.today.hookEvents).toBe(19);
+    expect(h.today.doubledHookEvents).toBe(3);
+    expect(h.warnings).toEqual([expect.stringMatching(/3 of 19 Claude Code hook events today arrived twice within 2 s/)]);
+    expect(H.formatFleetHealth(h)).toMatch(/claude code: 19 hook event\(s\) today, 3 doubled/);
+
+    const few = join(home(), "audit-few.log");
+    writeFileSync(few, [rec("2026-09-06T09:10:00.000Z", "vscode.tool_call", call(1)), rec("2026-09-06T09:10:00.400Z", "vscode.tool_call", call(1))].join("\n") + "\n");
+    const f = H.computeFleetHealth({ now, auditPath: few, report: rep, settingsPath: join(home(), "no-such-settings.json") });
+    expect(f.today).toMatchObject({ hookEvents: 2, doubledHookEvents: 1 });
+    expect(f.warnings).toEqual([]); // below DOUBLED_MIN_EVENTS: one repeat is not evidence
   });
   it("writes the file atomically and formats it for the CLI", () => {
     const h = H.computeFleetHealth({ now, version: "2.8.0", auditPath: join(home(), "missing.log"), report: report([{ pid: 1, role: "indexer", staleBuild: false }]) });

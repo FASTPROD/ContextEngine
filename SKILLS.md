@@ -224,7 +224,17 @@ files and re-embedding every chunk on every save, 9.3 CPU-hours in 1.4 h, load a
   problems: store refusals, old builds, index-write storm, commits since the repo's CE session
   was saved (same rule as `session-gate`), no MCP session, uncommitted files above the
   threshold. Default `CE` plus blocks prevented and recalls surfaced. No timers, no estimates.
-- Tests: `src/fleet-health.test.ts` (fake audit log and registry in the throwaway HOME).
+- **Claude Code hook checks (2.8.4).** `claudeHooks` counts the OpsContext registrations per
+  event in `~/.claude/settings.json` through the installer's own `claudeHookRegistrations()`
+  (paths expanded, so `$HOME/...` and `/Users/x/...` are one hook); `today.hookEvents` and
+  `today.doubledHookEvents` count the day's `vscode.*` records and those identical in event and
+  payload to the previous one within `DOUBLED_WINDOW_MS` (2 s). Warnings: any registration above
+  1, a partial install (some of the four events but not all), and doubled events above
+  `DOUBLED_HOOK_EVENTS_WARN_PCT` (5 percent) once the day has `DOUBLED_MIN_EVENTS` (10). Why: the
+  2026-09-06 doubling ran nine days at 99.5 to 100 percent doubled with nothing looking; either
+  check would have shown it within a minute of the indexer's next write. Not installed at all
+  (no settings.json, or none of our hooks) is not a warning.
+- Tests: `src/fleet-health.test.ts` (fake audit log, registry and settings.json in the throwaway HOME).
 
 ### Build & Test
 - `npx tsc` — TypeScript compilation (strict mode)
