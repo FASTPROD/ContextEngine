@@ -4,7 +4,7 @@ All notable changes to OpsContext for AI Agents (previously ContextEngine — MC
 
 > Entries for 2.2.0 through 2.4.0 were not backfilled here; see `docs/sessions/SESSION_19` through `SESSION_21` for those releases.
 
-## [Unreleased]
+## [2.8.4] 2026-09-17: a gate on complexity, a watch on doubled hooks
 
 ### Added
 
