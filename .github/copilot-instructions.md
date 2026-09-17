@@ -527,7 +527,7 @@ output hints at it. Cost has to be measured directly; it never shows up in the r
 - **Behavior**: **BLOCKS** (exit 1) on any blocking violation. Also blocks if `.copilot-credentials.md` is staged.
 - **Skip list**: `.copilot-credentials.md`, `.env`, `.env.local`, `.env.example`, `pre-commit` itself
 - **Deployed**: All 20 git repos have the secret scanner installed in `.git/hooks/pre-commit`. Re-deploy by `cp hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit` (per repo).
-- **git filter-repo**: Feb 28, 2026 — purged `#Crowlr@2023` (23 instances) and `#GandiVps@2026#` from entire ContextEngine history (PUBLIC repo). All commit hashes rewritten. Force-pushed to origin.
+- **git filter-repo**: Feb 28, 2026 — purged the two Gandi VPS passwords (23 instances, the values stay out of this file) from entire ContextEngine history (PUBLIC repo). All commit hashes rewritten. Force-pushed to origin.
 - **Validated**: v1.21.1 test commit blocked successfully (sk_live_ pattern matched). 2026-06 migration smoke-tested in three ephemeral repos (no policy → legacy fires; policy + JWT in session → policy fires; clean → passes).
 
 ### Publishing Workflow
